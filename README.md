@@ -12,6 +12,7 @@ Will shift to Mini WECC once it is available
 * 24 hour hourly capacity reserve
 * Only generation that has been committed can participate
 * Generators do not _have to_ have their capacity add to 100%, that is if unit commitment for hour t is 100% can still offer reserves, difference must be reconciled in real time
+* We can model the needed reserves as load and the generators bid in just their reserve as "generation"
 
 ### Real Time Market
 * Energy Dispatch
