@@ -27,6 +27,16 @@ Make sure to [install a solver](#solvers)
 
 Then proceed to verify the installation, see [these instructions](https://github.com/breldridge/Egret?tab=readme-ov-file#testing-the-installation)
 
+## Installing pnnlpcm package for GridView h5 handling
+Egret models based on GridView models are created by parsing the `h5` file created by GridView.
+To work with this file, the `pnnlpcm` package is required, which is hosted privately [here](https://devops.pnnl.gov/ntp/ntp_PCM).
+To get access reach out to Eran: <eran.schweitzer@pnnl.gov>.
+
+Once the repository is cloned it can be installed using the editable mode:
+```
+pip install -e <path-to-ntp-pcm>
+```
+
 ## Solvers
 ### Installing CBC on Windows
 Cbc installation appears to be not very supported on windows.
