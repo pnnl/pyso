@@ -1,0 +1,10 @@
+## copied from here: https://packaging.python.org/en/latest/guides/writing-pyproject-toml/
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+## modified from here: https://stackoverflow.com/questions/6323860/sibling-package-imports
+[project]
+name = "pyenergymarket"
+version = "0.1.0"
+description = "PyEnergyMarket is a EGRET-based energy market modeling tool developed by PNNL in the E-COMP LDRD initiative"
