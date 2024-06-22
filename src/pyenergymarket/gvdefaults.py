@@ -10,6 +10,10 @@ gvdefaults = {
             "rating_long_term": "WinterA",
             "rating_short_term": "WinterA",
             "rating_emergency": "WinterB"
+        },
+        "load": {
+            "datefrom": None,
+            "dateto": None
         }
     }
 }

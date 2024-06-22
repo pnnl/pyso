@@ -54,6 +54,9 @@ class GVParse():
         name, kv = self.h5("/mdb/Bus").loc[lambda x: x["BusID"] == busid, ["Name", "BaseKV"]].squeeze()
         return f'{busid}_{name}_{kv:.0f}'
     
+    def get_zone(self, busid:int):
+        return self.h5("/mdb/Bus").loc[lambda x: x["BusID"] == busid, "PSSEZoneID"].squeeze()
+
     def add_sys_info(self):
         """add system info"""
         sys = self.mdl.data["system"]
@@ -61,7 +64,7 @@ class GVParse():
         refbus = self.h5("/mdb/Bus").loc[lambda x: x["Type"] == 3, "BusID"].squeeze()
         sys["reference_bus"] = self.mk_bus_str(refbus)
         sys["reference_bus_angle"] = 0
-
+    
     def add_buses(self):
         """Add buses to Egret Model"""
 
@@ -181,4 +184,46 @@ class GVParse():
         pass
 
     def add_load(self):
-        pass
+        load = dict()
+        
+        datefrom=self.defaults["elements"]["load"]["datefrom"]
+        dateto  =self.defaults["elements"]["load"]["dateto"]
+        dtrange = h5fun.mk_daterange(datefrom=datefrom, dateto=dateto)
+        ### Conforming Load
+        # loop over areas
+        for area in self.h5("/area/LOAD").keys():
+            tmp = self.h5.area_ts_to_bus(area=area, dtrange=dtrange)
+            for k, v in tmp.items():
+                busid = int(k.split("_")[0])
+                load[k] = {
+                    "bus" : self.mk_bus_str(busid),
+                    "in_service": True,
+                    "area": area,
+                    "zone": self.get_zone(busid),
+                    "ncl": False,
+                    "p_load": {
+                        "data_type": "time_series",
+                        "values": v.values
+                    }
+                }
+
+        ### Non-Conforming Load
+        ncl = self.h5.get_ncl()
+        for i in ncl.index:
+            busid = ncl.loc[i,"BusID"]
+            k = f'{busid}_{ncl.loc[i, "LoadID"]}'
+            load[k] = {
+                "bus": self.mk_bus_str(busid),
+                "in_service": True,
+                "area": ncl.loc[i, "LoadArea"],
+                "zone": self.get_zone(busid),
+                "ncl": True,
+                "p_load": {
+                    "data_type": "time_series",
+                    "values": ncl.loc[i, "PL"]*np.ones(len(dtrange))
+                }
+            }
+
+        ### add to model
+        self.mdl.data["elements"]["load"] = load
+        
