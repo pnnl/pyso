@@ -10,16 +10,23 @@ if __name__ == "__main__":
     parser.add_argument("--get-daterange", help="print the daterange in the h5", action="store_true")
     args = parser.parse_args()
     
-    default = {"elements": {
-        "branch":{
-            "rating_long_term": "WinterC",
-            "rating_short_term": "WinterC",
-            "rating_emergency": "WinterB"
-        },
-        "load": {
+    default = {
+        "time": {
             "datefrom": "2032-01-01"
+        },
+        "elements": {
+            "branch":{
+                "rating_long_term": "WinterC",
+                "rating_short_term": "WinterC",
+                "rating_emergency": "WinterB"
+            }
+        },
+        "generator": {
+            "generator_type_map":{
+                "storage": [3, 10]
+            }
         }
-    }}
+    }
 
     gv = pyen.GVParse(args.h5path, default=default)
     if args.get_daterange:

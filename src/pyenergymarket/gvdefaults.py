@@ -1,4 +1,8 @@
 gvdefaults = {
+    "time": {
+        "datefrom": None,
+        "dateto": None
+    },
     "elements": {
         "bus": {
             "v_min": 0.95,
@@ -11,9 +15,13 @@ gvdefaults = {
             "rating_short_term": "WinterA",
             "rating_emergency": "WinterB"
         },
-        "load": {
-            "datefrom": None,
-            "dateto": None
+        "generator": {
+            "generator_type_map":{
+                "thermal": [1],
+                "hydro": [2],
+                "storage": [3],
+                "renewable": [4]
+            }
         }
     }
 }
