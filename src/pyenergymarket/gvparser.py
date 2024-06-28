@@ -98,6 +98,7 @@ class GVParse():
         refbus = self.h5("/mdb/Bus").loc[lambda x: x["Type"] == 3, "BusID"].squeeze()
         sys["reference_bus"] = self.mk_bus_str(refbus)
         sys["reference_bus_angle"] = 0
+        sys["time_keys"] = self.daterange.strftime("%Y-%m-%d %H:%M").to_list()
     
     def add_buses(self):
         """Add buses to Egret Model"""
@@ -217,58 +218,199 @@ class GVParse():
     def add_generators(self):
         
         gentab = self.h5("/mdb/Generator")
-        generator = dict()
+        self.mdl.data["elements"]["generator"] = dict()
         for i in gentab.index:
             ## loop over generators and dispatch based on generator type
-            if not self._gen_inservice(i):
+            
+            gen = gentab.loc[i] # pd.Series 
+            if not self._gen_inservice(gen):
                 ## for now, don't copy any generators that are not in service
                 continue
-
+            
+            ## Add general data
             tmp = {
-                "bus": self.mk_bus_str(gentab.loc[i, "BusID"]),
-                "gv_generatorkey": gentab.loc[i, "GeneratorKey"],
-                "in_service": True,
-                "unit_type": gentab.loc(gentab.loc[i, "SubType"]),
-                "area": gentab.loc[i, "LoadArea"],
-                "zone": self.get_zone(gentab.loc[i, "BusID"])
+                "bus": self.mk_bus_str(gen.BusID),
+                "gv_generatorkey": gen.GeneratorKey,
+                "in_service": gen.ServiceStatus,
+                "unit_type": gen.SubType,
+                "area": gen.LoadArea,
+                "zone": self.get_zone(gen.BusID)
             }
 
             ## dispatch based on GeneratorType
             for t, v in self.defaults["elements"]["generator"]["generator_type_map"].items():
-                if gentab.loc[i, "GeneratorType"] in v:
-                    getattr(self, f"_{t}_gen")(i, generator, tmp)
+                if gen.GeneratorType in v:
+                    getattr(self, f"_{t}_gen")(gen, tmp)
                     break
             
     
-    def _gen_inservice(self, i:int) -> bool:
-        """Test whether a generator at index i in the Generator table is in service.
+    def _gen_inservice(self, gen:pd.Series) -> bool:
+        """Test whether a generator (pandas series that is a row of the Generator table) is in service.
         To be in service, a generator must have:
           - the ServiceStatus flag True
           - Commission date earlier (<=) to the beginning of the date range considered
           - Retirement date later (>=) to the end of the date range considered
 
         Args:
-            i (int): index in self.h5("/mdb/Generator")
+            gen (pd.Series): row of self.h5("/mdb/Generator")
 
         Returns:
             bool: whether generator is operable
         """
-        status = self.h5("/mdb/Generator").loc[i, "ServiceStatus"]
-        commission = self.h5("/mdb/Generator").loc[i, "CommissionDate"]
-        retire = self.h5("/mdb/Generator").loc[i, "RetirementDate"]
 
-        return status and (commission <= self.daterange[0]) and (retire >= self.daterange[-1])
+        return gen.ServiceStatus and (gen.CommissionDate <= self.daterange[0]) and (gen.RetirementDate >= self.daterange[-1])
 
 
 
-    def _thermal_gen(self, i:int, generator:dict, tmp:dict):
+    def _thermal_gen(self, gen:pd.Series, tmp:dict):
+        """Thermal Generator Processing
+
+        Args:
+            gen (pd.Series): row of /mdb/Generator Table 
+            tmp (dict): parameter dictionary for the specific generator
+        """
         genkey = tmp["gv_generatorkey"]
-        fuelid = self.h5("/mdb/ThermalGeneral").loc[lambda x: x["GeneratorKey"] == genkey, "FuelID"]
+        
         tmp["generator_type"] = "thermal"
+        
+        ## set up the fuel burn data
         tmp["p_fuel"] = {"data_type": "fuel_curve", "values": self.thermal_iocurve(genkey)}
         ## get max and min values directly from the fuel curve
         tmp["p_min"] = tmp["p_fuel"]["values"][0][0]
         tmp["p_max"] = tmp["p_fuel"]["values"][-1][0]
+
+        fuelid = self.h5("/mdb/ThermalGeneral").loc[lambda x: x["GeneratorKey"] == genkey, "FuelID"].squeeze()
+        tmp["fuel"]   = self.h5("/mdb/Fuel").loc[lambda x: x["FuelID"] == fuelid, "FuelName"].squeeze()
+
+        tmp["fuel_cost"] = self.get_fuel_cost(fuelid)
+
+        ## convert to cost curve
+        self.fuel2cost(tmp)
+
+
+        ## min up/down times
+        genericnamecol = "GenericMinUpDnName"
+        generickey = "/mdb/ThermalGenericMinUpDownMaxUpTime"
+        tmp["min_up_time"] = self.get_value_or_generic(genkey, "MiniUpTime", genericnamecol, generickey, "MinimumUpTime")
+        tmp["min_down_time"] = self.get_value_or_generic(genkey, "MinimumDownTime", genericnamecol, generickey)
+
+        ## Ramping (ramping in GridView is MW/min)
+        genericnamecol = "GenericRampRateName"
+        generickey = "/mdb/ThermalGenericRampUpDown"
+        tmp["ramp_up_60min"] = 60*self.get_value_or_generic(genkey, "RampUpRate", genericnamecol, generickey, default=tmp["pmax"])
+        tmp["ramp_down_60min"] = 60*self.get_value_or_generic(genkey, "RampDownRate", genericnamecol, generickey, default=tmp["pmax"])
+
+    
+    def fuel2cost(self, tmp:dict):
+        """Convert fuel values to cost values
+
+        Args:
+            tmp (dict): parameter dictionary
+        """
+        p_fuel = tmp.pop("p_fuel")
+        fuel_cost = tmp.pop(fuel_cost)
+        if isinstance(fuel_cost, dict):
+            ### fuel cost is time series
+            tmp["p_cost"] = {"data_type": "time_series", "cost_curve_type": "piecwise",
+                            "values": []}
+            for fc in fuel_cost:
+                _tmp = []
+                for (mw, mmbtu) in p_fuel:
+                    _tmp.append((mw, mmbtu*fuel_cost))
+                tmp["p_cost"]["values"] = _tmp
+        else:
+            ### single value fuel cost
+            _tmp = []
+            for (mw, mmbtu) in tmp["p_fuel"]:
+                _tmp.append((mw, mmbtu*fuel_cost))
+            tmp["p_cost"] = _tmp
+            
+    def get_fuel_cost(self, fuelid:int) -> float:
+        """Return a fuel cost in $/MMBTU.
+        if defaults["elements"]["generator"]["fuel_cost"] = "time_series" a the fuel cost is returned
+        as time series for each simulation time.
+        if defaults["elements"]["generator"]["fuel_cost"] = "avg" this will pull the average
+        of the fuel costs for the date range of the simulation.
+        For each year in the daterange the code attempts to find fuel cost at that year.
+        If that is not available then year 0 is tried.
+
+        Args:
+            fuelid (int): the fuel id
+        """
+        
+        def get_fuel_cost_series(year:int) -> pd.Series:
+            """Return row of table corresponding ot provided year, or 0
+
+            Args:
+                year (int): year
+
+            Raises:
+                ValueError: if no row is found for the fuelid
+
+            Returns:
+                pd.Series: row of FuelCostSchedule table
+            """
+            v = self.h5("/mdb/FuelCostSchedule").loc[lambda x: (x["FuelID"] == fuelid) & (x["Year"] == year)].squeeze()
+            if v.empty:
+                v = self.h5("/mdb/FuelCostSchedule").loc[lambda x: (x["FuelID"] == fuelid) & (x["Year"] == 0)].squeeze()
+                if v.empty:
+                    raise ValueError(f"No Fuel cost found for fuel id {fuelid} for the year {year} OR with year=0.")
+            return v
+        
+        if self.defaults["elements"]["generator"]["fuel_cost"] == "time_series":
+            tmp = {"data_type": "time_series", "values": []}
+            for t in self.daterange:
+                year = t.year
+                month = t.month
+                v = get_fuel_cost_series(year)
+                tmp.append(getattr(v, f"V{month}")*v.PriceScaler)
+            return tmp
+        elif self.defaults["elements"]["generator"]["fuel_cost"] == "avg":
+            years = self.daterange.year.unique()
+            # months = self.daterange.month.unique()
+            tmp = []
+            for year in years:
+                ## loop over years
+                v = get_fuel_cost_series(year)
+                ## append all months that are in range
+                for month in self.daterange[self.daterange.year == year].month.unique():
+                    tmp.append(getattr(v, f"V{month}")*v.PriceScaler)
+            
+            return np.mean(tmp)
+        else:
+            raise ValueError(f'defaults["elements"]["generator"]["fuel_cost"] can be either avg or time_series but {self.defaults["elements"]["generator"]["fuel_cost"]} was given.')
+    
+    def get_value_or_generic(self, genkey:int, valcol:str, genericnamecol:str, 
+                             generickey:str, genericvalcol:str=None, default=0) -> float:
+        """Return a value form the ThermalGeneral Table or get the generic value if the found value is -1.
+
+        Args:
+            genkey (int): Generator Key
+            valcol (str): column name where value should be extracted
+            genericnamecol (str): column for the generic table name (if needed)
+            generickey (str): key for the generic table e.g. "/mdb/ThermalGenericMinUpDownMaxUpTime"
+            genericvalcol (str, optional): column name where generic value should be extracted. Defaults to valcol.
+            default (int, optional): value to return if valcol return -1 and no generic is found (this should not happen). Defaults to 0.
+
+        Returns:
+            float: property value
+        """
+        
+        if genericvalcol is None:
+            genericvalcol = valcol
+
+        gen = self.h5("/mdb/ThermalGeneral").loc[lambda x: x["GeneratorKey"] == genkey].squeeze()
+        v = getattr(gen, valcol)
+        if  v < 0:
+            ## use generic
+            v = self.h5(generickey).loc[lambda x: x[genericnamecol] == getattr(gen, genericnamecol), genericvalcol]
+            if v.empty:
+                print(f"WARNING: No generic value found for generator {genkey} for {valcol}. Generic Name is {getattr(gen, genericnamecol)}.")
+                return default
+            else:
+                return v.squeeze()
+        else:
+            return v
 
     def thermal_iocurve(self, genkey:int) -> list[tuple]:
         """Generatate the p_fuel curve which needs to have output value (MW), and fuel consumed MMBTU

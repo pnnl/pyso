@@ -21,7 +21,8 @@ gvdefaults = {
                 "hydro": [2],
                 "storage": [3],
                 "renewable": [4]
-            }
+            },
+            "fuel_cost": "time_series" #can be "avg" or "time_series"
         }
     }
 }

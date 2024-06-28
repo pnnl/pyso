@@ -24,3 +24,83 @@ The idea is to try to set up independent Egret runs and compare them to these re
 
 >**IMPORTANT**<br>
 >It appears that the UC/dispatch problems in Egret don't automatically solve for LMPs, that is, we'll need to tack on a second step for that in all instances.
+
+# GridView Parser
+## Fuel Based or Not
+There are two different ways to get costs for thermal generators in the Egret Model.
+1. Fuel Base: in this case `fuel_cost`, `p_fuel`, `sartup_fuel`, `non_fuel_startup_cost`
+2. Non Fuel Based: in this case things are defined by `p_cost`, `startup_cost`.
+
+Egret defaults to the fuel based values if provided.
+See for example:
+[startup_cost = thermal_gens[g].get('startup_cost')](https://github.com/breldridge/Egret/blob/03f1f01866c315661ba858e04d330528d200cb32/egret/model_library/unit_commitment/params.py#L855-L859)
+
+
+The fuel based method is the way the GridView models are generally based, that is the real Production Cost Model.
+One issue is that Egret does not seem to support variable O&M which is another $/MWh cost component in the GridView model.
+
+It is probably preferable therefore to convert to (MW,$) curves.
+
+# GridView Generator Tables (Discussion With Kostas)
+## Generator Key based
+* `Generator`
+* `FuelAssignment`
+* `ThermalCurve`
+* `ThermalGeneral`
+* `ThermalIOCurve`
+* `GenMaint`
+* `MonthlyVariableSchedule`
+* `HourlyResources`
+
+## Generator Table
+Column `GeneratorType` links to Monthly Variable Schedule Type.
+
+1. Thermal
+2. Hydro
+3. Energy Storage including pumped hydro
+4. Renewable
+
+## HourlyResources
+Table that lists hourly resources keyed by GeneratorKey
+
+The `Type` column maps to the `HourlyResourceType` table.
+
+### ThermalGeneral
+* Has a lot of the key constraints for thermal generators (ramp rates, must run).
+* Crucially, `FuelID`!!
+
+### ThermalIOCurve
+* Points to `ThermalGenericIOCurve` (optional)
+* has the heat rate information
+* `IOMinCap` and `IncCap<n>` are in MW
+* `MinInput` is MMBTU at the minimum
+* subsequent HR are MMBTU/MWh
+
+### GenMaint
+In the time between `MaintStart` and `MaintEnd` the unit is out of service.
+
+### MonthlyVariableSchdule
+Information by Generator Type such as VOM, Fixed costs, etc.
+
+#### MonthlyVariableScheduleType
+Look Generator type (i.e. 1 for thermal).
+Explains the data types in MonthlyVariableSchedule
+
+
+## FuelID based
+* `Fuel`
+* `EmissionFuel`
+* `FuelCostSchedule` (FuelID as well as year)
+
+### FuelCostSchedule
+* Fuel costs by fuel ID per month $/MMBTU
+
+## Start
+if generic
+Start fuel cost is StartFuel[MMBTU/MW] * Pmax * Fuel Cost [$/MMBTU]
+
+otherwise: StartFuel[MMBTU] * Fuel Cost [$/MMBTU]
+
+If generic:
+StartCost is StartCost[$/MW] * Pmax
+Otherwise just StartCost[$]
