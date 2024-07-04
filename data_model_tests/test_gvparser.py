@@ -16,27 +16,40 @@ if __name__ == "__main__":
         },
         "elements": {
             "branch":{
-                "rating_long_term": "WinterC",
-                "rating_short_term": "WinterC",
-                "rating_emergency": "WinterB"
-            }
-        },
-        "generator": {
-            "generator_type_map":{
-                "storage": [3, 10]
+                "rating_long_term": "A",
+                "rating_short_term": "A",
+                "rating_emergency": "B"
+            },
+            "generator": {
+                "generator_type_map":{
+                    "storage": [3, 10]
+                }
             }
         }
     }
 
-    gv = pyen.GVParse(args.h5path, default=default)
+    gv = pyen.GVParse(args.h5path, default=default, logger_options={"level": "DEBUG"})
     if args.get_daterange:
         print_daterange(gv)
         sys.exit(0)
+    gv.logger.info("Adding system info...", end="")
     gv.add_sys_info()
+    gv.logger.info("complete")
+    gv.logger.info("Adding buses...", end="")
     gv.add_buses()
+    gv.logger.info("complete")
+    gv.logger.info("Adding branches...", end="")
     gv.add_branches()
+    gv.logger.info("complete")
+    gv.logger.info("Adding load...", end="")
     gv.add_load()
+    gv.logger.info("complete")
+    gv.logger.info("Adding generators...", end="")
+    gv.add_generators()
+    gv.logger.info("complete")
+    gv.logger.info("Converting data for saving...", end="")
     gv.data_convert()
+    gv.logger.info("complete")
     gv.h5.close()
     gv.mdl.write("gv2egret_test.json")
     

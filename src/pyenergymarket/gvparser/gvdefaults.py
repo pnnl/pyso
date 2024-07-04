@@ -3,6 +3,9 @@ gvdefaults = {
         "datefrom": None,
         "dateto": None
     },
+    "simulation": {
+        "thermal_model": "cost" # can be "cost" or "fuel". if cost, will convert fuel.
+    },
     "elements": {
         "bus": {
             "v_min": 0.95,
@@ -11,9 +14,9 @@ gvdefaults = {
         "branch": {
             "angle_diff_min": -360,
             "angle_diff_max": 360,
-            "rating_long_term": "WinterA",
-            "rating_short_term": "WinterA",
-            "rating_emergency": "WinterB"
+            "rating_long_term": "A",
+            "rating_short_term": "A",
+            "rating_emergency": "B"
         },
         "generator": {
             "generator_type_map":{
@@ -21,8 +24,7 @@ gvdefaults = {
                 "hydro": [2],
                 "storage": [3],
                 "renewable": [4]
-            },
-            "fuel_cost": "time_series" #can be "avg" or "time_series"
+            }
         }
     }
 }

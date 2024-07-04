@@ -41,6 +41,27 @@ One issue is that Egret does not seem to support variable O&M which is another $
 
 It is probably preferable therefore to convert to (MW,$) curves.
 
+## VOM
+There are three locations where VOM is present:
+1. ThermalGeneral-> VOMCost
+2. ThermalGenericVOMCOst -> VOMCost
+3. MonthlyVariableSchedule -> DataTypeID = 1
+
+It is unclear what the precedence is between these, so for now the monthly schedule (point 3) will be ignored and the point 1 taken unless it is negative, in which case the generic value will be used."
+
+## Starting Costs
+### IF Generic
+Start fuel cost is GenericStartFuel[MMBTU/MW] * Pmax[MW] * Fuel Cost [$/MMBTU]
+
+Non-Fuel Start Cost is GenericStartCost[$/MW] * Pmaxp[MW]
+
+### Non-Generic
+Start fuel cost is StartFuel[MMBTU] * Fuel Cost [$/MMBTU]
+
+Non-Fuel Start Cost is StartupCost[$]
+
+###
+
 # GridView Generator Tables (Discussion With Kostas)
 ## Generator Key based
 * `Generator`
@@ -104,3 +125,51 @@ otherwise: StartFuel[MMBTU] * Fuel Cost [$/MMBTU]
 If generic:
 StartCost is StartCost[$/MW] * Pmax
 Otherwise just StartCost[$]
+
+
+## Ancilliary Services
+
+ASType:
+Ancillary service types: 1-Regulation Down; 2-Load Following Down; 3-Regulation Up; 4-Spinning Reserve; 5-nonSpinng Reserve; 6-Replacement Reserve;7-Frequency Response
+(pg. 326 AncillaryService_Requirement.csv)
+
+Requirements in mdb/AreaRegionAS
+Check if active by column EnforceReserve
+Two Options:
+1. Based on BaseLoadPercent/GenerationPercent
+2. Based on provided shape (if ShapeAdderFlag is True) in that case ShapeAdderID map to /mdb/AreaRegionAS, something like this: 
+```python
+h5("/mdb/AreaRegionAS").loc[lambda x: x["ShapeAdderFlag"]].merge(h52("/mdb/AreaRegionReserveShape"), how="left", left_on="ShapeAdderID", right_on="ID")
+```
+
+ASType (see above)
+
+Type:
+1. LoadAreaID
+2. Region 
+3. Combined
+
+ID:
+- If Region (Type=2), applies to all areas in /mdb/LoadArea/ with the same RegionID
+- If Combined the use "/mdb/CombinedAreaRegionDefinition" to see maping from ID (CombinedAreaRegionID) to region IDs (ElementID) (if ElementType is 1, or LoadAreaID if ElementType is 2)
+
+mdb/GeneratorAncillaryServiceOption
+GeneratorType (see thermal, hydro, etc.)
+Type:
+0: Everything
+1: Don't Know
+2: Combined
+3: Region
+
+ID:
+The id to look for depending on the Type
+
+SubType:
+Type of generation that is configured to provide reserves at various levels.
+If there is a row with SubType = Nothing then all resources of this GeneratorType then a True in the other columns takes precedence.
+
+Similarly if Type and ID are 0 this overrides everything.
+
+Other columns:
+XX[Option]: Whether this type of unit can supply this kind of reserve
+XX[MaxPercentage]: is the maximum percent of capacity that can supply the reserve
