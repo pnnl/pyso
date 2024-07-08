@@ -33,8 +33,8 @@ def mk_br_str(self:GVParse, br:pd.Series, check:Union[Iterable, None]=None) -> s
 def _collect_line(self:GVParse, data:pd.Series):
         tmp = {}
         tmp["branch_type"] = "line"
-        tmp["from_bus"] = data["FromBus"]
-        tmp["to_bus"] = data["ToBus"]
+        tmp["from_bus"] = self.mk_bus_str(data["FromBus"])
+        tmp["to_bus"] = self.mk_bus_str(data["ToBus"])
         tmp["circuit"] = data["CKT"]
         tmp["in_service"] = data["Status"]
         tmp["resistance"] = data["R"]
@@ -71,8 +71,8 @@ def _collect_par(self:GVParse, data:pd.Series):
 
 def _collect_dcline_brtab(self:GVParse, data:pd.Series):
         tmp = {}
-        tmp["from_bus"] = data["FromBus"]
-        tmp["to_bus"] = data["ToBus"]
+        tmp["from_bus"] = self.mk_bus_str(data["FromBus"])
+        tmp["to_bus"] = self.mk_bus_str(data["ToBus"])
         tmp["circuit"] = data["CKT"]
         tmp["in_service"] = data["Status"]
         for k in ["short_term", "long_term", "emergency"]:

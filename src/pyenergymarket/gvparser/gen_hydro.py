@@ -23,7 +23,8 @@ def _hydro_gen(self:GVParse, gen:pd.Series, tmp:dict):
     genkey = tmp["gv_generatorkey"]
     tmp["generator_type"] = "renewable"
 
-    tmp["p_max"] = self.get_hydro_dispatch(gen.GeneratorName)
+    tmp["p_max"] = {"data_type": "time_series", 
+                    "values": self.get_hydro_dispatch(gen.GeneratorName)}
     tmp["p_min"] = copy.deepcopy(tmp["p_max"])
     
     tmp["p_cost"] = self.get_renewable_dispach_cost(genkey)

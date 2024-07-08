@@ -150,6 +150,7 @@ class GVParse():
         sys["reference_bus"] = self.mk_bus_str(refbus)
         sys["reference_bus_angle"] = 0
         sys["time_keys"] = self.daterange.strftime("%Y-%m-%d %H:%M").to_list()
+        sys["time_period_length_minutes"] = 60 #TODO!! this will need to be modifiable
     
     def add_buses(self):
         """Add buses to Egret Model"""
@@ -199,6 +200,7 @@ class GVParse():
                 if "dc_branch" not in self.mdl.data["elements"]:
                     self.mdl.data["elements"]["dc_branch"] = dict()
                 self.mdl.data["elements"]["dc_branch"][self.mk_br_str(br, self.mdl.data["elements"]["dc_branch"].keys())] = tmp
+                continue # don't add to branch set!!!
             elif (br.PhaseShiftLB != 0) and (br.PhaseShiftUB != 0):
                 ## PAR
                 tmp = self._collect_par(br)

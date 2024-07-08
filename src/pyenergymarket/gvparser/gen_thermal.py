@@ -24,6 +24,12 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
         self.logger.warning(f"WARNING: Installed capacity for generator {genkey} is 0. Skipping.")
         return
     
+    ## min up/down times
+    genericnamecol = "GenericMinUpDnName"
+    generickey = "/mdb/ThermalGenericMinUpDownMaxUpTime"
+    tmp["min_up_time"] = self.get_value_or_generic(genkey, "MiniUpTime", genericnamecol, generickey, genericvalcol="MinimumUpTime")
+    tmp["min_down_time"] = self.get_value_or_generic(genkey, "MinimumDownTime", genericnamecol, generickey)
+
     ## get the fuel burn data
     tmp["p_fuel"] = {"data_type": "fuel_curve", "values": self.thermal_iocurve(genkey)}
     ## get max and min values directly from the fuel curve
@@ -47,7 +53,9 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     start_time = self.get_value_or_generic(genkey, "StartupTime", genericnamecol, generickey)
     
     tmp["non_fuel_startup_cost"] = start_cost
-    tmp["startup_fuel"] = np.array([(start_time, start_fuel)])
+    # first entry of startup_fuel needs to be (min_down_time, start_fuel)
+    # see start lag validation rule see validate_startup_lags_rule https://github.com/breldridge/Egret/blob/03f1f01866c315661ba858e04d330528d200cb32/egret/model_library/unit_commitment/params.py#L900-L903
+    tmp["startup_fuel"] = np.array([(tmp["min_down_time"], start_fuel)])
     ###### convert to cost curve
     ## Get VOM cost (NOTE: ignoring option in MonthlyVariableSchedule)
     vom = self.get_value_or_generic(genkey, "VOMCost", "GenericVOMName", "/mdb/ThermalGenericVOMCost")
@@ -56,12 +64,6 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
         self.fuel2cost(tmp, vom=vom)
     else:
         self.logger.warning("WARNING: simulation thermal_mode set not set to 'cost', VOM costs will be neglected")
-
-    ## min up/down times
-    genericnamecol = "GenericMinUpDnName"
-    generickey = "/mdb/ThermalGenericMinUpDownMaxUpTime"
-    tmp["min_up_time"] = self.get_value_or_generic(genkey, "MiniUpTime", genericnamecol, generickey, genericvalcol="MinimumUpTime")
-    tmp["min_down_time"] = self.get_value_or_generic(genkey, "MinimumDownTime", genericnamecol, generickey)
 
     ## Ramping (ramping in GridView is MW/min)
     genericnamecol = "GenericRampRateName"

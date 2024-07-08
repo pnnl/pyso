@@ -21,7 +21,8 @@ def _renewable_gen(self:GVParse, gen:pd.Series, tmp:dict):
 
     
     tmp["p_min"] = 0
-    tmp["p_max"] = self.get_renewable_shape(gen.GeneratorName)
+    tmp["p_max"] = {"data_type": "time_series", 
+                    "values": self.get_renewable_shape(gen.GeneratorName)}
     tmp["p_cost"] = self.get_renewable_dispach_cost(genkey)
     hrsource = self.h5("/mdb/HourlyResource").loc[lambda x: x["GeneratorKey"] == genkey].squeeze()
     tmp["fuel"] = self.h5("/mdb/HourlyResourceType").loc[lambda x: x["TypeID"] == hrsource.Type, "Comments"].squeeze()
