@@ -41,9 +41,9 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     ## get start fuel, this is not an Egret value but we should keep track of this.
     startfuelid = thermalgeneral.StartupFuelID
     tmp["start_fuel"] = self.h5("/mdb/Fuel").loc[lambda x: x["FuelID"] == startfuelid, "FuelName"].squeeze()
-    tmp["fuel_cost"] = self.get_fuel_cost(fuelid)
+    tmp["fuel_cost"] = self.get_fuel_cost(fuelid, scale_factor=self.defaults["elements"]["generator"]["scale_fuel_cost"])
     ## Note: starting fuel cannot accommodate time varying values in Egret at present.
-    tmp["start_fuel_cost"] = self.get_fuel_cost(startfuelid, typ="avg")
+    tmp["start_fuel_cost"] = self.get_fuel_cost(startfuelid, typ="avg", scale_factor=self.defaults["elements"]["generator"]["scale_fuel_cost"])
 
     ## Get starting fuel/costs
     genericnamecol = "GenericStartupName"
@@ -52,7 +52,8 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     start_cost = self.get_value_or_generic(genkey, "StartupCost", genericnamecol, generickey, genericvalcol="GenericStartCost", scale_generic=tmp["p_max"])
     start_time = self.get_value_or_generic(genkey, "StartupTime", genericnamecol, generickey)
     
-    tmp["non_fuel_startup_cost"] = start_cost
+    
+    tmp["non_fuel_startup_cost"] = 0 if self.defaults["elements"]["generator"]["ignore_non_fuel_startup"] else start_cost
     # first entry of startup_fuel needs to be (min_down_time, start_fuel)
     # see start lag validation rule see validate_startup_lags_rule https://github.com/breldridge/Egret/blob/03f1f01866c315661ba858e04d330528d200cb32/egret/model_library/unit_commitment/params.py#L900-L903
     tmp["startup_fuel"] = np.array([(tmp["min_down_time"], start_fuel)])
@@ -73,17 +74,18 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     tmp["ramp_down_60min"] = 60*self.get_value_or_generic(genkey, "RampDnRate", genericnamecol, generickey, genericnamekey=genericnamekey, genericvalcol="RampDownRate", default=tmp["p_max"])
 
     ## startup/shutdown capacity
-    ## Assume that start up is pmin+ramp up <- TODO: Check with Hitachi
+    ## According to Hitachi generator can start up at an point
     ## Assume generator can shutdown from any point.
-    tmp["startup_capacity"] = min(tmp["p_min"] + tmp["ramp_up_60min"], tmp["p_max"])
+    tmp["startup_capacity"] = tmp["p_max"] #min(tmp["p_min"] + tmp["ramp_up_60min"], tmp["p_max"])
     tmp["shutdown_capcity"] = tmp["p_max"]
 
     ## must run
-    tmp["fixed_commitment"] = thermalgeneral.MustRun
+    if thermalgeneral.MustRun:
+        tmp["fixed_commitment"] = 1
 
     ### initialization
     ## copying default from rts_gmlc parser: https://github.com/breldridge/Egret/blob/03f1f01866c315661ba858e04d330528d200cb32/egret/parsers/rts_gmlc/parser.py#L948-L953
-    ## all units set on at ther minimum output
+    ## all units set on at their minimum output
     tmp["initial_status"] = tmp["min_up_time"] + 1
     tmp["initial_p_output"] = tmp["p_min"]
     tmp["initial_q_output"] = 0.0
@@ -113,14 +115,21 @@ def fuel2cost(self:GVParse, tmp:dict, vom:float=0):
     """
 
     def mmbtu2dollar(p_fuel, fc, vom):
+        # inchr = self.fuelburn2inchr(p_fuel)
+        # _tmp = [(inchr[0][0], inchr[0][1])]
         _tmp = []
+        # for delta_mw, hr in inchr[1:]:
         for (mw, mmbtu) in p_fuel:
             _tmp.append((mw, mmbtu*fc + mw*vom))
+            # _tmp.append((delta_mw, hr*fc + vom))
         return _tmp
     
     ###### FUEL BURN
     p_fuel = tmp.pop("p_fuel") # Fuel Burn curve (MW, MMBTU)
     fuel_cost = tmp.pop("fuel_cost") # Fuel Cost in ($/MMBTU)
+    tmp["org_p_fuel"] = p_fuel
+    tmp["org_fuel_cost"] = fuel_cost
+    ## Convert to cost curve with entries (MW, $/MWh)
     if isinstance(fuel_cost, dict):
         ### fuel cost is time series
         tmp["p_cost"] = {"data_type": "time_series", "cost_curve_type": "piecwise",
@@ -138,6 +147,8 @@ def fuel2cost(self:GVParse, tmp:dict, vom:float=0):
     ##### START FUEL
     start_fuel = tmp.pop("startup_fuel")
     start_fuel_cost = tmp.pop("start_fuel_cost")
+    tmp["org_start_fuel"] = start_fuel
+    tmp["org_start_fuel_cost"] = start_fuel_cost
     tmp["startup_cost"] = [(hr, mmbtu*start_fuel_cost) for (hr, mmbtu) in start_fuel]
     
 def get_fuel_cost(self:GVParse, fuelid:int, **kwargs) -> Union[float, dict]:

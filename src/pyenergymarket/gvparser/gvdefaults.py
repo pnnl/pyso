@@ -24,7 +24,11 @@ gvdefaults = {
                 "hydro": [2],
                 "storage": [3],
                 "renewable": [4]
-            }
+            },
+            ### parameters mainly for debugging purposes
+            "renewable_type_override": {},
+            "ignore_non_fuel_startup": False,
+            "scale_fuel_cost": 1
         }
     }
 }

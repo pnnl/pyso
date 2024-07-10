@@ -26,6 +26,21 @@ The idea is to try to set up independent Egret runs and compare them to these re
 >It appears that the UC/dispatch problems in Egret don't automatically solve for LMPs, that is, we'll need to tack on a second step for that in all instances.
 
 # GridView Parser
+## Testing the model
+Generate the Egret `ModelData` json file using `test_gvparser.py`.
+This takes as argument a path to an h5 file as well as other optional arguments see:
+```
+python test_gvparser.py --help
+```
+
+Run the Unit Commitment model using the `uc_test_example.py`.
+This takes as optional arguments the path to the json model data as well as which solver (gurobi or cbc) to use.
+This will save another json file with the solution data in it.
+
+Finally, the results can be investigated using `investigate_solution.py`.
+This creates a generation stack figure and also prints some data frames.
+More work is necessary on this script.
+
 ## Fuel Based or Not
 There are two different ways to get costs for thermal generators in the Egret Model.
 1. Fuel Base: in this case `fuel_cost`, `p_fuel`, `sartup_fuel`, `non_fuel_startup_cost`

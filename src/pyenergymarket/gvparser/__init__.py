@@ -149,6 +149,7 @@ class GVParse():
         refbus = self.h5("/mdb/Bus").loc[lambda x: x["Type"] == 3, "BusID"].squeeze()
         sys["reference_bus"] = self.mk_bus_str(refbus)
         sys["reference_bus_angle"] = 0
+        sys["load_mismatch_cost"] = float(self.h5("/mdb/SimulationControl").loc[lambda x: x["Name"] == "Load Shedding Penalty", "Value"].squeeze())
         sys["time_keys"] = self.daterange.strftime("%Y-%m-%d %H:%M").to_list()
         sys["time_period_length_minutes"] = 60 #TODO!! this will need to be modifiable
     
@@ -348,7 +349,7 @@ class GVParse():
                 - time_series: returns a time series of fuel costs
                 - avg: returns a average value of the the date range for the model
             scale_key (str, optional): column name in mdb key that contains a scaler for the data. Default is None.
-            scale_factor (float, optional): scale factor (will be overridden if scale_key is provided). Default is 1. 
+            scale_factor (float, optional): scale factor (will multiply scale_key is provided). Default is 1. 
             force_time_series (bool, optional): If True and typ = "time_series" a time series will be returned
                 even if it consists of all identical values.
         """
@@ -372,7 +373,8 @@ class GVParse():
             month = t.month
             v = get_series(year)
             if scale_key is not None:
-                scale_factor = getattr(v, scale_key)
+                self.logger.debug(f"get_ts_param: scale_factor = {scale_factor} (type={type(scale_factor)}), v = {getattr(v, scale_key)} (type={type(getattr(v, scale_key))})")
+                scale_factor *= getattr(v, scale_key)
             tmp.append(getattr(v, f"V{month}")*scale_factor)
             
             ## check if all values are the same, if so, return just one scalar

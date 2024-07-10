@@ -42,6 +42,7 @@ def _collect_line(self:GVParse, data:pd.Series):
         tmp["charging_susceptance"] = data["B"]
         for k in ["long_term", "short_term", "emergency"]:
             tmp[f"rating_{k}"] = data[self.season + self.defaults["elements"]["branch"][f"rating_{k}"]]
+        tmp["violation_penalty"] = data["Penalty"]
         tmp["angle_diff_min"] = self.defaults["elements"]["branch"]["angle_diff_min"]
         tmp["angle_diff_max"] = self.defaults["elements"]["branch"]["angle_diff_max"]
         ## saving for future use

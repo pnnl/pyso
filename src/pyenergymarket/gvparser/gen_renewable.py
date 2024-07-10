@@ -25,7 +25,10 @@ def _renewable_gen(self:GVParse, gen:pd.Series, tmp:dict):
                     "values": self.get_renewable_shape(gen.GeneratorName)}
     tmp["p_cost"] = self.get_renewable_dispach_cost(genkey)
     hrsource = self.h5("/mdb/HourlyResource").loc[lambda x: x["GeneratorKey"] == genkey].squeeze()
-    tmp["fuel"] = self.h5("/mdb/HourlyResourceType").loc[lambda x: x["TypeID"] == hrsource.Type, "Comments"].squeeze()
+    if hrsource.Type in self.defaults["elements"]["generator"]["renewable_type_override"]:
+        tmp["fuel"] = self.defaults["elements"]["generator"]["renewable_type_override"][hrsource.Type]
+    else:
+        tmp["fuel"] = self.h5("/mdb/HourlyResourceType").loc[lambda x: x["TypeID"] == hrsource.Type, "Comments"].squeeze()
 
     self.mdl.data["elements"]["generator"][gen.GeneratorName] = tmp
 
