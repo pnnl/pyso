@@ -4,7 +4,7 @@
 import os, argparse
 
 from egret.data.model_data import ModelData
-from egret.models.unit_commitment import solve_unit_commitment
+from egret.models.unit_commitment import solve_unit_commitment, SlackType
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="solve model")
@@ -21,7 +21,7 @@ if __name__ == "__main__":
     md = ModelData.read(os.path.join(this_module_path, args.json))
 
     ## solve the unit commitment instance using solver gurobi
-    md_sol = solve_unit_commitment(md, args.solver, 
+    md_sol = solve_unit_commitment(md, args.solver, slack_type=SlackType.TRANSMISSION_LIMITS,
                                    mipgap=0.01,
                                    timelimit=300, solver_tee=True)
     print('Solved!')
