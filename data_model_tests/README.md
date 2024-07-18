@@ -144,9 +144,30 @@ Otherwise just StartCost[$]
 
 ## Ancilliary Services
 
-ASType:
-Ancillary service types: 1-Regulation Down; 2-Load Following Down; 3-Regulation Up; 4-Spinning Reserve; 5-nonSpinng Reserve; 6-Replacement Reserve;7-Frequency Response
-(pg. 326 AncillaryService_Requirement.csv)
+>**NOTE:**<br>
+>When shapes are provided, they are in `.dat` files that are currently not in the h5.
+>Ideally, these would be included/parsed so that just inputs can be used.
+>For now, when a shape is pointed to the REQUIREMENT from one of the result keys will be used.
+
+Ancillary service types:
+See pg. 326 AncillaryService_Requirement.csv of Hitachi manual
+| ASType | Description|
+| :----: | :--------  |
+| 1 | Regulation Down |
+| 2 | Load Following Down |
+| 3 | Regulation Up |
+| 4 | Spinning Reserve |
+| 5 | nonSpinning Reserve |
+| 6 | Load Following Up |
+| 7 | Frequency Response  |
+
+It looks like EGRET has regulation and flexible ramping which match regulation and load following here.
+So the only thing that would be missing is Frequency response.
+
+Looking at the GridView results it appears that 
+$$
+P_g[t] + RU[t] + LFU[t] \leq P_{\text{max}}
+$$
 
 Requirements in mdb/AreaRegionAS
 Check if active by column EnforceReserve
@@ -164,17 +185,22 @@ Type:
 2. Region 
 3. Combined
 
+Note: there might be a type 0 which is system wide.
+
 ID:
 - If Region (Type=2), applies to all areas in /mdb/LoadArea/ with the same RegionID
 - If Combined the use "/mdb/CombinedAreaRegionDefinition" to see maping from ID (CombinedAreaRegionID) to region IDs (ElementID) (if ElementType is 1, or LoadAreaID if ElementType is 2)
 
-mdb/GeneratorAncillaryServiceOption
+mdb/GeneratorAncillaryServiceOption2
 GeneratorType (see thermal, hydro, etc.)
 Type:
 0: Everything
-1: Don't Know
-2: Combined
-3: Region
+1: Don't Know (almost certainly LoadAreaID)
+2: Region 
+3: CombinedRegion
+
+>**NOTE**:
+> This type mapping should be verified. It appears to be correct for the Mini WECC model.
 
 ID:
 The id to look for depending on the Type

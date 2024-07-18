@@ -38,7 +38,67 @@ class GVParse():
 
         self._summer_time = None
         self._season = None
+
+        ## TODO: not sure what ends up being the label for 5: non spin, and 7: frequency
+        self.astype2gvkey = {1: "REGULATION DOWN",
+                             2: "FLEXIBLE DOWN",
+                             3: "REGULATION UP",
+                             4: "SPINNING RESERVE",
+                             6: "FLEXIBLE UP"}
+        ## Note: mapping both regulation and load following (Flexible) to regulation
+        self.astype2egret = {1: "regulation_down",
+                             2: "flexible_ramp_down",
+                             3: "regulation_up",
+                             4: "spinning_reserve",
+                             5: "non_spinning_reserve",
+                             6: "flexible_ramp_up"}
     
+    def __call__(self, savename:str):
+        """Parse gridview and write the EGRET model
+        
+        Args:
+            savename (str): name to save to (.json)
+        """
+        
+        self.parse()
+        self.write(savename)
+
+    def parse(self):
+        """Parse the gridview model for the given date range into an EGRET Model
+        """
+        if not self.h5.is_open:
+            self.h5.open()
+        self.logger.info("Adding system info...", end="")
+        self.add_sys_info()
+        self.logger.info("complete")
+        self.logger.info("Adding buses...", end="")
+        self.add_buses()
+        self.logger.info("complete")
+        self.logger.info("Adding branches...", end="")
+        self.add_branches()
+        self.logger.info("complete")
+        self.logger.info("Adding load...", end="")
+        self.add_load()
+        self.logger.info("complete")
+        self.logger.info("Adding generators...", end="")
+        self.add_generators()
+        self.logger.info("complete")
+        self.logger.info("Adding ancillary service requirements...", end="")
+        self.as_requirements()
+        self.logger.info("complete")
+        self.logger.info("Converting data for saving...", end="")
+        self.data_convert()
+        self.logger.info("complete")
+        self.h5.close()
+    
+    def write(self, savename:str):
+        """Write the EGRET model to a json file
+
+        Args:
+            savename (str): name to save to (.json)
+        """
+        self.mdl.write(savename)
+
     @property
     def daterange(self) -> pd.DatetimeIndex:
         """Get date range based on the values in self.defaults["time"]
@@ -219,7 +279,7 @@ class GVParse():
           
         # note, will want to distinguish between lines and transformers, PARS, and dclines
     
-    ###### Branches ################
+    ###### Generators ################
     def add_generators(self):
         
         gentab = self.h5("/mdb/Generator")
@@ -273,12 +333,18 @@ class GVParse():
     from .gen_thermal import fuelburn2inchr
     from .gen_thermal import inchr2fuelburn
     from .gen_thermal import _from_inchr
+    from .gen_thermal import get_as_capability
+    from .gen_thermal import regulation_params
+    from .gen_thermal import spinning_params
+    from .gen_thermal import flexible_params
     
     ##### RENEWABLE GENERATION ################
     from .gen_renewable import _renewable_gen
     from .gen_renewable import get_renewable_shape
     from .gen_renewable import get_renewable_dispach_cost
-    
+    from .gen_renewable import renewable_ancillary_sevices
+    from .gen_renewable import renewable2thermal
+
     ##### Hydro ###############################
     from .gen_hydro import _hydro_gen
     from .gen_hydro import get_hydro_dispatch
@@ -369,18 +435,19 @@ class GVParse():
         tmp = []
         ## collect data for each time interval
         for t in self.daterange:
+            _scale_factor = scale_factor # copy for this time instant of any additional/external scale factor
             year = t.year
             month = t.month
             v = get_series(year)
             if scale_key is not None:
                 self.logger.debug(f"get_ts_param: scale_factor = {scale_factor} (type={type(scale_factor)}), v = {getattr(v, scale_key)} (type={type(getattr(v, scale_key))})")
-                scale_factor *= getattr(v, scale_key)
-            tmp.append(getattr(v, f"V{month}")*scale_factor)
+                _scale_factor *= getattr(v, scale_key)
+            tmp.append(getattr(v, f"V{month}")*_scale_factor)
             
-            ## check if all values are the same, if so, return just one scalar
-            unique_vals = np.unique(tmp)
-            if len(unique_vals) == 1:
-                return unique_vals[0]
+        ## check if all values are the same, if so, return just one scalar
+        unique_vals = np.unique(tmp)
+        if len(unique_vals) == 1:
+            return unique_vals[0]
         
         if typ == "time_series":
             return {"data_type": "time_series", "values": tmp}
@@ -388,4 +455,7 @@ class GVParse():
             return np.mean(tmp)
         else:
             raise ValueError(f'typ can be either avg or time_series but {typ} was given.')
-        
+
+    ############## Ancilliary Services ######################
+    from .ancilliary_services import as_requirements
+    from .ancilliary_services import get_as_requirement

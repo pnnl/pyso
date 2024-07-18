@@ -9,7 +9,7 @@ from egret.models.unit_commitment import solve_unit_commitment, SlackType
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="solve model")
     # parser.add_argument("--json", help="path solved json", default="gv2egret_test_fuelmode.json")
-    parser.add_argument("--json", help="path solved json", default="rts_gmlc_output/prescient_egret_json/ruc_modeldata0.json")
+    parser.add_argument("--json", help="path solved json", default="gv2egret_test.json")
     parser.add_argument("--solver", help="choice of solver", choices=["gurobi", "cbc"], default="gurobi")
     args = parser.parse_args()
     

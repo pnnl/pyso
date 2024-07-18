@@ -60,7 +60,7 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     ###### convert to cost curve
     ## Get VOM cost (NOTE: ignoring option in MonthlyVariableSchedule)
     vom = self.get_value_or_generic(genkey, "VOMCost", "GenericVOMName", "/mdb/ThermalGenericVOMCost")
-    
+    tmp["vom"] = vom
     if self.defaults["simulation"]["thermal_model"] == "cost":
         self.fuel2cost(tmp, vom=vom)
     else:
@@ -90,17 +90,27 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     tmp["initial_p_output"] = tmp["p_min"]
     tmp["initial_q_output"] = 0.0
 
-    ### ANCILLIARY SERVICES: TODO!!!
-    ## some of these are standin
-    tmp["fast_start"] = thermalgeneral.QuickStart
+    ### ANCILLIARY SERVICES
+    ### Regulation (AGC)
+    as_check, as_frac = self.get_as_capability(gen, ["RDOption", "RUOption"], ["RDMaxPercentage", "RUMaxPercentage"])
+    tmp["agc_capable"] = as_check
+    if as_check:
+        # use minimum of ramp_up/ramp_down 
+        tmp["ramp_agc"] = min(tmp["ramp_up_60min"]/60, tmp["ramp_down_60min"]/60)
+        # Since we only have a percent, we only scale the maximum 
+        tmp["p_min_agc"] = tmp["p_min"]
+        tmp["p_max_agc"] = tmp["p_max"]*as_frac
     
-    ## AGC
-    tmp["agc_capable"] = 1
-    # use minimum of ramp_up/ramp_down 
-    tmp["ramp_agc"] = min(tmp["ramp_up_60min"]/60, tmp["ramp_down_60min"]/60)
-    tmp["p_min_agc"] = tmp["p_min"]
-    tmp["p_max_agc"] = tmp["p_max"]
-
+    ### Flexible Ramp
+    # there is no possibility of excluding generators here...all thermal generators can provide this
+    
+    ### Spinning
+    as_check, as_frac = self.get_as_capability(gen, "SPOption", "SPMaxPercentage")
+    if as_check:
+        tmp["spinning_capacity"] = tmp["p_max"]*as_frac
+    
+    ### Non Spin (TODO)
+    tmp["fast_start"] = thermalgeneral.QuickStart
     ## TODO: generation distribution table from Brent's update!!!
 
     ### Add to model data
@@ -132,7 +142,7 @@ def fuel2cost(self:GVParse, tmp:dict, vom:float=0):
     ## Convert to cost curve with entries (MW, $/MWh)
     if isinstance(fuel_cost, dict):
         ### fuel cost is time series
-        tmp["p_cost"] = {"data_type": "time_series", "cost_curve_type": "piecwise",
+        tmp["p_cost"] = {"data_type": "time_series", "cost_curve_type": "piecewise",
                         "values": []}
         for fc in fuel_cost["values"]:
             tmp["p_cost"]["values"].append(mmbtu2dollar(p_fuel["values"], fc, vom))
@@ -403,3 +413,106 @@ def _from_inchr(self:GVParse, iocurve:pd.Series) -> list[tuple]:
 
     ## convert to fuel burn
     return self.inchr2fuelburn(inc_hr)
+
+def get_as_capability(self:GVParse, gen:pd.Series, optionkeys:Union[str,list[str]], percentkeys:Union[list[str]]) -> tuple[bool, float]:
+    """Get the ancillary services capability for a generator.
+
+    Args:
+        gen (pd.Series): row from the /mdb/Generator key
+        optionkeys (Union[str,list[str]]): column names in /mdb/GeneratorAncillaryServiceOption2 
+            that indicate whether the service can be provided
+        percentkeys (Union[list[str]]): column names in /mdb/GeneratorAncillaryServiceOption2 
+            that specify the maximum percent (w.r.t) capacity of reserve that can be provided
+
+    Returns:
+        tuple[bool, float]: Whether the resource is capable of performing the service 
+                            and the fraction of of capacity possible
+    """
+    
+    def option_filter(x, subtype:str, typ:int, include_id=False):
+        expr = (x["SubType"] == subtype) & (x["Type"] == typ) & x.loc[:, optionkeys].prod(axis=1).astype(bool)
+        if include_id:
+            expr = expr & self.h5.gen_in_region(gen.GeneratorKey, x["ID"])
+        return expr
+    
+    ### convert strings to list of string to preserve DataFrame type in .loc call
+    if isinstance(percentkeys, str):
+        percentkeys = [percentkeys]
+    if isinstance(optionkeys, str):
+        optionkeys = [optionkeys]
+
+    genopt = self.h5("/mdb/GeneratorAncillaryServiceOption2").loc[lambda x: (x["GeneratorType"] == gen.GeneratorType) & x["SubType"].isin(["", gen.SubType])]
+    
+    ### TODO: For now, just take logical OR of system level, waiting on Hitachi to understand logic better
+    # Logical OR (any call) is on the various entries (rows) in table (axis=0),
+    # if multiple option keys, we enforce that they are ALL true.
+    # For the percentage, return the minimum over all options
+    capable = genopt.loc[lambda x: x["Type"] == 0, optionkeys].any(axis=0).all()
+    percent = genopt.loc[lambda x: x["Type"] == 0, percentkeys].min(axis=0).min()
+
+    return capable, percent/100
+
+###### ATTEMPT AT LOGIC over different regional defintions
+# ### We go down in precedence order:
+# ##      If yes: record but proceed (only update values if they are more restrictive)
+# ##      If no: then this is binding, finish
+# exit_flag = False
+# #### SYSTEM WIDE NO SUBTYPE 
+# if genopt.loc[lambda x: option_filter("", 0)].empty:
+#     return False
+# else:
+#     percent = genopt.loc[lambda x: option_filter("", 0), percentkeys].min(axis=1).squeeze()
+# #### SYSTEM WIDE SPECIFIC SUBTYPE
+# if genopt.loc[lambda x: (x["SubType"] == gen.SubType) & (x["Type"] == 0) & x["RDOption"] & x["RUOption"]].empty:
+#     percent = genopt.loc[lambda x: (x["SubType"] == gen.SubType) & (x["Type"] == 0), ["RDMaxPercentage", "RUMaxPercentage"]].min(axis=1).squeeze()
+# #### Region WIDE NO SUBTYPE
+# elif not genopt.loc[lambda x: (x["SubType"] == "") & (x["Type"] == 2) & (self.h5.gen_in_region(gen.GeneratorKey, x["ID"])) &
+#                     x["RDOption"] & x["RUOption"]].empty:
+#     percent = genopt.loc[lambda x: (x["SubType"] == "") & (x["Type"] == 2) & (self.h5.gen_in_region(gen.GeneratorKey, x["ID"])), ["RDMaxPercentage", "RUMaxPercentage"]].min(axis=1).squeeze()
+# #### Region WIDE SPECIFIC SUBTYPE
+# elif not genopt.loc[lambda x: (x["SubType"] == gen.SubType) & (x["Type"] == 2) & (self.h5.gen_in_region(gen.GeneratorKey, x["ID"])) &
+#                     x["RDOption"] & x["RUOption"]].empty:
+#     percent = genopt.loc[lambda x: (x["SubType"] == gen.SubType) & (x["Type"] == 2) & (self.h5.gen_in_region(gen.GeneratorKey, x["ID"])), ["RDMaxPercentage", "RUMaxPercentage"]].min(axis=1).squeeze()
+
+def regulation_params(self:GVParse, gen:pd.Series):
+    """Get capability and percent of maximum for generation participation in 
+    regulation up AND regulation down (only one is not possible!)
+
+    Args:
+        gen (pd.Series): row from the /mdb/Generator key
+
+    Returns:
+        tuple[bool, float]: Whether the resource is capable of performing the service 
+                            and the percent of of capacity possible
+    """
+
+    return self.get_as_capability(gen, ["RDOption", "RUOption"], ["RDMaxPercentage", "RUMaxPercentage"])
+    
+
+def spinning_params(self:GVParse, gen:pd.Series):
+    """Get capability and percent of maximum for generation participation in 
+    spinning reserves
+
+    Note for thermal generators
+
+    Args:
+        gen (pd.Series): row from the /mdb/Generator key
+
+    Returns:
+        tuple[bool, float]: Whether the resource is capable of performing the service 
+                            and the percent of of capacity possible
+    """
+    return self.get_as_capability(gen, "SPOption", "SPMaxPercentage")
+    
+def flexible_params(self:GVParse, gen:pd.Series):
+    """Get capability and percent of maximum for generation participation in 
+    Load following Up AND down (only one is not possible!)
+
+    Args:
+        gen (pd.Series): row from the /mdb/Generator key
+
+    Returns:
+        tuple[bool, float]: Whether the resource is capable of performing the service 
+                            and the percent of of capacity possible
+    """
+    return self.get_as_capability(gen, ["LDOption", "LUOption"], ["LDMaxPercentage", "LUMaxPercentage"])

@@ -18,13 +18,14 @@ if __name__ == "__main__":
     
     md = ModelData.read(os.path.join(this_module_path, args.json))
 
-    print("Non Zero Thermal Generators")
-    for n, g in md.elements("generator", generator_type="thermal"):
-        if np.any(np.array(g["pg"]["values"]) > 0):
-            print(f'Generator {n} of type {g["unit_type"]} and fuel {g["fuel"]}')
+    # print("Non Zero Thermal Generators")
+    # for n, g in md.elements("generator", generator_type="thermal"):
+    #     if np.any(np.array(g["pg"]["values"]) > 0):
+    #         print(f'Generator {n} of type {g["unit_type"]} and fuel {g["fuel"]}')
 
 
     #### energy balance
+    print("\n######## ENERGY BALANCE ###############\n")
     gen_total = 0
     for n, g in md.elements("generator"):
         gen_total += np.array(g["pg"]["values"])
@@ -50,26 +51,41 @@ if __name__ == "__main__":
 
 
     #### branches
-    flows = {}
-    for n, b in md.elements("branch"):
-        flows[n] = b["pf"]["values"]
+    # flows = {}
+    # for n, b in md.elements("branch"):
+    #     flows[n] = b["pf"]["values"]
     
-    flows = pd.DataFrame(flows)
-    print(flows)
+    # flows = pd.DataFrame(flows)
+    # print(flows)
 
-    ##### renewables
+    ##### curtailment
+    print("\n######## Curtailment ###############\n")
     curtailment = {"Wind": 0, "Solar": 0, "Hydro": 0} 
-    for n, g in md.elements("generator", generator_type="renewable"): 
+    for n, g in md.elements("generator"): 
+        if g["fuel"] not in curtailment.keys():
+            continue
+        pg = np.array(g["pg"]["values"])
+        if "regulation_up_supplied" in g.keys():
+            reg_up = np.array(g["regulation_up_supplied"]["values"])
+        else:
+            reg_up = 0
+        if "flexible_ramp_up_supplied" in g.keys():
+            flex_up = np.array(g["flexible_ramp_up_supplied"]["values"])
+        else:
+            flex_up = 0
+        if "spinning_reserve_supplied" in g.keys():
+            spinn = np.array(g["spinning_reserve_supplied"]["values"])
+        else:
+            spinn = 0
         if isinstance(g["p_max"], dict):
-            curt = np.array(g["p_max"]["values"]) - np.array(g["pg"]["values"])
+            curt = np.array(g["p_max"]["values"]) - (pg + reg_up + flex_up + spinn)
         else:
             print(f"Generator {n} doesn't have p_max as dictionary")
-            curt = g["p_max"] - np.array(g["pg"]["values"])
+            curt = g["p_max"] - (pg + reg_up + flex_up + spinn)
         if np.abs(curt).max() > 1e-3:
             print(f"Generator {n} has non negligible curtailment.")
         curtailment[g["fuel"]] += curt
     curtailment = pd.DataFrame(curtailment)
-    print("Curtailment")
     print(curtailment)
 
     
