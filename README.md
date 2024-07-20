@@ -1,5 +1,12 @@
 PyEnergyMarket is a EGRET-based energy market modeling tool developed by PNNL in the E-COMP LDRD initiative.
 
+## Package Structure
+## EnergyMarket
+The `EnergyMarket` class is defined in `engine.py` and houses the core functionalities for running energy market models
+
+## GVParse
+The `GVParse` class is the GridView parse used to convert GridView models (currently _solved_) exported to an `h5` file to the EGRET data model
+
 ## Use Case Structure
 ### Data Set
 We'll start with the RTS GMLC system just to have a model that runs.

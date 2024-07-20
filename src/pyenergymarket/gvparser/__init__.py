@@ -4,21 +4,10 @@ import numpy as np
 from egret.data.model_data import ModelData
 from .gvdefaults import gvdefaults
 from typing import Union, Callable, Iterable
+from ..utils.ioutils import merge_configs
+from ..engine import DataProvider
 
-def merge_configs(defaults:dict, user:dict, level=0):
-    """update the default options with user inputs"""
-    for k, v in user.items():
-        if k not in defaults:
-            if level == 0:
-                # if this is a top level configuration key, raise warning
-                print(f"WARNING: configuration parameter {k} is unknown. Check spelling and capitalization perhaps?")
-            defaults[k] = v
-        else:
-            if isinstance(v, dict):
-                merge_configs(defaults[k], v, level=level+1)
-            else:
-                defaults[k] = v
-class GVParse():
+class GVParse(DataProvider):
     def __init__(self, h5path:str, default:dict=None, **kwargs):
         """
         Inputs:
@@ -62,6 +51,24 @@ class GVParse():
         
         self.parse()
         self.write(savename)
+
+    def get_model(self, datefrom:str, dateto:str) -> ModelData:
+        """Data provider callback for EnergyMarket
+
+        Args:
+            datefrom (str): start date for Egret problem
+            dateto (str): End date for Egret problem
+
+        Returns:
+            ModelData: Egret model for specified date range
+        """
+        
+        ### set the date
+        self.set_daterange(datefrom, dateto)
+        ### parse
+        self.parse()
+        ### return model
+        return self.mdl
 
     def parse(self):
         """Parse the gridview model for the given date range into an EGRET Model
