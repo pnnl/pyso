@@ -10,6 +10,7 @@ The `GVParse` class is the GridView parse used to convert GridView models (curre
 ## Getting Started
 To run an example see the [`test_energymarket.py`](./data_model_tests/test_energymarket.py) file.
 To run this test an h5 database from a GridView run is necessary.
+Such files are available on the Thrust 3 teams channel in a folder called `h5files`.
 The command to run the test is:
 ```
 >python test_energymarket.py <path-to-h5file.h5>
