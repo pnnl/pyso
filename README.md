@@ -7,6 +7,23 @@ The `EnergyMarket` class is defined in `engine.py` and houses the core functiona
 ## GVParse
 The `GVParse` class is the GridView parse used to convert GridView models (currently _solved_) exported to an `h5` file to the EGRET data model
 
+## Getting Started
+To run an example see the [`test_energymarket.py`](./data_model_tests/test_energymarket.py) file.
+To run this test an h5 database from a GridView run is necessary.
+The command to run the test is:
+```
+>python test_energymarket.py <path-to-h5file.h5>
+```
+The command will produce a resulting json file called `pyenergy_test_solution.json`
+
+Some summary statistics and a generation stack can be created with the [`investigate_solution.py`](./data_model_tests/investigate_solution.py), which should produce a figure that looks something like this:
+![](./data_model_tests/data_files/investigate_solution.png)
+
+Taking a look at `test_energymarket.py` the basic setup is:
+* Create the `GVParser` object based on the h5 file. There are various configuration possible here
+* Create the `EnergyMarket` object, passing it the `GVParser` object as a data provider.
+* Run (eventually many) instances of the market by parsing the model for a particular time window (`EnergyMarket.data_provider.get_model()`), and then solving it.
+
 ## Use Case Structure
 ### Data Set
 We'll start with the RTS GMLC system just to have a model that runs.

@@ -8,7 +8,7 @@ energymarket_defaults = {
     "simulation": {
         "price_model": "lmp", # can be "lmp" (fix commitment), 
                                       #"achp" (approximate convex hull, relax binary),
-                                      # "none" (don't calculate prices)
+                                      # None (don't calculate prices)
     },
     "solve_arguments": {
         "solver": "gurobi",
@@ -18,5 +18,11 @@ energymarket_defaults = {
             "solver_tee": True,
             "timelimit": 300,
         }
+    },
+    "logging": {
+        "name": "pyenergy",
+        "level": "INFO",
+        "msg_format": "{message}",
+        "file": None
     }
 }

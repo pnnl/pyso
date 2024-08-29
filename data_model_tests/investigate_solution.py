@@ -29,10 +29,14 @@ if __name__ == "__main__":
     gen_total = 0
     for n, g in md.elements("generator"):
         gen_total += np.array(g["pg"]["values"])
+    for n, g in md.elements("storage"):
+        gen_total += np.array(g["p_discharge"]["values"])
     
     load_total = 0
     for n, l in md.elements("load"):
         load_total += np.array(l["p_load"]["values"])
+    for n, l in md.elements("storage"):
+        load_total += np.array(l["p_charge"]["values"])
 
     load_total_bus = 0
     p_balance_violation = 0

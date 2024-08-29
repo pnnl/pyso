@@ -15,10 +15,7 @@ if __name__ == "__main__":
     # parser.add_argument("--savename", help="name of output json file", default="gv2egret_test.json")
     args = parser.parse_args()
     
-    default = {
-        "time": {
-            "datefrom": "2032-02-01"
-        },
+    gvconfig = {
         "simulation": {
             "thermal_model": "cost", # this is the default
         },
@@ -40,20 +37,24 @@ if __name__ == "__main__":
     }
 
     if args.fuelmodel:
-        default["simulation"]["thermal_model"] = "fuel"
-        savename = "gv2egret_test_fuelmode.json"
-    else:
-        savename = "gv2egret_test.json"
+        gvconfig["simulation"]["thermal_model"] = "fuel"
 
     if args.ignore_startup:
-        default["elements"]["generator"]["ignore_non_fuel_startup"] = True
+        gvconfig["elements"]["generator"]["ignore_non_fuel_startup"] = True
 
-    gv = pyen.GVParse(args.h5path, default=default, logger_options={"level": args.loglevel})
+    gv = pyen.GVParse(args.h5path, default=gvconfig, logger_options={"level": args.loglevel})
     if args.get_daterange:
         print_daterange(gv)
         sys.exit(0)
     
 
-    em =pyen.EnergyMarket(gv)
-    em.run_model(default["time"]["datefrom"], default["time"]["datefrom"])
+    pyenconfig = {
+        "time": {
+            "datefrom": "2032-02-01",
+            "dateto": "2032-02-01"
+        }
+    }
+    em =pyen.EnergyMarket(gv, config=pyenconfig)
+    em.run_model(pyenconfig["time"]["datefrom"], pyenconfig["time"]["dateto"])
     
+    em.save_model("pyenergy_test_solution.json")
