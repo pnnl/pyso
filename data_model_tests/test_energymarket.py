@@ -55,11 +55,12 @@ if __name__ == "__main__":
         },
         "solve_arguments": {
             "kwargs":{
-                "solver_tee": True # change to False to remove some logging
+                "solver_tee": True # change to False to remove some
             }
         }
     }
     em =pyen.EnergyMarket(gv, config=pyenconfig)
-    em.run_model(pyenconfig["time"]["datefrom"])
+    em.get_model(pyenconfig["time"]["datefrom"])
+    em.solve_model()
     
     em.save_model("pyenergy_test_solution.json")

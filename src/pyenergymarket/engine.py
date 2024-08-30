@@ -64,12 +64,12 @@ class EnergyMarket:
         else:
             self.set_property(value, *args[1:], d=d[args[0]])
 
-
-    def run_model(self, start:Union[str, pd.Timestamp]):
-        """_summary_
+    
+    def get_model(self, start:Union[str, pd.Timestamp]):
+        """form the Egret Model at start time
 
         Args:
-            start (Union[str, pd.Timestamp]): _description_
+            start (Union[str, pd.Timestamp]): time start time of the model
         """
 
         periods = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
@@ -80,7 +80,10 @@ class EnergyMarket:
         # get the model for the specified time range 
         self.logger.info(f"Forming model starting at: {daterange[0]} - {daterange[-1]}")
         self.mdl = self.data_provider.get_model(daterange)
-
+    
+    def solve_model(self):
+        """Run the egret model in self.mdl
+        """
         self.logger.info(f"Solving Model\n")
         self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
