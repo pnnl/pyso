@@ -52,9 +52,14 @@ if __name__ == "__main__":
         "time": {
             "datefrom": "2032-02-01",
             "dateto": "2032-02-01"
+        },
+        "solve_arguments": {
+            "kwargs":{
+                "solver_tee": True # change to False to remove some logging
+            }
         }
     }
     em =pyen.EnergyMarket(gv, config=pyenconfig)
-    em.run_model(pyenconfig["time"]["datefrom"], pyenconfig["time"]["dateto"])
+    em.run_model(pyenconfig["time"]["datefrom"])
     
     em.save_model("pyenergy_test_solution.json")

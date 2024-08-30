@@ -5,6 +5,7 @@ from egret.data.model_data import ModelData
 from .gvdefaults import gvdefaults
 from typing import Union, Callable, Iterable
 from ..utils.ioutils import merge_configs
+from ..utils.timeutils import mk_daterange
 from ..engine import DataProvider
 
 class GVParse(DataProvider):
@@ -23,6 +24,7 @@ class GVParse(DataProvider):
             merge_configs(self.defaults, default)
 
         self._daterange = None
+        self._actual_res_daterange = None
         self.logger = self.h5.logger
 
         self._summer_time = None
@@ -52,19 +54,23 @@ class GVParse(DataProvider):
         self.parse()
         self.write(savename)
 
-    def get_model(self, datefrom:str, dateto:str) -> ModelData:
-        """Data provider callback for EnergyMarket
+    def get_model(self, daterange:Union[pd.DatetimeIndex,None]) -> ModelData:
+        """Data provider callback for EnergyMarket.
+        See also utils.timeutils.mk_daterange
 
         Args:
-            datefrom (str): start date for Egret problem
-            dateto (str): End date for Egret problem
+            daterange(Union[pd.DatetimeIndex,None], optional): the actual datetime index. Defaults to None
+            start (Union[str, pd.Timestamp, None], optional): start time. Defaults to None.
+            end (Union[str, pd.Timestamp,None], optional): end time. Defaults to None.
+            min_freq (Union[None,int], optional): frequency in minutes. Defaults to None.
+            periods (Union[None,int], optional): number of periods. Defaults to None.
 
         Returns:
             ModelData: Egret model for specified date range
         """
         
         ### set the date
-        self.set_daterange(datefrom, dateto)
+        self.set_daterange(dt = daterange)
         ### parse
         self.parse()
         ### return model
@@ -109,15 +115,28 @@ class GVParse(DataProvider):
     @property
     def daterange(self) -> pd.DatetimeIndex:
         """Get date range based on the values in self.defaults["time"]
+        floors the result to hourly resolution since this is what is in the GV database
         """
         
         if self._daterange is None:
-            datefrom=self.defaults["time"]["datefrom"]
-            dateto  =self.defaults["time"]["dateto"]
-            self._daterange = h5fun.mk_daterange(dfts=self.h5("/area/LOAD"), datefrom=datefrom, dateto=dateto)
+            datefrom = self.defaults["time"]["datefrom"]
+            dateto   = self.defaults["time"]["dateto"]
+            min_freq = self.defaults["time"]["min_freq"]
+            periods  = self.defaults["time"]["periods"]
+            self._actual_res_daterange = mk_daterange(start = datefrom, end=dateto, min_freq=min_freq, periods=periods)
+            self._daterange = self._actual_res_daterange.floor("h")
+            # self._daterange = h5fun.mk_daterange(dfts=self.h5("/area/LOAD"), datefrom=datefrom, dateto=dateto)
         
         return self._daterange
     
+    @property
+    def actual_res_daterange(self) -> pd.DatetimeIndex:
+        """Get the actual daterange (might be at resolution less than hour)
+        """
+        
+        _ = self.daterange # force calculation if necessary
+        return self._actual_res_daterange
+
     def is_summer(self, t:pd.Timestamp) -> bool:
         """Test whether a time instance is summer or winter
 
@@ -164,20 +183,64 @@ class GVParse(DataProvider):
                 self._season = "Winter"
         return self._season
     
-    def set_daterange(self, datefrom:Union[None,str] = None, dateto:Union[None,str]=None):
-        """Update the desired daterange (in parameter self.daterange)
-        If only one (datefrom OR dateto) is given the date range will be just that date.
-        If both datefrom and dateto are None, then the full daterange of the underlying database will be used.
+    def update_daterange(self, dt:pd.DatetimeIndex):
+        """Update the daterange incase a datetime index is provided directly
 
-        Note:
+        Args:
+            dt (pd.DatetimeIndex): externally provided datetime index
+        """
+
+        self.defaults["time"]["datefrom"] = dt[0].strftime("%Y-%m-%d %H:%M")
+        self.defaults["time"]["dateto"]   = dt[-1].strftime("%Y-%m-%d %H:%M")
+        self.defaults["time"]["min_freq"] = round(dt.diff()[-1].total_seconds()/60)
+        self.defaults["time"]["periods"]  = len(dt)
+
+        # force recalculation of daterange
+        self._daterange = None
+        return self.daterange
+    
+    def set_daterange(self, dt:Union[pd.DatetimeIndex,None]=None,
+                      datefrom:Union[None,str] = None, dateto:Union[None,str]=None,
+                      min_freq:Union[None,int] = None, periods:Union[None,int]=None,
+                      force_update=False):
+        """Update the desired daterange (in parameter self.daterange)
+        Updates the time values for any input that is not None.
+        If force_update is True all inputs will be updated, allowing to set previously set inputs to None.
+        Note that exactly 3 inputs must be defined at any time to create a daterange.
+
+        Note 1: By default (see gvdefaults.py) min_freq is populated with 60, and periods with 24. 
+        This means that if only datefrom is provided, the resulting daterange will be one day, starting at that time.
+        If only dateto is provided, the resulting daterange will be one day ending at that time.
+        If both are provided, the behavior is that this range takes precedence.
+
+        Note 2:
             This function updates the values in self.defaults["time"]
         Args:
             datefrom (Union[None,str], optional): Start date for the range (inclusive). Defaults to None.
             dateto (Union[None,str], optional): End date for the range (inclusive). Defaults to None.
         """
+        ### If datetime index is provided it takes precedence.
+        if dt is not None:
+            return self.update_daterange(dt)
+        
+        ### if 3 of the inputs are specified, set force update
+        ### since this is a fully specified time range
+        cnt_not_none = 0
+        for i in [datefrom, dateto, min_freq, periods]:
+            if i is not None:
+                cnt_not_none += 1
+        if cnt_not_none >= 3:
+            force_update = True
 
-        self.defaults["time"]["datefrom"] = datefrom
-        self.defaults["time"]["dateto"] = dateto
+        if force_update or (datefrom is not None):
+            self.defaults["time"]["datefrom"] = datefrom
+        if force_update or (dateto is not None):
+            self.defaults["time"]["dateto"] = dateto
+        if force_update or (min_freq is not None):
+            self.defaults["time"]["min_freq"] = min_freq
+        if force_update or (periods is not None):
+            self.defaults["time"]["periods"] = periods
+
         
         # force recalculation of daterange
         self._daterange = None 
@@ -217,8 +280,8 @@ class GVParse(DataProvider):
         sys["reference_bus"] = self.mk_bus_str(refbus)
         sys["reference_bus_angle"] = 0
         sys["load_mismatch_cost"] = float(self.h5("/mdb/SimulationControl").loc[lambda x: x["Name"] == "Load Shedding Penalty", "Value"].squeeze())
-        sys["time_keys"] = self.daterange.strftime("%Y-%m-%d %H:%M").to_list()
-        sys["time_period_length_minutes"] = 60 #TODO!! this will need to be modifiable
+        sys["time_keys"] = self.actual_res_daterange.strftime("%Y-%m-%d %H:%M").to_list()
+        sys["time_period_length_minutes"] =  round(self.actual_res_daterange.diff()[-1].total_seconds()/60)
     
     def add_buses(self):
         """Add buses to Egret Model"""

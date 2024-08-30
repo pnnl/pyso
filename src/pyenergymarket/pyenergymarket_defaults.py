@@ -2,7 +2,8 @@ energymarket_defaults = {
     "time": {
         "datefrom": None,
         "dateto": None,
-        "window": None, # solution window, if non the datefrom-dateto will be used
+        "min_freq": 60, # period length in minutes
+        "window": 24, # solution window
         "lookahead": 0 # solution lookahead
     },
     "simulation": {

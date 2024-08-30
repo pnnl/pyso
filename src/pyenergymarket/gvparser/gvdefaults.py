@@ -1,7 +1,9 @@
 gvdefaults = {
     "time": {
         "datefrom": None,
-        "dateto": None
+        "dateto": None,
+        "min_freq": 60,
+        "periods": 24
     },
     "simulation": {
         "thermal_model": "cost" # can be "cost" or "fuel". if cost, will convert fuel.

@@ -2,15 +2,21 @@
 EnergyMarket class is here.
 """
 from .utils.ioutils import merge_configs, Logger
+from .utils.timeutils import mk_daterange
 from .pyenergymarket_defaults import energymarket_defaults
 import abc
 from egret.data.model_data import ModelData
 from egret.models.unit_commitment import solve_unit_commitment, SlackType
+import pandas as pd
+from typing import Union
 
 class DataProvider(abc.ABC):
     
     @abc.abstractmethod
-    def get_model(self, starttime:str, stoptime:str) -> ModelData:
+    def get_model(self, daterange:pd.DatetimeIndex) -> ModelData:
+        """Generate an Egret model based on the timeindex provided
+         see also utils.timeutils.mk_daterange
+        """
         pass
 
 class EnergyMarket:
@@ -59,11 +65,21 @@ class EnergyMarket:
             self.set_property(value, *args[1:], d=d[args[0]])
 
 
-    def run_model(self, starttime:str, stoptime:str):
+    def run_model(self, start:Union[str, pd.Timestamp]):
+        """_summary_
 
-        # get the 
-        self.logger.info(f"Forming model for time range: {starttime} - {stoptime}")
-        self.mdl = self.data_provider.get_model(starttime, stoptime)
+        Args:
+            start (Union[str, pd.Timestamp]): _description_
+        """
+
+        periods = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
+        min_freq = self.configuration["time"]["min_freq"]
+
+        daterange = mk_daterange(start, min_freq=min_freq, periods=periods)
+
+        # get the model for the specified time range 
+        self.logger.info(f"Forming model starting at: {daterange[0]} - {daterange[-1]}")
+        self.mdl = self.data_provider.get_model(daterange)
 
         self.logger.info(f"Solving Model\n")
         self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
