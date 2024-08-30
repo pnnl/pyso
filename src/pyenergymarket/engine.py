@@ -83,7 +83,18 @@ class EnergyMarket:
         else:
             raise ValueError("No model currently loaded.")
         
-    def pricing_model(self, pricing_model):
+    def pricing_model(self, pricing_model:str):
+        """Run a pricing model (with binaries relaxed) and extract locational prices
+        and reserve prices.
+        
+        NOTE: The solved prices are added to the solved dispatch model (self.mdl_sol).
+        NO other values from the pricing model are kept!!!
+        That is, if the dispatch in the pricing model differs from the original dispatch model,
+        those changes WILL NOT be reflected in the result. 
+
+        Args:
+            pricing_model (str): pricing model, options are "LMP" or "ACHP"
+        """
         pricing_instance = self.mdl_sol.clone()
         ## copy from Prescient/prescient/engine/egret/egret_plugin.py
         ## function solve_deterministic_day_ahead_pricing_problem
@@ -111,6 +122,16 @@ class EnergyMarket:
         ## update prices in solution
         for b, b_dict in self.mdl_price.elements(element_type="bus"):
             self.mdl_sol.data["elements"]["bus"][b]["lmp"] = b_dict["lmp"]
+
+        for elem in ["area", "zone"]:
+            for a, a_dict in self.mdl_price.elements(element_type=elem):
+                for k in a_dict.keys():
+                    if "_price" in k:
+                        self.mdl_sol.data["elements"][elem][a][k] = a_dict[k]
+        for k, v in self.mdl_price.data["system"].items():
+            if "_price" in k:
+                self.mdl_sol.data["system"][k] = v
+        
 
 
     def storage2load(self, mdl:ModelData):
