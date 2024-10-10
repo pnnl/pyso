@@ -424,6 +424,24 @@ class GVParse(DataProvider):
     from .gen_storage import _storage_type10
     from .gen_storage import get_storage_vom
 
+    def interpolate_time(self, df:Union[pd.DataFrame, pd.Series], dtinterp:pd.DatetimeIndex,
+                         method:str="floor") -> Union[pd.DataFrame,pd.Series]:
+        """interpolate the data in the input dataframe/series onto the alternative daterange 
+        provided
+
+        Args:
+            df (Union[pd.DataFrame, pd.Series]): Input data at original resolution
+            dtinterp (pd.DatetimeIndex): the time index for the interpolated data
+            method (str, optional): interpolation method. Defaults to "zero-order".
+
+        Returns:
+            Union[pd.DataFrame,pd.Series]: interpolated data on the new time index.
+        """
+        
+        if method == "floor":
+            pass
+        if method == "linear":
+            pass
     
     def add_load(self):
         load = dict()
