@@ -1,6 +1,7 @@
 from pnnlpcm import h5fun
 import pandas as pd
 import numpy as np
+from scipy.interpolate import interp1d
 from egret.data.model_data import ModelData
 from .gvdefaults import gvdefaults
 from typing import Union, Callable, Iterable
@@ -60,10 +61,10 @@ class GVParse(DataProvider):
 
         Args:
             daterange(Union[pd.DatetimeIndex,None], optional): the actual datetime index. Defaults to None
-            start (Union[str, pd.Timestamp, None], optional): start time. Defaults to None.
-            end (Union[str, pd.Timestamp,None], optional): end time. Defaults to None.
-            min_freq (Union[None,int], optional): frequency in minutes. Defaults to None.
-            periods (Union[None,int], optional): number of periods. Defaults to None.
+            # start (Union[str, pd.Timestamp, None], optional): start time. Defaults to None.
+            # end (Union[str, pd.Timestamp,None], optional): end time. Defaults to None.
+            # min_freq (Union[None,int], optional): frequency in minutes. Defaults to None.
+            # periods (Union[None,int], optional): number of periods. Defaults to None.
 
         Returns:
             ModelData: Egret model for specified date range
@@ -75,6 +76,7 @@ class GVParse(DataProvider):
         self.parse()
         ### return model
         return self.mdl
+    
 
     def parse(self):
         """Parse the gridview model for the given date range into an EGRET Model
@@ -189,11 +191,19 @@ class GVParse(DataProvider):
         Args:
             dt (pd.DatetimeIndex): externally provided datetime index
         """
-
         self.defaults["time"]["datefrom"] = dt[0].strftime("%Y-%m-%d %H:%M")
         self.defaults["time"]["dateto"]   = dt[-1].strftime("%Y-%m-%d %H:%M")
-        self.defaults["time"]["min_freq"] = round(dt.diff()[-1].total_seconds()/60)
         self.defaults["time"]["periods"]  = len(dt)
+        if self.defaults['time']['periods'] == 1:
+            if self.defaults["time"]["min_freq"] is not None:
+                pass
+            else:
+                # if only one time interval, then we must require
+                # the user to provide the min_freq
+                raise ValueError(f"min_freq must be set in energy market configuration")
+        else:
+            self.defaults["time"]["min_freq"] = round(dt.diff()[-1].total_seconds()/60)
+        
 
         # force recalculation of daterange
         self._daterange = None
@@ -289,7 +299,8 @@ class GVParse(DataProvider):
         bustype = {1: "PQ", 2: "PV", 3: "ref", 4: "isolated"}
         buses = dict()
         ### add load area name rather than id
-        h5fun.add_load_area(self.h5("/mdb/Bus"), self.h5("/mdb/Bus"), self.h5("/mdb/LoadArea"))
+        if 'LoadArea' not in self.h5('/mdb/Bus'):
+            h5fun.add_load_area(self.h5("/mdb/Bus"), self.h5("/mdb/Bus"), self.h5("/mdb/LoadArea"))
         bustab = self.h5("/mdb/Bus") ## alias for less typing
         for i in bustab.index:
             tmp = {}
@@ -425,31 +436,50 @@ class GVParse(DataProvider):
     from .gen_storage import get_storage_vom
 
     def interpolate_time(self, df:Union[pd.DataFrame, pd.Series], dtinterp:pd.DatetimeIndex,
-                         method:str="floor") -> Union[pd.DataFrame,pd.Series]:
+                         method:Union[str,None]=None) -> Union[pd.DataFrame,pd.Series]:
         """interpolate the data in the input dataframe/series onto the alternative daterange 
         provided
 
         Args:
             df (Union[pd.DataFrame, pd.Series]): Input data at original resolution
-            dtinterp (pd.DatetimeIndex): the time index for the interpolated data
-            method (str, optional): interpolation method. Defaults to "zero-order".
+            dtinterp (pd.DatetimeIndex): the time index for the interpolated data 
+            method (str, optional): interpolation method. Defaults to "linear". must be one of the
+                                    methods received by scipy.interpolate()
 
         Returns:
             Union[pd.DataFrame,pd.Series]: interpolated data on the new time index.
         """
-        
-        if method == "floor":
-            pass
-        if method == "linear":
-            pass
+        if method is None: # method was not passed to function
+            method = self.defaults['interpolate']['method']
+        df = df.reindex(dtinterp).interpolate(method=method)
+            
+        return df
     
     def add_load(self):
         load = dict()
-        
+
         ### Conforming Load
         # loop over areas
         for area in self.h5("/area/LOAD").keys():
-            tmp = self.h5.area_ts_to_bus(area=area, dtrange=self.daterange)
+            # get updated daterange
+            # print(area)
+            # interpolate
+            if self.defaults['interpolate']['method']:
+                # if we have an interpolation method, then we want to extract more datetime indices to allow
+                # for interpolation
+                min_freq = self.defaults['time']['min_freq']
+                dtr = self.actual_res_daterange.floor('h').union(self.actual_res_daterange.ceil('h')).drop_duplicates() # get indices on both ends for interpolation
+                dti = mk_daterange(start=dtr[0],end=dtr[-1],min_freq=min_freq)
+                # extract mini df
+                tmp = self.h5.area_ts_to_bus(area=area, dtrange=dtr)#dtrange=self.daterange) # unique to load
+                tmp = self.interpolate_time(df=tmp, # move to utilities
+                                            dtinterp=dti,
+                                            method=self.defaults['interpolate']['method']
+                                            ).loc[self.actual_res_daterange]
+            else:
+                # if we don't have an interpolation method, then we only need the daterange
+                tmp = self.h5.area_ts_to_bus(area=area, dtrange=self.daterange)
+
             for k, v in tmp.items():
                 busid = int(k.split("_")[0])
                 load[k] = {

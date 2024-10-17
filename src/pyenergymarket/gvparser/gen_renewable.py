@@ -1,6 +1,7 @@
 from __future__ import annotations
 import pandas as pd
 import numpy as np
+from ..utils.timeutils import mk_daterange
 
 ### This is for type checking and syntax highlighting
 ### see: https://www.youtube.com/watch?v=UnKa_t-M_kM
@@ -48,7 +49,20 @@ def get_renewable_shape(self:GVParse, genname:str) -> np.ndarray:
     ### For now, combine dispatched and curtailed MW to get input profile
     generation_key = "/generator/GENERATION"
     curtailment_key = "/generator/PRICE_MARKUP_RATIO"
-    out = self.h5(generation_key).loc[self.daterange, genname] + self.h5(curtailment_key).loc[self.daterange, genname]
+    if self.defaults['interpolate']['method']:
+        # if we have an interpolation method, then we want to extract more datetime indices to allow
+        # for interpolation
+        min_freq = self.defaults['time']['min_freq']
+        dtr = self.actual_res_daterange.floor('h').union(self.actual_res_daterange.ceil('h')).drop_duplicates() # get indices on both ends for interpolation
+        dti = mk_daterange(start=dtr[0],end=dtr[-1],min_freq=min_freq)
+        # extract mini df
+        out = self.h5(generation_key).loc[dtr, genname] + self.h5(curtailment_key).loc[dtr, genname]
+        out = self.interpolate_time(df=out, # move to utilities
+                                    dtinterp=dti,
+                                    method=self.defaults['interpolate']['method']
+                                    ).loc[self.actual_res_daterange]
+    else:
+        out = self.h5(generation_key).loc[self.daterange, genname] + self.h5(curtailment_key).loc[self.daterange, genname]
     return out.values
     
 def get_renewable_dispach_cost(self:GVParse, genkey:int) -> Union[float, dict]:
@@ -75,7 +89,7 @@ def renewable_ancillary_sevices(self:GVParse, gen:pd.Series, tmp:dict):
     Any renewable that should provide ancillary services is converted to a thermal
     generator
 
-    Currently Implemnted:
+    Currently Implemented:
     Regulation, Load Following, Spinning
 
     Args:
@@ -146,9 +160,11 @@ def renewable2thermal(self:GVParse, tmp:dict):
     tmp["minimum_up_time"] = 0
     tmp["minimum_down_time"] = 0
 
-    ### Ramp rate is equal to maximum power over the time horizon/min
-    tmp["ramp_up_60min"] = p_max*60
-    tmp["ramp_down_60min"] = p_max*60
+    ### Ramp rate is equal to maximum capacity to make sure no violations occur wrt ramp
+    genkey = tmp['gv_generatorkey']
+    maxcap = self.h5('/mdb/Generator').loc[lambda x: x['GeneratorKey'] == genkey, 'PSSEMaxCap'].squeeze()
+    tmp["ramp_up_60min"] = maxcap*60
+    tmp["ramp_down_60min"] = maxcap*60
 
     ### Force on (shouldn't matter since pmin=0)
     tmp["fixed_commitment"] = 1 

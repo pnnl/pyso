@@ -25,3 +25,15 @@ def mk_daterange(start:Union[str, pd.Timestamp, None]=None,
         ## if all are not None, convert periods to None
         periods = None
     return pd.date_range(start=start, end=end, freq=f"{min_freq}min", periods=periods)
+
+def count_gen_onoff_periods(lst):
+    if not lst:
+        return 0
+    count = 0
+    value_type = 0 if lst[-1] == 0.0 else 1  # Check if trailing values are zeros or non-zeros
+    for num in reversed(lst):
+        if (value_type == 0 and num == 0.0) or (value_type == 1 and num != 0.0):
+            count += 1
+        else:
+            break
+    return count if value_type == 1 else -count
