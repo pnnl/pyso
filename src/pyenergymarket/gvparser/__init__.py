@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from egret.data.model_data import ModelData
 from .gvdefaults import gvdefaults
 from typing import Union, Callable, Iterable
-from ..utils.ioutils import merge_configs
+from ..utils.ioutils import merge_configs, format_filename
 from ..utils.timeutils import mk_daterange
 from ..engine import DataProvider
 

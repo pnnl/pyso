@@ -2,12 +2,13 @@
 EnergyMarket class is here.
 """
 from .utils.ioutils import merge_configs, Logger
-from .utils.timeutils import mk_daterange
+from .utils.timeutils import mk_daterange, count_gen_onoff_periods
 from .pyenergymarket_defaults import energymarket_defaults
 import abc
 from egret.data.model_data import ModelData
 from egret.models.unit_commitment import solve_unit_commitment, SlackType
 import pandas as pd
+import numpy as np
 from typing import Union
 
 class DataProvider(abc.ABC):
@@ -80,7 +81,9 @@ class EnergyMarket:
         # get the model for the specified time range 
         self.logger.info(f"Forming model starting at: {daterange[0]} - {daterange[-1]}")
         self.mdl = self.data_provider.get_model(daterange)
-    
+
+
+
     def solve_model(self):
         """Run the egret model in self.mdl
         """
@@ -127,7 +130,7 @@ class EnergyMarket:
             ### fix storage
             self.storage2load(pricing_instance)
         elif pricing_model == "ACHP":
-            ## don't do anyting, binaries just relaxed
+            ## don't do anything, binaries just relaxed
             pass
         
         ## TODO: we may want to get the pyomo model here so we can get the duals
@@ -136,7 +139,7 @@ class EnergyMarket:
         self.mdl_price : ModelData = solve_unit_commitment(pricing_instance, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
                                         relaxed=True,
-                                        **self.configuration["solve_arguments"]["kwargs"])
+                                        **self.configuration["solve_arguments"]["kwargs"]) 
 
         ## update prices in solution
         for b, b_dict in self.mdl_price.elements(element_type="bus"):
@@ -166,13 +169,16 @@ class EnergyMarket:
         for g, g_dict in mdl.elements(element_type="storage"):
             for direction in ["pos", "neg"]:
                 name = g+"_"+direction
-                p_load_key = "p_charge" if (direction == "pos") else "p_discharge"
+                p_load_key = "p_charge" if (direction == "pos") else "p_discharge" # double check the sign on this
                 tmp = {}
                 for k in ["bus", "in_service", "area", "zone"]:
                     tmp[k] = g_dict[k]
-                tmp["p_load"] = g_dict[p_load_key]
+                tmp["p_load"] = g_dict[p_load_key] 
+                if direction == 'neg':
+                    tmp["p_load"]["values"] = -1*np.array(tmp["p_load"]["values"])
                 new_loads[name] = tmp
         ## add new loads
         mdl.data["elements"]["load"].update(new_loads)
         ## remove the storage from the model
         mdl.data["elements"].pop("storage", None)
+

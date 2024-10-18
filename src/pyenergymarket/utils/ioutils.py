@@ -4,6 +4,9 @@ place here.
 import logging
 import sys
 
+def format_filename(datetime_str):
+    return datetime_str.replace(':', '-').replace(' ', '_')
+
 def merge_configs(defaults:dict, user:dict, level=0):
     """update the default options with user inputs"""
     for k, v in user.items():
