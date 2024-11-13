@@ -68,6 +68,19 @@ Install pyenergy market as an editable package via:
 pip install -e <path-to-pyenergymarket>
 ```
 
+To install with support for the GridView Parser use:
+```
+pip install -e <path-to-pyenergymarket>[gv]
+```
+
+### Known Issues
+There are some issues that arise when the `pandas`, `blosc` and `tables` (pytables) are not installed from the same channel as the latter two are optional dependencies of pandas for reading form sources like hdf5 and excel.
+If there are `ImportError` issues, the solution is to uninstall these and make sure to install them all from the same location.
+One option, would be to uninstall them and pandas and do something like:
+```
+pip install "pandas[hdf5, excel]"
+``` 
+
 ## Solvers
 ### Installing CBC on Windows
 Cbc installation appears to be not very supported on windows.
