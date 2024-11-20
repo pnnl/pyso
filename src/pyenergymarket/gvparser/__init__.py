@@ -424,7 +424,22 @@ class GVParse(DataProvider):
     from .gen_storage import _storage_type10
     from .gen_storage import get_storage_vom
 
-    
+    ##### Load ################################
+    def get_qp(self, area:str) -> pd.Series:
+        """get a series of QL/PL ratios for the 
+        CONFORMING LOADS in area.
+
+        Args:
+            area (str): Load Area Name
+
+        Returns:
+            pd.Series: Series with index BusID_LoadID and values QL/PL
+        """
+        tmp = self.h5.get_cl(area)
+        tmp["key"] = tmp.apply(lambda x: f"{x['BusID']}_{x['LoadID']}", axis=1)
+        tmp.set_index("key", inplace=True, drop=True)
+        return tmp.apply(lambda x: x["QL"]/x["PL"], axis=1)
+
     def add_load(self):
         load = dict()
         
@@ -432,6 +447,8 @@ class GVParse(DataProvider):
         # loop over areas
         for area in self.h5("/area/LOAD").keys():
             tmp = self.h5.area_ts_to_bus(area=area, dtrange=self.daterange)
+            if self.defaults["simulation"]["include_reactive"]:
+                qp = self.get_qp(area)
             for k, v in tmp.items():
                 busid = int(k.split("_")[0])
                 load[k] = {
@@ -445,6 +462,13 @@ class GVParse(DataProvider):
                         "values": v.values
                     }
                 }
+                if self.defaults["simulation"]["include_reactive"]:
+                    ### add q_load:
+                    load[k]["q_load"] = {
+                        "data_type": "time_series",
+                        "values": v.values * qp[k]
+                    }
+                
 
         ### Non-Conforming Load
         ncl = self.h5.get_ncl()
@@ -462,6 +486,12 @@ class GVParse(DataProvider):
                     "values": ncl.loc[i, "PL"]*np.ones(len(self.daterange))
                 }
             }
+            if self.defaults["simulation"]["include_reactive"]:
+                ### add q_load:
+                load[k]["q_load"] = {
+                    "data_type": "time_series",
+                    "values": ncl.loc[i, "QL"]*np.ones(len(self.daterange))
+                }
 
         ### add to modele in
         self.mdl.data["elements"]["load"] = load

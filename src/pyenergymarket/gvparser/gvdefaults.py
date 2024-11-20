@@ -6,7 +6,8 @@ gvdefaults = {
         "periods": 24
     },
     "simulation": {
-        "thermal_model": "cost" # can be "cost" or "fuel". if cost, will convert fuel.
+        "thermal_model": "cost", # can be "cost" or "fuel". if cost, will convert fuel.
+        "include_reactive": False # if true parse reactive data
     },
     "elements": {
         "bus": {
