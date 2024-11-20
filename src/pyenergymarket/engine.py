@@ -2,7 +2,7 @@
 EnergyMarket class is here.
 """
 from .utils.ioutils import merge_configs, Logger
-from .utils.timeutils import mk_daterange, count_gen_onoff_periods
+from .utils.timeutils import mk_daterange
 from .pyenergymarket_defaults import energymarket_defaults
 import abc
 from egret.data.model_data import ModelData

@@ -1,11 +1,10 @@
 from pnnlpcm import h5fun
 import pandas as pd
 import numpy as np
-from scipy.interpolate import interp1d
 from egret.data.model_data import ModelData
 from .gvdefaults import gvdefaults
 from typing import Union, Callable, Iterable
-from ..utils.ioutils import merge_configs, format_filename
+from ..utils.ioutils import merge_configs
 from ..utils.timeutils import mk_daterange
 from ..engine import DataProvider
 
@@ -61,10 +60,6 @@ class GVParse(DataProvider):
 
         Args:
             daterange(Union[pd.DatetimeIndex,None], optional): the actual datetime index. Defaults to None
-            # start (Union[str, pd.Timestamp, None], optional): start time. Defaults to None.
-            # end (Union[str, pd.Timestamp,None], optional): end time. Defaults to None.
-            # min_freq (Union[None,int], optional): frequency in minutes. Defaults to None.
-            # periods (Union[None,int], optional): number of periods. Defaults to None.
 
         Returns:
             ModelData: Egret model for specified date range
@@ -438,12 +433,12 @@ class GVParse(DataProvider):
     def interpolate_time(self, df:Union[pd.DataFrame, pd.Series], dtinterp:pd.DatetimeIndex,
                          method:Union[str,None]=None) -> Union[pd.DataFrame,pd.Series]:
         """interpolate the data in the input dataframe/series onto the alternative daterange 
-        provided
+        provided.
 
         Args:
             df (Union[pd.DataFrame, pd.Series]): Input data at original resolution
             dtinterp (pd.DatetimeIndex): the time index for the interpolated data 
-            method (str, optional): interpolation method. Defaults to "linear". must be one of the
+            method (str, optional): interpolation method. Defaults to "zero". must be one of the
                                     methods received by scipy.interpolate()
 
         Returns:
