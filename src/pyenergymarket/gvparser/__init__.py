@@ -360,7 +360,7 @@ class GVParse(DataProvider):
             if not self._gen_inservice(gen):
                 ## for now, don't copy any generators that are not in service
                 continue
-            self.h5.logger.debug(f"Processing Generator {gen.GeneratorKey} {gen.GeneratorName}")
+            self.logger.debug(f"Processing Generator {gen.GeneratorKey} {gen.GeneratorName}")
             ## Add general data
             tmp = {
                 "bus": self.mk_bus_str(gen.BusID),
@@ -425,20 +425,22 @@ class GVParse(DataProvider):
     from .gen_storage import get_storage_vom
 
     ##### Load ################################
-    def get_qp(self, area:str) -> pd.Series:
+    from .dist_gen import update_load
+    from .dist_gen import area_distgen
+    from .dist_gen import btm_distgen
+
+    def get_qp(self, area:Union[str,None]=None) -> pd.Series:
         """get a series of QL/PL ratios for the 
         CONFORMING LOADS in area.
+        If area is None, all conforming loads are returned.
 
         Args:
-            area (str): Load Area Name
+            area (Union[str,None], optional): Load Area Name
 
         Returns:
             pd.Series: Series with index BusID_LoadID and values QL/PL
         """
-        tmp = self.h5.get_cl(area)
-        tmp["key"] = tmp.apply(lambda x: f"{x['BusID']}_{x['LoadID']}", axis=1)
-        tmp.set_index("key", inplace=True, drop=True)
-        return tmp.apply(lambda x: x["QL"]/x["PL"], axis=1)
+        return self.h5.get_cl(area).apply(lambda x: x["QL"]/x["PL"], axis=1)
 
     def add_load(self):
         load = dict()
@@ -457,6 +459,7 @@ class GVParse(DataProvider):
                     "area": area,
                     "zone": self.get_zone(busid),
                     "ncl": False,
+                    "distgen": [],
                     "p_load": {
                         "data_type": "time_series",
                         "values": v.values
@@ -464,6 +467,7 @@ class GVParse(DataProvider):
                 }
                 if self.defaults["simulation"]["include_reactive"]:
                     ### add q_load:
+                    load[k]["qp"] = qp[k] # store for modifications due to distributed generation
                     load[k]["q_load"] = {
                         "data_type": "time_series",
                         "values": v.values * qp[k]
@@ -481,6 +485,7 @@ class GVParse(DataProvider):
                 "area": ncl.loc[i, "LoadArea"],
                 "zone": self.get_zone(busid),
                 "ncl": True,
+                "distgen": [],
                 "p_load": {
                     "data_type": "time_series",
                     "values": ncl.loc[i, "PL"]*np.ones(len(self.daterange))
@@ -488,6 +493,7 @@ class GVParse(DataProvider):
             }
             if self.defaults["simulation"]["include_reactive"]:
                 ### add q_load:
+                load[k]["qp"] = qp[k] # store for modifications due to distributed generation
                 load[k]["q_load"] = {
                     "data_type": "time_series",
                     "values": ncl.loc[i, "QL"]*np.ones(len(self.daterange))
@@ -495,6 +501,10 @@ class GVParse(DataProvider):
 
         ### add to modele in
         self.mdl.data["elements"]["load"] = load
+
+        ### add distributed generation
+        self.area_distgen()
+        self.btm_distgen()
     
     def get_ts_param(self, key:str, filter_fun:Callable[[pd.DataFrame, int], pd.Series], 
                      typ:str="time_series", scale_key:Union[str,None]=None, scale_factor:float=1, 
