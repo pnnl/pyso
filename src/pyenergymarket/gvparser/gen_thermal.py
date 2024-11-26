@@ -36,11 +36,7 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     tmp["p_min"] = tmp["p_fuel"]["values"][0][0]
     tmp["p_max"] = tmp["p_fuel"]["values"][-1][0]
     if self.get_reactive:
-        pf = self.get_default_pf("thermal")
-        s_max = tmp["p_max"]/pf
-        sin_theta = np.sin(np.arccos(pf))
-        tmp["q_min"] = -s_max*sin_theta
-        tmp["q_max"] = s_max*sin_theta
+        self.set_qlims(tmp, typ="thermal")
 
     fuelid = thermalgeneral.FuelID
     tmp["fuel"]   = self.h5("/mdb/Fuel").loc[lambda x: x["FuelID"] == fuelid, "FuelName"].squeeze()
