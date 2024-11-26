@@ -23,7 +23,7 @@ def update_load(self:GVParse, key:str, pgen:np.ndarray):
     ## subtract dispatch allocation from load
     self.mdl.data["elements"]["load"][key]["p_load"]["values"] -= pgen
     
-    if self.defaults["simulation"]["include_reactive"]:
+    if self.defaults["reactive_power"]["include"]:
         ### update q_load
         qp = self.mdl.data["elements"]["load"][key]["qp"]
         p_load = self.mdl.data["elements"]["load"][key]["p_load"]["values"]

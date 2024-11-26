@@ -35,6 +35,12 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     ## get max and min values directly from the fuel curve
     tmp["p_min"] = tmp["p_fuel"]["values"][0][0]
     tmp["p_max"] = tmp["p_fuel"]["values"][-1][0]
+    if self.get_reactive:
+        pf = self.get_default_pf("thermal")
+        s_max = tmp["p_max"]/pf
+        sin_theta = np.sin(np.arccos(pf))
+        tmp["q_min"] = -s_max*sin_theta
+        tmp["q_max"] = s_max*sin_theta
 
     fuelid = thermalgeneral.FuelID
     tmp["fuel"]   = self.h5("/mdb/Fuel").loc[lambda x: x["FuelID"] == fuelid, "FuelName"].squeeze()
@@ -77,7 +83,7 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     ## According to Hitachi generator can start up at an point
     ## Assume generator can shutdown from any point.
     tmp["startup_capacity"] = tmp["p_max"] #min(tmp["p_min"] + tmp["ramp_up_60min"], tmp["p_max"])
-    tmp["shutdown_capcity"] = tmp["p_max"]
+    tmp["shutdown_capacity"] = tmp["p_max"]
 
     ## must run
     if thermalgeneral.MustRun:

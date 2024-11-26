@@ -23,6 +23,8 @@ def _renewable_gen(self:GVParse, gen:pd.Series, tmp:dict):
     tmp["p_min"] = 0.0
     tmp["p_max"] = {"data_type": "time_series", 
                     "values": self.get_renewable_shape(gen.GeneratorName)}
+    if self.get_reactive:
+        tmp["power_factor"] = self.get_default_pf("renewable")
     tmp["p_cost"] = self.get_renewable_dispach_cost(genkey)
     hrsource = self.h5("/mdb/HourlyResource").loc[lambda x: x["GeneratorKey"] == genkey].squeeze()
     if hrsource.Type in self.defaults["elements"]["generator"]["renewable_type_override"]:
@@ -146,9 +148,17 @@ def renewable2thermal(self:GVParse, tmp:dict):
     tmp["minimum_up_time"] = 0
     tmp["minimum_down_time"] = 0
 
-    ### Ramp rate is equal to maximum power over the time horizon/min
-    tmp["ramp_up_60min"] = p_max*60
-    tmp["ramp_down_60min"] = p_max*60
+    ### Ramp rate is equal to maximum capacity to make sure no violations occur wrt ramp
+    genkey = tmp['gv_generatorkey']
+    maxcap = self.h5('/mdb/Generator').loc[lambda x: x['GeneratorKey'] == genkey, 'PSSEMaxCap'].squeeze()
+    tmp["ramp_up_60min"] = maxcap*60
+    tmp["ramp_down_60min"] = maxcap*60
 
     ### Force on (shouldn't matter since pmin=0)
     tmp["fixed_commitment"] = 1 
+
+    if self.get_reactive and ("q_max" not in tmp):
+        ## IMPORTANT: change in Usage of POWER FACTOR.
+        ## In renewable model it is a fixed number, when transitioning to thermal it will change to a +\- range!
+        self.set_qlims(tmp, typ="renewable", fixedpmax=maxcap if self.defaults["reactive_power"]["renewable2thermal_fixed"] else None)
+        

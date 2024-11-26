@@ -113,6 +113,12 @@ class GVParse(DataProvider):
         self.mdl.write(savename)
 
     @property
+    def get_reactive(self) -> bool:
+        """indicate whether to include reactive power capability or not"""
+        return self.defaults["reactive_power"]["include"]
+    
+
+    @property
     def daterange(self) -> pd.DatetimeIndex:
         """Get date range based on the values in self.defaults["time"]
         floors the result to hourly resolution since this is what is in the GV database
@@ -364,6 +370,7 @@ class GVParse(DataProvider):
             ## Add general data
             tmp = {
                 "bus": self.mk_bus_str(gen.BusID),
+                "id": gen.GeneratorID,
                 "gv_generatorkey": gen.GeneratorKey,
                 "in_service": gen.ServiceStatus,
                 "unit_type": gen.SubType,
@@ -392,6 +399,46 @@ class GVParse(DataProvider):
         """
 
         return gen.ServiceStatus and (gen.CommissionDate <= self.daterange[0]) and (gen.RetirementDate >= self.daterange[-1])
+
+    def get_default_pf(self, typ:str="other") -> float:
+        """return a default power factor for a generator of type typ.
+        Types are defined in the reactive_power->default_pf dictionary of the configuration.
+        The "other" key is returned if the provided type is not found
+
+        Args:
+            typ (str, optional): type of generation. Default is "other"
+
+        Returns:
+            float: default power factor
+        """
+        if typ not in self.defaults["reactive_power"]["default_pf"]:
+            typ = "other"
+        return self.defaults["reactive_power"]["default_pf"][typ]
+    
+    def set_qlims(self, tmp:dict, typ:str="other", fixedpmax:Union[None,float]=None):
+        """Populate the generation for a generator of typ with q limits.
+        Note: the limits are 
+
+        Args:
+            tmp (dict): _description_
+            typ (_type_, optional): _description_. Defaults to str="other".
+        """
+        pf = self.get_default_pf("thermal")
+        if fixedpmax is not None:
+            s_max = fixedpmax/pf
+            sin_theta = np.sin(np.arccos(pf))
+            tmp["q_min"] = -s_max*sin_theta
+            tmp["q_max"] = s_max*sin_theta
+        elif isinstance(tmp["pmax"], dict):
+            ## time series
+            s_max :np.ndarray = tmp["p_max"]["values"]/pf
+            sin_theta = np.sin(np.arccos(pf))
+            tmp["q_min"] = {"data_type": "time_series", "values":-s_max*sin_theta}
+            tmp["q_max"] = {"data_type": "time_series", "values":s_max*sin_theta}
+        else:
+            ## pmax is not time series, simply recall seting it as fixedpmax
+            self.set_qlims(tmp, typ=typ, fixedpmax=tmp["p_max"])
+        
 
     ###### THERMAL GENERATION ################
     from .gen_thermal import _thermal_gen
@@ -449,7 +496,7 @@ class GVParse(DataProvider):
         # loop over areas
         for area in self.h5("/area/LOAD").keys():
             tmp = self.h5.area_ts_to_bus(area=area, dtrange=self.daterange)
-            if self.defaults["simulation"]["include_reactive"]:
+            if self.get_reactive:
                 qp = self.get_qp(area)
             for k, v in tmp.items():
                 busid = int(k.split("_")[0])
@@ -465,7 +512,7 @@ class GVParse(DataProvider):
                         "values": v.values
                     }
                 }
-                if self.defaults["simulation"]["include_reactive"]:
+                if self.get_reactive:
                     ### add q_load:
                     load[k]["qp"] = qp[k] # store for modifications due to distributed generation
                     load[k]["q_load"] = {
@@ -491,7 +538,7 @@ class GVParse(DataProvider):
                     "values": ncl.loc[i, "PL"]*np.ones(len(self.daterange))
                 }
             }
-            if self.defaults["simulation"]["include_reactive"]:
+            if self.get_reactive:
                 ### add q_load:
                 load[k]["qp"] = qp[k] # store for modifications due to distributed generation
                 load[k]["q_load"] = {

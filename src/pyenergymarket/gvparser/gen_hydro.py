@@ -27,6 +27,9 @@ def _hydro_gen(self:GVParse, gen:pd.Series, tmp:dict):
                     "values": self.get_hydro_dispatch(gen.GeneratorName)}
     tmp["p_min"] = 0 #copy.deepcopy(tmp["p_max"])
     
+    if self.get_reactive:
+        self.set_qlims(tmp, typ="hydro", fixedpmax=gen.PSSEMaxCap)
+
     tmp["p_cost"] = self.get_renewable_dispach_cost(genkey)
     
     tmp["fuel"] = "Hydro"

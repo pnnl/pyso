@@ -7,7 +7,15 @@ gvdefaults = {
     },
     "simulation": {
         "thermal_model": "cost", # can be "cost" or "fuel". if cost, will convert fuel.
-        "include_reactive": False # if true parse reactive data
+    },
+    "reactive_power": {
+        "include": False, # if true parse reactive data
+        "default_pf": {# default reactive capability (hopefully overwritten by PF model data)
+            "thermal": 0.95,
+            "renewable": 1.0,
+            "other": 0.95
+        },
+        "renewable2thermal_fixed": True #True means q limits are with respect to name plate NOT with respect to variable p max
     },
     "elements": {
         "bus": {
