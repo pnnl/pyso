@@ -117,7 +117,7 @@ class EnergyMarket:
         pricing_instance = self.mdl_sol.clone()
         ## copy from Prescient/prescient/engine/egret/egret_plugin.py
         ## function solve_deterministic_day_ahead_pricing_problem
-        if pricing_model == "LMP":
+        if pricing_model == "lmp":
             ### fix all commitment variables
             for g, g_dict in pricing_instance.elements(element_type='generator', generator_type='thermal'):
                 ## loop over all thermal generators, since they are the only ones with commitment variables.
