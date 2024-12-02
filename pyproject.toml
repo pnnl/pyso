@@ -8,3 +8,17 @@ build-backend = "setuptools.build_meta"
 name = "pyenergymarket"
 version = "0.1.0"
 description = "PyEnergyMarket is a EGRET-based energy market modeling tool developed by PNNL in the E-COMP LDRD initiative"
+authors = [{name="Eran Schweitzer", email="eran.schweitzer@pnnl.gov"},
+            {name="Allison Campbell", email="allison.m.campbell@pnnl.gov"},
+            {name="Molly Rose Kelly-Gorham", email="mollyrose.kelly-gorham@pnnl.gov"},
+            {name="Trevor Hardy", email="trevor.hardy@pnnl.gov"}]
+requires-python = ">= 3.9"
+dependencies = [
+    "pandas>=2.2.1",
+]
+[project.optional-dependencies]
+gv = ["numpy>=1.26"]
+
+## see: https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
+[tool.setuptools.packages.find]
+where = ["src"]

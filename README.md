@@ -68,6 +68,44 @@ Install pyenergy market as an editable package via:
 pip install -e <path-to-pyenergymarket>
 ```
 
+To install with support for the GridView Parser use:
+```
+pip install -e <path-to-pyenergymarket>[gv]
+```
+
+After installation a `dependencies.log` file is created.
+If any of the editable dependencies (such as `egret` or `pnnlpcm`) are not installed this file will:
+* indicate this
+* point to where to get the repositories (note: access is restricted)
+* reprise how to install
+
+As an example:
+```
+The following REQUIRED dependencies are missing:
+ - egret (source: https://github.com/pnnl-private/egret)
+
+They should be installed as editable packages using pip:
+Clone repository from source
+cd into repository folder
+pip install -e .
+
+The following OPTIONAL dependencies are missing:
+ - pnnlpcm (source: https://devops.pnnl.gov/ntp/ntp_PCM)
+
+They should be installed as editable packages using pip:
+Clone repository from source
+cd into repository folder
+pip install -e .
+```
+
+### Known Issues
+There are some issues that arise when the `pandas`, `blosc` and `tables` (pytables) are not installed from the same channel as the latter two are optional dependencies of pandas for reading form sources like hdf5 and excel.
+If there are `ImportError` issues, the solution is to uninstall these and make sure to install them all from the same location.
+One option, would be to uninstall them and pandas and do something like:
+```
+pip install "pandas[hdf5, excel]"
+``` 
+
 ## Solvers
 ### Installing CBC on Windows
 Cbc installation appears to be not very supported on windows.
