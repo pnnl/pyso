@@ -10,6 +10,7 @@ from egret.models.unit_commitment import solve_unit_commitment, SlackType
 import pandas as pd
 import numpy as np
 from typing import Union
+import copy
 
 class DataProvider(abc.ABC):
     
@@ -32,7 +33,7 @@ class EnergyMarket:
         self.mdl = None
         self.mdl_sol = None
         ### get configuration
-        self.configuration = energymarket_defaults.copy()
+        self.configuration = copy.deepcopy(energymarket_defaults)
         if config is not None:
             merge_configs(self.configuration, config)
         

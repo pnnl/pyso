@@ -7,6 +7,7 @@ from typing import Union, Callable, Iterable
 from ..utils.ioutils import merge_configs
 from ..utils.timeutils import mk_daterange
 from ..engine import DataProvider
+import copy
 
 class GVParse(DataProvider):
     def __init__(self, h5path:str, default:dict=None, **kwargs):
@@ -19,7 +20,7 @@ class GVParse(DataProvider):
         self.h5 = h5fun.H5(h5path, **kwargs)
         self.mdl = ModelData() # create an empty model data object with keys "elements", "system"
 
-        self.defaults = gvdefaults.copy()
+        self.defaults = copy.deepcopy(gvdefaults)
         if default is not None:
             merge_configs(self.defaults, default)
 
