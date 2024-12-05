@@ -444,18 +444,10 @@ class GVParse(DataProvider):
         Returns:
             Union[pd.DataFrame,pd.Series]: interpolated data on the new time index.
         """
-        # if method is None: # method was not passed to function
-        #     method = self.defaults['interpolate']['method']
-        dtinterp = mk_daterange(start=self.daterange[0],end=self.daterange[-1],min_freq=self.defaults["time"]["min_freq"])
 
-# take the date_from
-# and go through window + lookahead -- ceil
-# can still use daterange, but cut it to 
-# only be window+lookahead
-        print(df)
-        print(self.defaults['interpolate']['method'])
+        dtinterp = mk_daterange(start=self.daterange[0],end=self.daterange[-1],min_freq=self.defaults["time"]["min_freq"])
         df = df.reindex(dtinterp).interpolate(method=self.defaults['interpolate']['method'])
-        print(df)
+
         return df.loc[self.actual_res_daterange]
     
     def add_load(self):
