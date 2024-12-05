@@ -18,6 +18,28 @@ def merge_configs(defaults:dict, user:dict, level=0):
             else:
                 defaults[k] = v
 
+def format_filename(datetime_str):
+    """formats a filename for use with the solved market model based on the current market time.
+       current_time is the market operation time.
+    example: filename = os.path.join(outdir,market+'_'+
+                     pyen.utils.ioutils.format_filename(str(current_time))+'.json')
+        used for saving solved market models during testing, prior to 
+        implementation of database.
+
+    Parameters
+    ----------
+    datetime_str : string
+        the datetime-formatted current time, converted to string
+
+    Returns
+    -------
+    string
+        reformatted datetime string 
+        example:
+        from: '2032:01:01 00:00:00'
+        to:   '2032-01-01_00-00-00'
+    """
+    return datetime_str.replace(':', '-').replace(' ', '_')
 
 class Logger(logging.Logger):
     def __init__(self, name, level=logging.INFO, msg_format="{message}", **kwargs):

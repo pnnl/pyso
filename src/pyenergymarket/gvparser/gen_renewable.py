@@ -49,20 +49,9 @@ def get_renewable_shape(self:GVParse, genname:str) -> np.ndarray:
     ### For now, combine dispatched and curtailed MW to get input profile
     generation_key = "/generator/GENERATION"
     curtailment_key = "/generator/PRICE_MARKUP_RATIO"
+    out = self.h5(generation_key).loc[self.daterange, genname] + self.h5(curtailment_key).loc[self.daterange, genname]
     if self.defaults['interpolate']['method']:
-        # if we have an interpolation method, then we want to extract more datetime indices to allow
-        # for interpolation
-        min_freq = self.defaults['time']['min_freq']
-        dtr = self.actual_res_daterange.floor('h').union(self.actual_res_daterange.ceil('h')).drop_duplicates() # get indices on both ends for interpolation
-        dti = mk_daterange(start=dtr[0],end=dtr[-1],min_freq=min_freq)
-        # extract mini df
-        out = self.h5(generation_key).loc[dtr, genname] + self.h5(curtailment_key).loc[dtr, genname]
-        out = self.interpolate_time(df=out, # move to utilities
-                                    dtinterp=dti,
-                                    method=self.defaults['interpolate']['method']
-                                    ).loc[self.actual_res_daterange]
-    else:
-        out = self.h5(generation_key).loc[self.daterange, genname] + self.h5(curtailment_key).loc[self.daterange, genname]
+        out = self.interpolate_time(df=out)
     return out.values
     
 def get_renewable_dispach_cost(self:GVParse, genkey:int) -> Union[float, dict]:

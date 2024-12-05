@@ -121,7 +121,7 @@ class GVParse(DataProvider):
             min_freq = self.defaults["time"]["min_freq"]
             periods  = self.defaults["time"]["periods"]
             self._actual_res_daterange = mk_daterange(start = datefrom, end=dateto, min_freq=min_freq, periods=periods)
-            self._daterange = self._actual_res_daterange.floor("h")
+            self._daterange = self._actual_res_daterange.floor('h').union(self._actual_res_daterange.ceil('h')).drop_duplicates()#self._actual_res_daterange.floor("h")
             # self._daterange = h5fun.mk_daterange(dfts=self.h5("/area/LOAD"), datefrom=datefrom, dateto=dateto)
         
         return self._daterange
@@ -430,25 +430,33 @@ class GVParse(DataProvider):
     from .gen_storage import _storage_type10
     from .gen_storage import get_storage_vom
 
-    def interpolate_time(self, df:Union[pd.DataFrame, pd.Series], dtinterp:pd.DatetimeIndex,
-                         method:Union[str,None]=None) -> Union[pd.DataFrame,pd.Series]:
+    def interpolate_time(self, df:Union[pd.DataFrame, pd.Series]) -> Union[pd.DataFrame,pd.Series]: #, #dtinterp:pd.DatetimeIndex,
+                        #  method:Union[str,None]=None) -> Union[pd.DataFrame,pd.Series]:
         """interpolate the data in the input dataframe/series onto the alternative daterange 
         provided.
 
         Args:
             df (Union[pd.DataFrame, pd.Series]): Input data at original resolution
-            dtinterp (pd.DatetimeIndex): the time index for the interpolated data 
+            # dtinterp (pd.DatetimeIndex): the time index for the interpolated data 
             method (str, optional): interpolation method. Defaults to "zero". must be one of the
                                     methods received by scipy.interpolate()
 
         Returns:
             Union[pd.DataFrame,pd.Series]: interpolated data on the new time index.
         """
-        if method is None: # method was not passed to function
-            method = self.defaults['interpolate']['method']
-        df = df.reindex(dtinterp).interpolate(method=method)
-            
-        return df
+        # if method is None: # method was not passed to function
+        #     method = self.defaults['interpolate']['method']
+        dtinterp = mk_daterange(start=self.daterange[0],end=self.daterange[-1],min_freq=self.defaults["time"]["min_freq"])
+
+# take the date_from
+# and go through window + lookahead -- ceil
+# can still use daterange, but cut it to 
+# only be window+lookahead
+        print(df)
+        print(self.defaults['interpolate']['method'])
+        df = df.reindex(dtinterp).interpolate(method=self.defaults['interpolate']['method'])
+        print(df)
+        return df.loc[self.actual_res_daterange]
     
     def add_load(self):
         load = dict()
@@ -456,24 +464,9 @@ class GVParse(DataProvider):
         ### Conforming Load
         # loop over areas
         for area in self.h5("/area/LOAD").keys():
-            # get updated daterange
-            # print(area)
-            # interpolate
+            tmp = self.h5.area_ts_to_bus(area=area, dtrange=self.daterange) # unique to load
             if self.defaults['interpolate']['method']:
-                # if we have an interpolation method, then we want to extract more datetime indices to allow
-                # for interpolation
-                min_freq = self.defaults['time']['min_freq']
-                dtr = self.actual_res_daterange.floor('h').union(self.actual_res_daterange.ceil('h')).drop_duplicates() # get indices on both ends for interpolation
-                dti = mk_daterange(start=dtr[0],end=dtr[-1],min_freq=min_freq)
-                # extract mini df
-                tmp = self.h5.area_ts_to_bus(area=area, dtrange=dtr)#dtrange=self.daterange) # unique to load
-                tmp = self.interpolate_time(df=tmp, # move to utilities
-                                            dtinterp=dti,
-                                            method=self.defaults['interpolate']['method']
-                                            ).loc[self.actual_res_daterange]
-            else:
-                # if we don't have an interpolation method, then we only need the daterange
-                tmp = self.h5.area_ts_to_bus(area=area, dtrange=self.daterange)
+                tmp = self.interpolate_time(df=tmp)
 
             for k, v in tmp.items():
                 busid = int(k.split("_")[0])
