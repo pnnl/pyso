@@ -116,12 +116,12 @@ class EnergyMarket:
         those changes WILL NOT be reflected in the result. 
 
         Args:
-            pricing_model (str): pricing model, options are "LMP" or "ACHP"
+            pricing_model (str): pricing model, options are "lmp" or "achp"
         """
         pricing_instance = self.mdl_sol.clone()
         ## copy from Prescient/prescient/engine/egret/egret_plugin.py
         ## function solve_deterministic_day_ahead_pricing_problem
-        if pricing_model == "LMP":
+        if pricing_model == "lmp":
             ### fix all commitment variables
             for g, g_dict in pricing_instance.elements(element_type='generator', generator_type='thermal'):
                 ## loop over all thermal generators, since they are the only ones with commitment variables.
@@ -130,7 +130,7 @@ class EnergyMarket:
                     g_dict['fixed_regulation'] = g_dict['reg_provider']
             ### fix storage
             self.storage2load(pricing_instance)
-        elif pricing_model == "ACHP":
+        elif pricing_model == "achp":
             ## don't do anything, binaries just relaxed
             pass
         
