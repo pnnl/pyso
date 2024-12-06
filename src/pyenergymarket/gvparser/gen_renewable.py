@@ -50,8 +50,7 @@ def get_renewable_shape(self:GVParse, genname:str) -> np.ndarray:
     generation_key = "/generator/GENERATION"
     curtailment_key = "/generator/PRICE_MARKUP_RATIO"
     out = self.h5(generation_key).loc[self.daterange, genname] + self.h5(curtailment_key).loc[self.daterange, genname]
-    if self.defaults['interpolate']['method']:
-        out = self.interpolate_time(df=out)
+    out = self.interpolate_time(df=out)
     return out.values
     
 def get_renewable_dispach_cost(self:GVParse, genkey:int) -> Union[float, dict]:

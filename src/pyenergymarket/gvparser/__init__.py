@@ -433,8 +433,9 @@ class GVParse(DataProvider):
 
     def interpolate_time(self, df:Union[pd.DataFrame, pd.Series]) -> Union[pd.DataFrame,pd.Series]: #, #dtinterp:pd.DatetimeIndex,
                         #  method:Union[str,None]=None) -> Union[pd.DataFrame,pd.Series]:
-        """interpolate the data in the input dataframe/series onto the alternative daterange 
-        provided.
+        """interpolate the data in the input dataframe/series (indexed on self.daterange)
+        to indices of self.actual_res_daterange.
+        Interpolation method is defined in configuration: self.defaults["interpolate"]["method"]
 
         Args:
             df (Union[pd.DataFrame, pd.Series]): Input data at original resolution
@@ -446,9 +447,12 @@ class GVParse(DataProvider):
             Union[pd.DataFrame,pd.Series]: interpolated data on the new time index.
         """
 
+        # create time index to be interpolated on (resolution equal to actual_res_daterange)
         dtinterp = mk_daterange(start=self.daterange[0],end=self.daterange[-1],min_freq=self.defaults["time"]["min_freq"])
+        # reindex dataframe at resolution of interest and interpolate
         df = df.reindex(dtinterp).interpolate(method=self.defaults['interpolate']['method'])
 
+        # return samples at the actual time slices of interest
         return df.loc[self.actual_res_daterange]
     
     def add_load(self):
@@ -458,8 +462,7 @@ class GVParse(DataProvider):
         # loop over areas
         for area in self.h5("/area/LOAD").keys():
             tmp = self.h5.area_ts_to_bus(area=area, dtrange=self.daterange) # unique to load
-            if self.defaults['interpolate']['method']:
-                tmp = self.interpolate_time(df=tmp)
+            tmp = self.interpolate_time(tmp)
 
             for k, v in tmp.items():
                 busid = int(k.split("_")[0])

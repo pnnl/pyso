@@ -50,7 +50,6 @@ def get_hydro_dispatch(self:GVParse, genname:str) -> np.ndarray:
     
     generation_key = "/generator/GENERATION"
     out = self.h5(generation_key).loc[self.daterange, genname]
-    if self.defaults['interpolate']['method']:
-        out = self.interpolate_time(df=out)
+    out = self.interpolate_time(out)
 
     return out.values

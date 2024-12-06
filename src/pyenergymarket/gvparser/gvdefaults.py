@@ -6,7 +6,7 @@ gvdefaults = {
         "periods": 24
     },
     "interpolate": {
-        "method": None
+        "method": "linear"
     },
     "simulation": {
         "thermal_model": "cost" # can be "cost" or "fuel". if cost, will convert fuel.
