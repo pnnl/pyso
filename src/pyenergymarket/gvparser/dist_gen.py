@@ -9,6 +9,45 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .__init__ import GVParse
 
+def is_distgen(self:GVParse, genkey:int) -> str:
+    """Check if generator is a distributed generator.
+    Returns empty string if it is not, otherwise, returns type
+    "BUS", "AREA", or "BTM".
+
+    Args:
+        genkey (int): generator key
+
+    Returns:
+        str: type of distributed generator ("" is none)
+    """
+    
+
+    ### GenerationDistribution Table
+    try:
+        disttab = self.h5("/mdb/GenerationDistribution")
+        tmp = disttab.loc[lambda x: (x["GeneratorKey"] == genkey) & (x["Type"] == "AREA")]
+        if not tmp.empty:
+            ## generation distributed to area load
+            return "AREA"
+        tmp = disttab.loc[lambda x: (x["GeneratorKey"] == genkey) & (x["Type"] == "BUS")]
+        if not tmp.empty:
+            ## generation distributed to several buses
+            return "BUS"
+    except KeyError:
+        pass
+    
+    ### BTMGenLoadMapping Table
+    try:
+        disttab = self.h5("/mdb/BTMGenLoadMapping")
+        tmp = disttab.loc[lambda x: x["GeneratorKey"] == genkey]
+        if not tmp.empty:
+            return "BTM"
+    except KeyError:
+        pass
+    
+    ### genkey no non of the distribution tables
+    return ""
+
 ### IMPORTANT ############################################
 # Distributed generation is subtracted from load!
 

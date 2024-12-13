@@ -366,7 +366,12 @@ class GVParse(DataProvider):
             if not self._gen_inservice(gen):
                 ## for now, don't copy any generators that are not in service
                 continue
+
+            if self.is_distgen(gen.GeneratorKey) in ["AREA", "BTM"]:
+                ## these types of distributed generators get distributed to load
+                continue
             self.logger.debug(f"Processing Generator {gen.GeneratorKey} {gen.GeneratorName}")
+            
             ## Add general data
             tmp = {
                 "bus": self.mk_bus_str(gen.BusID),
@@ -423,7 +428,7 @@ class GVParse(DataProvider):
             tmp (dict): _description_
             typ (_type_, optional): _description_. Defaults to str="other".
         """
-        pf = self.get_default_pf("thermal")
+        pf = self.get_default_pf(typ)
         if fixedpmax is not None:
             s_max = fixedpmax/pf
             sin_theta = np.sin(np.arccos(pf))
@@ -475,6 +480,7 @@ class GVParse(DataProvider):
     from .dist_gen import update_load
     from .dist_gen import area_distgen
     from .dist_gen import btm_distgen
+    from .dist_gen import is_distgen
 
     def get_qp(self, area:Union[str,None]=None) -> pd.Series:
         """get a series of QL/PL ratios for the 

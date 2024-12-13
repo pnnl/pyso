@@ -113,8 +113,13 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     
     ### Non Spin (TODO)
     tmp["fast_start"] = thermalgeneral.QuickStart
-    ## TODO: generation distribution table from Brent's update!!!
-
+    
+    if self.is_distgen(genkey) == "BUS":
+        ## this is a distributed generator
+        disttab = self.h5("/mdb/GenerationDistribution").loc[lambda x: x["GeneratorKey"] == genkey]
+        ### create a dictionary with keys=bus names, values=fraction
+        tmp["bus"] = dict(zip(disttab.apply(lambda x: self.mk_bus_str(int(x["Name"])), axis=1), disttab["Percentage"]))
+        tmp["id"] = dict(zip(disttab.apply(lambda x: self.mk_bus_str(int(x["Name"])), axis=1), disttab["GeneratorID"]))
     ### Add to model data
     self.mdl.data["elements"]["generator"][gen.GeneratorName] = tmp
 
