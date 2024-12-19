@@ -61,8 +61,15 @@ def bus_distgen(self:GVParse, genkey:int, tmp:dict):
     ### distributed generator table
     disttab = self.h5("/mdb/GenerationDistribution").loc[lambda x: x["GeneratorKey"] == genkey]
     ### create a dictionary with keys=bus names, values=fraction
-    tmp["bus"] = dict(zip(disttab.apply(lambda x: self.mk_bus_str(int(x["Name"])), axis=1), disttab["Percentage"]))
-    tmp["id"] = dict(zip(disttab.apply(lambda x: self.mk_bus_str(int(x["Name"])), axis=1), disttab["GeneratorID"]))
+    tmp["bus"] = dict()
+    tmp["id"] = dict()
+    for b, i, v in zip(disttab["Name"].astype(int), disttab["GeneratorID"], disttab["Percentage"]):
+        if self.include_bus(b):
+            bus_str = self.mk_bus_str(b)
+            tmp["bus"][bus_str] = v
+            tmp["id"][bus_str]  = i
+    if len(tmp["bus"]) == 0:
+        raise ValueError(f"bus_distgen: distributed generator with genkey {genkey} is not distributed to an of the included buses!")
 
 ### IMPORTANT ############################################
 # Distributed generation is subtracted from load!
@@ -114,6 +121,9 @@ def area_distgen(self:GVParse):
         cl = self.h5.get_cl(dist.Name)
         for idx2 in cl.index:
             ld : pd.Series = cl.loc[idx2]
+            if not self.include_bus(ld.BusID):
+                ### this load is not in the graph, skip.
+                continue
             ## get dispatch allocation to this load
             p : np.ndarray = disp.to_numpy()*dist.Percentage*ld.alpha_k
 
@@ -140,6 +150,9 @@ def btm_distgen(self:GVParse):
     for idx in disttab.index:
         ## get distribution entry
         dist : pd.Series = disttab.loc[idx]
+        if not self.include_bus(dist.LoadBusID):
+            ### this load is not in the graph, skip.
+            continue
         ## get generator entry
         gen : pd.Series = self.h5("/mdb/Generator").loc[lambda x: x["GeneratorKey"] == dist.GeneratorKey].squeeze()
         ## get dispatch

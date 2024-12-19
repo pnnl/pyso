@@ -1,6 +1,7 @@
 from pnnlpcm import h5fun
 import pandas as pd
 import numpy as np
+import networkx as nx
 from egret.data.model_data import ModelData
 from .gvdefaults import gvdefaults
 from typing import Union, Callable, Iterable
@@ -10,6 +11,11 @@ from ..utils.egretutils import NumpyEncoder
 from ..engine import DataProvider
 
 class GVParse(DataProvider):
+
+    from .topology_management import get_topology_subgraph
+    from .topology_management import include_bus
+    from .topology_management import include_branch
+
     def __init__(self, h5path:str, default:dict=None, **kwargs):
         """
         Inputs:
@@ -30,6 +36,9 @@ class GVParse(DataProvider):
 
         self._summer_time = None
         self._season = None
+        
+        ### topology graph
+        self.G : nx.Graph = None
 
         ## TODO: not sure what ends up being the label for 5: non spin, and 7: frequency
         self.astype2gvkey = {1: "REGULATION DOWN",
@@ -94,6 +103,8 @@ class GVParse(DataProvider):
         """
         if not self.h5.is_open:
             self.h5.open()
+        if self.G is None:
+            self.get_topology_subgraph() # set the subgraph model
         self.logger.info("Adding system info...", end="")
         self.add_sys_info()
         self.logger.info("complete")
@@ -134,6 +145,21 @@ class GVParse(DataProvider):
     def add_solution(self) -> bool:
         """indicate whether to include solution variables where appropriate"""
         return self.defaults["simulation"]["include_solution_vars"]
+
+    @property
+    def refbus(self) -> int:
+        """return the reference bus for the model.
+        Reference bus is either specified in self.defaults["system"]["reference_bus"]
+        Or if None (default) it is queried from the GV database.
+
+        Returns:
+            int: reference bus number
+        """
+
+        refbus = self.defaults["system"]["reference_bus"]
+        if refbus is None:
+            refbus = self.h5("/mdb/Bus").loc[lambda x: x["Type"] == 3, "BusID"].squeeze()
+        return refbus
 
     @property
     def daterange(self) -> pd.DatetimeIndex:
@@ -319,8 +345,7 @@ class GVParse(DataProvider):
         """add system info"""
         sys = self.mdl.data["system"]
         sys["baseMVA"] = float(self.h5("/mdb/SimulationControl").loc[lambda x: x["Name"] == "BaseMVA", "Value"].squeeze())
-        refbus = self.h5("/mdb/Bus").loc[lambda x: x["Type"] == 3, "BusID"].squeeze()
-        sys["reference_bus"] = self.mk_bus_str(refbus)
+        sys["reference_bus"] = self.mk_bus_str(self.refbus)
         sys["reference_bus_angle"] = 0
         sys["load_mismatch_cost"] = float(self.h5("/mdb/SimulationControl").loc[lambda x: x["Name"] == "Load Shedding Penalty", "Value"].squeeze())
         sys["time_keys"] = self.actual_res_daterange.strftime("%Y-%m-%d %H:%M").to_list()
@@ -335,6 +360,9 @@ class GVParse(DataProvider):
         h5fun.add_load_area(self.h5("/mdb/Bus"), self.h5("/mdb/Bus"), self.h5("/mdb/LoadArea"))
         bustab = self.h5("/mdb/Bus") ## alias for less typing
         for i in bustab.index:
+            if not self.include_bus(bustab.loc[i, "BusID"]):
+                # bus is not in subgraph
+                continue
             tmp = {}
             tmp["id"] = bustab.loc[i, "BusID"]
             tmp["name"] = bustab.loc[i, "Name"]
@@ -368,6 +396,9 @@ class GVParse(DataProvider):
         btab = h5fun.branchtab_with_bus_names(self.h5("/mdb/Branch"), self.h5("/mdb/Bus"))
         for i in range(btab.shape[0]):
             br = btab.iloc[i,:]
+            if not self.include_branch(br.FromBus, br.ToBus):
+                ## not in subgraph
+                continue
             if np.isnan(br.FromBuskV) or np.isnan(br.ToBuskV):
                 self.logger.warning(f"WARNING: branch {self.mk_br_str(br)} has end buses that are not in the bus table. Skipping.")
                 continue
@@ -402,7 +433,10 @@ class GVParse(DataProvider):
         self.mdl.data["elements"]["generator"] = dict()
         for i in gentab.index:
             ## loop over generators and dispatch based on generator type
-            gen = gentab.loc[i] # pd.Series 
+            gen = gentab.loc[i] # pd.Series
+            if not self.include_bus(gen.BusID):
+                ## not in subgraph
+                continue
             if not self._gen_inservice(gen):
                 ## for now, don't copy any generators that are not in service
                 continue
@@ -562,6 +596,9 @@ class GVParse(DataProvider):
                 qp = self.get_qp(area)
             for k, v in tmp.items():
                 busid = int(k.split("_")[0])
+                if not self.include_bus(busid):
+                    ### not in subgraph
+                    continue
                 loadid = k.split("_")[1]
                 load[k] = {
                     "bus" : self.mk_bus_str(busid),
@@ -589,6 +626,9 @@ class GVParse(DataProvider):
         ncl = self.h5.get_ncl()
         for i in ncl.index:
             busid = ncl.loc[i,"BusID"]
+            if not self.include_bus(busid):
+                ### not in subgraph
+                continue
             k = f'{busid}_{ncl.loc[i, "LoadID"]}'
             load[k] = {
                 "bus": self.mk_bus_str(busid),

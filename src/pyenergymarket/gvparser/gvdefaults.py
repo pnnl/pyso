@@ -18,6 +18,9 @@ gvdefaults = {
         },
         "renewable2thermal_fixed": True #True means q limits are with respect to name plate NOT with respect to variable p max
     },
+    "system": {
+        "reference_bus": None # integer: force this to be the reference bus. None: use reference bus from GV model.
+    },
     "elements": {
         "bus": {
             "v_min": 0.95,
