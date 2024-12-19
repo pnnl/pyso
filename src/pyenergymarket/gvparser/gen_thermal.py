@@ -35,6 +35,10 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     ## get max and min values directly from the fuel curve
     tmp["p_min"] = tmp["p_fuel"]["values"][0][0]
     tmp["p_max"] = tmp["p_fuel"]["values"][-1][0]
+    
+    if self.add_solution:
+        tmp["pg"] = {"data_type": "time_series",
+                     "values": self.get_other_dispatch(gen.GeneratorName)}
     if self.get_reactive:
         self.set_qlims(tmp, typ="thermal")
 
@@ -102,24 +106,33 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
         # Since we only have a percent, we only scale the maximum 
         tmp["p_min_agc"] = tmp["p_min"]
         tmp["p_max_agc"] = tmp["p_max"]*as_frac
-    
+
+        if self.add_solution:
+            # include provided reserves
+            for i in ["up", "down"]:
+                tmp[f"regulation_{i}_supplied"] = {"data_type": "time_series", 
+                                             "values": self.get_as_supplied(gen, f"regulation_{i}")}
     ### Flexible Ramp
     # there is no possibility of excluding generators here...all thermal generators can provide this
-    
+    if self.add_solution:
+        for i in ["up", "down"]:
+            tmp[f"flexible_ramp_{i}_supplied"] = {"data_type": "time_series",
+                                                  "values": self.get_as_supplied(gen, f"flexible_ramp_{i}")}
     ### Spinning
     as_check, as_frac = self.get_as_capability(gen, "SPOption", "SPMaxPercentage")
     if as_check:
         tmp["spinning_capacity"] = tmp["p_max"]*as_frac
+        if self.add_solution:
+            tmp["spinning_reserve_supplied"] = {"data_type": "time_series",
+                                                "values": self.get_as_supplied(gen, "spinning_reserve")}
     
     ### Non Spin (TODO)
     tmp["fast_start"] = thermalgeneral.QuickStart
     
     if self.is_distgen(genkey) == "BUS":
         ## this is a distributed generator
-        disttab = self.h5("/mdb/GenerationDistribution").loc[lambda x: x["GeneratorKey"] == genkey]
-        ### create a dictionary with keys=bus names, values=fraction
-        tmp["bus"] = dict(zip(disttab.apply(lambda x: self.mk_bus_str(int(x["Name"])), axis=1), disttab["Percentage"]))
-        tmp["id"] = dict(zip(disttab.apply(lambda x: self.mk_bus_str(int(x["Name"])), axis=1), disttab["GeneratorID"]))
+        self.bus_distgen(genkey, tmp)
+        
     ### Add to model data
     self.mdl.data["elements"]["generator"][gen.GeneratorName] = tmp
 
@@ -164,8 +177,8 @@ def fuel2cost(self:GVParse, tmp:dict, vom:float=0):
     ##### START FUEL
     start_fuel = tmp.pop("startup_fuel")
     start_fuel_cost = tmp.pop("start_fuel_cost")
-    tmp["org_start_fuel"] = start_fuel
-    tmp["org_start_fuel_cost"] = start_fuel_cost
+    tmp["org_startup_fuel"] = start_fuel
+    tmp["org_startup_fuel_cost"] = start_fuel_cost
     tmp["startup_cost"] = [(hr, mmbtu*start_fuel_cost) for (hr, mmbtu) in start_fuel]
     
 def get_fuel_cost(self:GVParse, fuelid:int, **kwargs) -> Union[float, dict]:
@@ -523,3 +536,25 @@ def flexible_params(self:GVParse, gen:pd.Series):
                             and the percent of of capacity possible
     """
     return self.get_as_capability(gen, ["LDOption", "LUOption"], ["LDMaxPercentage", "LUMaxPercentage"])
+
+def get_as_supplied(self:GVParse, gen:pd.Series, regtyp:str) -> np.ndarray:
+    """Return the ancilliary services supplied by a generator
+
+    Args:
+        gen (pd.Series): row from the /mdb/Generator key
+        rgtyp (str): regulation service to pull options are:
+            regulation_up
+            regulation_down
+            flexible_ramp_up
+            flexible_ramp_down
+            spinning_reserve
+
+    Returns:
+        np.ndarray: ancillary service supplied
+    """
+    
+    if regtyp not in self.as_egret2gv.keys():
+        raise KeyError(f"get_as_supplied: {regtyp} is not one of the supported regulation types.")
+
+    out = self.h5(f"/generator/{self.as_egret2gv[regtyp]}_SERVED AMOUNT").loc[self.daterange, gen.GeneratorName]
+    return out.values

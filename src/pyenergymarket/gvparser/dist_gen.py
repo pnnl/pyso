@@ -48,6 +48,22 @@ def is_distgen(self:GVParse, genkey:int) -> str:
     ### genkey no non of the distribution tables
     return ""
 
+def bus_distgen(self:GVParse, genkey:int, tmp:dict):
+    """Update generator parameters for distributed generators.
+    the bus fields needs to be a dictionary bus->fraction
+    the id field (not used by egret directly) is a dictionary bus->generator ID
+
+    Args:
+        genkey (int): generator key
+        tmp (dict): parameter dictionary
+    """
+
+    ### distributed generator table
+    disttab = self.h5("/mdb/GenerationDistribution").loc[lambda x: x["GeneratorKey"] == genkey]
+    ### create a dictionary with keys=bus names, values=fraction
+    tmp["bus"] = dict(zip(disttab.apply(lambda x: self.mk_bus_str(int(x["Name"])), axis=1), disttab["Percentage"]))
+    tmp["id"] = dict(zip(disttab.apply(lambda x: self.mk_bus_str(int(x["Name"])), axis=1), disttab["GeneratorID"]))
+
 ### IMPORTANT ############################################
 # Distributed generation is subtracted from load!
 
@@ -87,7 +103,13 @@ def area_distgen(self:GVParse):
         ## get generator entry
         gen : pd.Series = self.h5("/mdb/Generator").loc[lambda x: x["GeneratorKey"] == dist.GeneratorKey].squeeze()
         ## get dispatch
-        disp : pd.Series = self.h5("/generator/GENERATION").loc[self.daterange, gen.GeneratorName]
+        try:
+            disp : pd.Series = self.h5("/generator/GENERATION").loc[self.daterange, gen.GeneratorName]
+        except KeyError:
+            ### skip if no output data. warn if the generator should be online.
+            if self._gen_inservice(gen):
+                self.logger.warning(f"WARINING: Generator {gen.GeneratorKey} {gen.GeneratorName} is in service but not in the GridView output. Skipping.")
+            continue
         ## get conforming load
         cl = self.h5.get_cl(dist.Name)
         for idx2 in cl.index:

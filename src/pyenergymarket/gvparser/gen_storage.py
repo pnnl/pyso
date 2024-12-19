@@ -29,7 +29,10 @@ def _storage_gen(self:GVParse, gen:pd.Series, tmp:dict):
     # elif gen.GeneratorType == 3:
     #     self._storage_typ3(tmp)
     else:
-        raise ValueError(f"Storage of type {gen.GeneratorType} is not implemented.")
+        self.logger.warning(f"WARNING: Storage of type {gen.GeneratorType} is not implemented. Treating {gen.GeneratorName} as Other.")
+        self._other_gen(gen, tmp)
+        return
+        # raise ValueError(f"Storage of type {gen.GeneratorType} is not implemented.")
 
     if "storage" not in self.mdl.data["elements"]:
         self.mdl.data["elements"]["storage"] = dict()

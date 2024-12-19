@@ -20,5 +20,8 @@ pwdefaults = {
         "level": "INFO",
         "msg_format": "{message}",
         "file": None
-    }
+    },
+    "generation": {
+        "include_qg": True # True includes reactive power setpoint
+    },
 }

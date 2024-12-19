@@ -2,6 +2,8 @@
 """
 from egret.data.model_data import ModelData
 from copy import deepcopy
+import json
+import numpy as np
 
 def get_bus_id(md:ModelData, bus:str, field="id") -> int:
     """Under the ASSUMPTION that a field was added to the Egret
@@ -30,7 +32,7 @@ def flatten_distributed_generators(md:ModelData):
     #### SETUP 
     #################################
     #### helper functions
-    def scale_time_series(ts:dict, scale:float):
+    def scale_time_series(ts:dict, scale:float) -> dict:
         tmp = {"data_type": "time_series"}
         if isinstance(ts["values"], dict):
             tmp["values"] = {k: scale*v for k,v in ts["values"].items()}
@@ -38,8 +40,9 @@ def flatten_distributed_generators(md:ModelData):
             tmp["values"] = [scale*v for v in ts["values"]]
         else:
             raise ValueError(f"scale_time_series: expected values key of time series to be either dict or str but got {type(ts['values'])}")
+        return tmp
     
-    def scale_cost_curve(cc:dict, scale:float):
+    def scale_cost_curve(cc:dict, scale:float) -> dict:
         tmp = {"data_type": "cost_curve", "cost_curve_type": cc["cost_curve_type"]}
         if cc["cost_curve_type"] == "piecewise":
             ## scale both output and cost
@@ -47,13 +50,14 @@ def flatten_distributed_generators(md:ModelData):
         elif cc["cost_curve_type"] == "polynomial":
             ## scale coefficients
             tmp["values"] = {k: scale*v for k,v in cc["values"].items()}
-    def scale_fuel_curve(fc:dict, scale:float):
+        return tmp
+    def scale_fuel_curve(fc:dict, scale:float) -> dict:
         tmp = {"data_type": "fuel_curve"}
         ## scale both output and fuel
         tmp["values"] = [(scale*gen, scale*fuel) for gen, fuel in fc["values"]]
-    
+        return tmp
     ## Do not scale these
-    exclude_keys = ["power_factor", "in_service", 
+    exclude_keys = ["power_factor", "in_service", "zone", "area",
                     "min_up_time", "min_down_time", 
                     "initial_status", "fuel_cost"
                     "agc_marginal_cost", "spinning_cost", "non_spinning_cost",
@@ -75,7 +79,7 @@ def flatten_distributed_generators(md:ModelData):
             # not a distributed generator
             continue
         remove_gens.append(g)
-        for bus, frac in g_dict["bus"]:
+        for bus, frac in g_dict["bus"].items():
             ### copy parameter dictionary
             tmp = deepcopy(g_dict)
             ### update bus and generator ID
@@ -88,7 +92,7 @@ def flatten_distributed_generators(md:ModelData):
                 if isinstance(v, str) or isinstance(v, bool):
                     ## nothing to split
                     continue
-                if k in exclude_keys:
+                if k in exclude_keys + ["bus", "id"]:
                     continue
                 if isinstance(v,dict):
                     if v["data_type"] == "time_series":
@@ -99,6 +103,15 @@ def flatten_distributed_generators(md:ModelData):
                         tmp[k] = scale_fuel_curve(v, frac)
                     else:
                         raise KeyError(f"flatten_distributed_generators: unknown data type for generator {g} key {k}")
+                elif isinstance(v, list):
+                    if ("startup_cost" in k) or ("startup_fuel" in k):
+                        tmp[k] = [(hr, val*frac) for (hr, val) in v]
+                    else:
+                        raise TypeError(f"flatten_distributed_generators: unknown data type {type(v)} for property {k}: {v}.")
+                elif isinstance(v, (float, np.floating, int, np.integer)):
+                    tmp[k] = frac*v
+                else:
+                    raise TypeError(f"flatten_distributed_generators: unknown data type {type(v)} for property {k}: {v}.")
             ### collect generator
             new_gen[f"{g}_{bus}_{id}"] = tmp
     
@@ -111,4 +124,15 @@ def flatten_distributed_generators(md:ModelData):
 
 
 
-            
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        else:
+            return super(NumpyEncoder, self).default(obj)            

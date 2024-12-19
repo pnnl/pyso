@@ -23,6 +23,11 @@ def _renewable_gen(self:GVParse, gen:pd.Series, tmp:dict):
     tmp["p_min"] = 0.0
     tmp["p_max"] = {"data_type": "time_series", 
                     "values": self.get_renewable_shape(gen.GeneratorName)}
+    
+    if self.add_solution:
+        tmp["pg"] = {"data_type": "time_series",
+                     "values": self.get_other_dispatch(gen.GeneratorName)}
+        
     if self.get_reactive:
         tmp["power_factor"] = self.get_default_pf("renewable")
     tmp["p_cost"] = self.get_renewable_dispach_cost(genkey)
@@ -33,6 +38,10 @@ def _renewable_gen(self:GVParse, gen:pd.Series, tmp:dict):
         tmp["fuel"] = self.h5("/mdb/HourlyResourceType").loc[lambda x: x["TypeID"] == hrsource.Type, "Comments"].squeeze()
 
     self.renewable_ancillary_sevices(gen, tmp)
+    if self.is_distgen(genkey) == "BUS":
+        ## this is a distributed generator
+        self.bus_distgen(genkey, tmp)
+
     self.mdl.data["elements"]["generator"][gen.GeneratorName] = tmp
 
 
@@ -94,13 +103,22 @@ def renewable_ancillary_sevices(self:GVParse, gen:pd.Series, tmp:dict):
         tmp["p_min_agc"] = tmp["p_min"]
         tmp["p_max_agc"] = {"data_type": "time_series",
                             "values": tmp["p_max"]["values"] * as_frac}
-    
+        if self.add_solution:
+            # include provided reserves
+            for i in ["up", "down"]:
+                tmp[f"regulation_{i}_supplied"] = {"data_type": "time_series", 
+                                             "values": self.get_as_supplied(gen, f"regulation_{i}")}
     #### Flexible Ramping
     as_cap, as_frac = self.flexible_params(gen)
     if as_cap:
         ### convert to thermal so it can provide reserves
         self.renewable2thermal(tmp)
-
+        if self.add_solution:
+            # include provided reserves
+            for i in ["up", "down"]:
+                tmp[f"flexible_ramp_{i}_supplied"] = {"data_type": "time_series", 
+                                             "values": self.get_as_supplied(gen, f"flexible_ramp_{i}")}
+        
     #### Spinning
     as_cap, as_frac = self.spinning_params(gen)
     if as_cap:
@@ -108,6 +126,9 @@ def renewable_ancillary_sevices(self:GVParse, gen:pd.Series, tmp:dict):
         self.renewable2thermal(tmp)
         tmp["spinning_capacity"] = {"data_type": "time_series",
                                     "values": tmp["p_max"]["values"] * as_frac}
+        if self.add_solution:
+            tmp["spinning_reserve_supplied"] = {"data_type": "time_series",
+                                                "values": self.get_as_supplied(gen, "spinning_reserve")}
         
 def renewable2thermal(self:GVParse, tmp:dict):
     """Convert a renewable generator to a thermal one

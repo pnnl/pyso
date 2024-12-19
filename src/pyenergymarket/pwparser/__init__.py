@@ -32,6 +32,12 @@ class PWParse():
 
         self._tables = {}
 
+    @property
+    def include_qg(self) -> bool:
+        """include qg results in model
+        """
+        return self.defaults["generation"]["include_qg"]
+    
     def get_table(self, key:str, parameterkeynames:list=[], parameterkeytypes:list=[]) -> pd.DataFrame:
         """get data table form the power world model
 
@@ -78,8 +84,25 @@ class PWParse():
                 continue
             g_dict["q_min"] = gen.MvarMin
             g_dict["q_max"] = gen.MvarMax
-            ## in case this is a renewable model
-            g_dict["power_factor"] = np.sign(gen.Mvar/gen.MW)*np.cos(np.arctan(gen.Mvar/gen.MW))
+            if self.include_qg:
+                g_dict["qg"] = gen.Mvar
+            ## Note: if this is a renewable model the assumed power factor will be used
+        
+        ### loop over load in case other-type generators were placed there
+        for l, l_dict in md.elements(element_type="load"):
+            if "gv_generatorkey" in l_dict:
+                bus = get_bus_id(md, l_dict["bus"]) ## note: this is not there by default in Egret
+                id  = l_dict["id"]                  ## note: this is not there by default in Egret
+                gen : pd.Series = gens.loc[lambda x: (x["BusNum"] == bus) & (x["ID"].str.strip() == id.strip())].squeeze()
+                if gen.empty:
+                    self.logger.warning(f"\tWARNING: Generator {g} not found in PW Gen Table. Skipping. Default Q limits will Remain.")
+                    continue
+                ## use constant Q instead of constant PF
+                l_dict["q_load"] = -1*gen.Mvar # flip sign since modeled as load
+                ### for information only, but again flipping sign due to model as load
+                l_dict["q_min"] = -gen.MvarMax
+                l_dict["q_max"] = gen.MvarMin
+
         self.logger.info("Completed generator reactive limits.")
 
     def map_shunt_type(self, pw_shunt_type:str) -> str:
@@ -129,9 +152,9 @@ class PWParse():
             remove_existing_shunts = self.defaults["shunts"]["remove_existing"]
         
         ### remove existing shunt key
-        if remove_existing_shunts or ("shunt" not in md["elements"]):
-            md["elements"].pop("shunt",None)
-            md["elements"]["shunt"] = dict()
+        if remove_existing_shunts or ("shunt" not in md.data["elements"]):
+            md.data["elements"].pop("shunt",None)
+            md.data["elements"]["shunt"] = dict()
         
         ## get all shunts
         shunts = self.sa.extract_object_table("Shunt")
@@ -153,7 +176,7 @@ class PWParse():
             if (tmp["pw_status"] == "Open") and (tmp["shunt_type"] == "fixed"):
                 ## don't included fixed shunts that are out of service
                 continue
-            md["elements"]["shunt"][f"{s.BusNum}_{s.ID}"] = tmp
+            md.data["elements"]["shunt"][f"{s.BusNum}_{s.ID}"] = tmp
         self.logger.info("Completed adding shunt elements.")
 
     def add_line_shunts(self, md:ModelData, remove_existing_shunts:Union[None,bool]=None):
@@ -163,9 +186,9 @@ class PWParse():
             remove_existing_shunts = self.defaults["shunts"]["remove_existing"]
         
         ### remove existing shunt key
-        if remove_existing_shunts or ("shunt" not in md["elements"]):
-            md["elements"].pop("shunt",None)
-            md["elements"]["shunt"] = dict()
+        if remove_existing_shunts or ("shunt" not in md.data["elements"]):
+            md.data["elements"].pop("shunt",None)
+            md.data["elements"]["shunt"] = dict()
 
         ### get all line shunts
         line_shunts = self.sa.extract_object_table("LineShunt",
@@ -190,8 +213,8 @@ class PWParse():
             if (tmp["pw_status"] == "Open") and (tmp["shunt_type"] == "fixed"):
                 ## don't included fixed shunts that are out of service
                 continue
-            md["elements"]["shunt"][f"{s.BusNumLoc}_{s.ID}"] = tmp
-            self.logger.info("Completed adding line shunt elements.")
+            md.data["elements"]["shunt"][f"{s.BusNumLoc}_{s.ID}"] = tmp
+        self.logger.info("Completed adding line shunt elements.")
             
         
 

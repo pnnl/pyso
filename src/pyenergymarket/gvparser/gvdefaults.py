@@ -7,6 +7,7 @@ gvdefaults = {
     },
     "simulation": {
         "thermal_model": "cost", # can be "cost" or "fuel". if cost, will convert fuel.
+        "include_solution_vars": False # True includes solution vars like pg and reserves
     },
     "reactive_power": {
         "include": False, # if true parse reactive data
@@ -36,6 +37,8 @@ gvdefaults = {
                 "storage": [3],
                 "renewable": [4]
             },
+            "type_other_cost": 100.0, # $/MWh for unknown generator type
+            "type_other_pos_neg_epsilon": 1e-6, # threshold to consider positive/negative generation exists.
             ### parameters mainly for debugging purposes
             "renewable_type_override": {},
             "ignore_non_fuel_startup": False,
