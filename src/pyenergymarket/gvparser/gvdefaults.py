@@ -31,7 +31,8 @@ gvdefaults = {
             "angle_diff_max": 360,
             "rating_long_term": "A",
             "rating_short_term": "A",
-            "rating_emergency": "B"
+            "rating_emergency": "B",
+            "min_reactance": 1e-6 # minimum reactance in case 0
         },
         "generator": {
             "generator_type_map":{

@@ -38,7 +38,7 @@ def _collect_line(self:GVParse, data:pd.Series):
         tmp["circuit"] = data["CKT"]
         tmp["in_service"] = data["Status"]
         tmp["resistance"] = data["R"]
-        tmp["reactance"] = data["X"]
+        tmp["reactance"] = data["X"] if data["X"] != 0 else self.defaults["elements"]["branch"]["min_reactance"]
         tmp["charging_susceptance"] = data["B"]
         for k in ["long_term", "short_term", "emergency"]:
             tmp[f"rating_{k}"] = data[self.season + self.defaults["elements"]["branch"][f"rating_{k}"]]
@@ -56,7 +56,7 @@ def _collect_xfrm(self:GVParse, data:pd.Series):
         tmp["branch_type"] = "transformer" #change branch type
         
         ## add transformer specific data
-        tmp["transformer_tap_ratio"] = data["Ratio"]
+        tmp["transformer_tap_ratio"] = data["Ratio"] if data["Ratio"] != 0 else 1.0
         tmp["transformer_phase_shift"] = data["Angle"]
         return tmp
 
