@@ -388,6 +388,7 @@ class GVParse(DataProvider):
     from .branches import _collect_dcline_brtab
     from .branches import _collect_dcline_dctab
     from .branches import mk_br_str
+    from .branches import get_branch_flow
 
     def add_branches(self):
         """Add branches to Egret model"""

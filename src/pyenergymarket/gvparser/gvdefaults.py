@@ -26,6 +26,9 @@ gvdefaults = {
             "v_min": 0.95,
             "v_max": 1.05
         },
+        "dc_branch":{
+            "include_dispatch": False
+        },
         "branch": {
             "angle_diff_min": -360,
             "angle_diff_max": 360,
