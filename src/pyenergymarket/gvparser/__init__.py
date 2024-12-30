@@ -351,6 +351,20 @@ class GVParse(DataProvider):
         sys["time_keys"] = self.actual_res_daterange.strftime("%Y-%m-%d %H:%M").to_list()
         sys["time_period_length_minutes"] =  self.defaults["time"]["min_freq"]
     
+    ###### Branches ################
+    def get_bus_voltage(self, b:pd.Series) -> float:
+        
+        vmin = self.defaults["elements"]["bus"]["v_min"]
+        vmax = self.defaults["elements"]["bus"]["v_max"]
+        vm = b.VM
+        if vm < vmin/2:
+            vm = 1.0
+            self.logger.warning(f"WARINING: {self.mk_bus_str(b.BusID)} bus voltage less than half of minimum, setting to 1.0.")
+        elif vm > vmax*2:
+            vm = 1.0
+            self.logger.warning(f"WARINING: {self.mk_bus_str(b.BusID)} bus voltage greater than twice of maximum, setting to 1.0.")
+        return vm
+    
     def add_buses(self):
         """Add buses to Egret Model"""
 
@@ -368,7 +382,7 @@ class GVParse(DataProvider):
             tmp["name"] = bustab.loc[i, "Name"]
             tmp["base_kv"] = bustab.loc[i, "BaseKV"]
             tmp["matpower_bustype"] =  bustype[bustab.loc[i, "Type"]]
-            tmp["vm"] = bustab.loc[i, "VM"]
+            tmp["vm"] = self.get_bus_voltage(bustab.loc[i])
             tmp["va"] = bustab.loc[i, "VA"]
             tmp["area"] = bustab.loc[i, "LoadArea"] #use the load area from GridView
             tmp["zone"] = bustab.loc[i, "PSSEZoneID"]
