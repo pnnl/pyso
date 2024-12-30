@@ -24,4 +24,7 @@ pwdefaults = {
     "generation": {
         "include_qg": True # True includes reactive power setpoint
     },
+    "bus": {
+        "update_voltage": True # update vm and va set points from power flow case
+    }
 }

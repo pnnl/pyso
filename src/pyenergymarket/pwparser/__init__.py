@@ -38,6 +38,12 @@ class PWParse():
         """
         return self.defaults["generation"]["include_qg"]
     
+    @property
+    def update_voltage(self) -> bool:
+        """update voltage setpoints vm/va from power flow case
+        """
+        return self.defaults["bus"]["update_voltage"]
+    
     def get_table(self, key:str, parameterkeynames:list=[], parameterkeytypes:list=[]) -> pd.DataFrame:
         """get data table form the power world model
 
@@ -60,9 +66,33 @@ class PWParse():
         Args:
             md (ModelData): Egret model
         """
+        if self.update_voltage:
+            self.update_buses(md)
         self.update_generator_qlims(md)
         self.add_shunts(md)
         self.add_line_shunts(md, remove_existing_shunts=False)
+
+    def update_buses(self, md:ModelData):
+        """Update the voltage setpoints of buses based on the power flow
+
+        Args:
+            md (ModelData): Egret model
+        """
+
+        self.logger.info("Updating bus voltages...", end="")
+        buses = self.get_table("Bus")
+        for b, b_dict in md.elements(element_type="bus"):
+            busid = b_dict["id"] ## note: this is not there by default in Egret
+            bus : pd.Series = buses.loc[lambda x: x["Number"] == busid].squeeze()
+            if bus.empty:
+                self.logger.warning(f"\tWARNING: Bus {b} not found in PW Bus Table. Skipping. Voltage setpoint from PCM will remain.")
+                continue
+            ## get voltage magnitude and angle
+            b_dict["vm"] = bus.Vpu
+            b_dict["va"] = bus.VangleRad*180/np.pi
+        
+        self.logger.info("Completed bus initial voltages.")
+
 
     def update_generator_qlims(self, md:ModelData):
         """Update generator reactive limits
