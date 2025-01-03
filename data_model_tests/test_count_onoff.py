@@ -40,6 +40,7 @@ if __name__ == "__main__":
         system_times = pd.to_datetime(pd.date_range(start=system_times[0], end=system_times[-1], freq=min_freq))
     # test_time = test_times[int(len(test_times) / 2) + 1]
     t0idx = int(len(system_times) / 2) + 1
+    print(f"selected initial time index {t0idx}: {system_times[t0idx]}")
 
     solution_out = {"elements": {}, "system": test_solution["system"]}
     # Loop through all elements. If the element is a generator, update the initial status
@@ -55,16 +56,17 @@ if __name__ == "__main__":
                 solution_out["elements"][elem][unit] = u_dict
                 # Option to print results for each generator
                 if args.verbose:
-                    commits = u_dict["commitment"]
-                    if isinstance(commits, dict):
-                        commits = commits["values"][:t0idx+1]
+                    commits_tmp = u_dict["commitment"]
+                    if isinstance(commits_tmp, dict):
+                        commits = commits_tmp["values"][:t0idx+1]
+                        print_commits = commits + ["<-t0idx"] + commits_tmp["values"][t0idx+1:]
                     if args.different:
                         if sum(commits) != 0 and sum(commits) != len(commits):
                             print(f"For generator {unit} setting initial status to {new_initial_status} based on "
-                                  f"input initial_status {prev_initial_status} and commitments {commits}")
+                                  f"input initial_status {prev_initial_status} and commitments {print_commits}")
                     else:
                         print(f"For generator {unit} setting initial status to {new_initial_status} based on "
-                              f"input initial_status {prev_initial_status} and commitments {commits}")
+                              f"input initial_status {prev_initial_status} and commitments {print_commits}")
 
         else:
             # Pass all other values through
