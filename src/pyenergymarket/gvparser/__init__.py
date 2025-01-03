@@ -9,6 +9,7 @@ from ..utils.ioutils import merge_configs
 from ..utils.timeutils import mk_daterange
 from ..utils.egretutils import NumpyEncoder
 from ..engine import DataProvider
+import copy
 
 class GVParse(DataProvider):
 
@@ -26,7 +27,7 @@ class GVParse(DataProvider):
         self.h5 = h5fun.H5(h5path, **kwargs)
         self.mdl = ModelData() # create an empty model data object with keys "elements", "system"
 
-        self.defaults = gvdefaults.copy()
+        self.defaults = copy.deepcopy(gvdefaults)
         if default is not None:
             merge_configs(self.defaults, default)
 
@@ -82,10 +83,6 @@ class GVParse(DataProvider):
 
         Args:
             daterange(Union[pd.DatetimeIndex,None], optional): the actual datetime index. Defaults to None
-            start (Union[str, pd.Timestamp, None], optional): start time. Defaults to None.
-            end (Union[str, pd.Timestamp,None], optional): end time. Defaults to None.
-            min_freq (Union[None,int], optional): frequency in minutes. Defaults to None.
-            periods (Union[None,int], optional): number of periods. Defaults to None.
 
         Returns:
             ModelData: Egret model for specified date range
@@ -97,6 +94,7 @@ class GVParse(DataProvider):
         self.parse()
         ### return model
         return self.mdl
+    
 
     def parse(self):
         """Parse the gridview model for the given date range into an EGRET Model
@@ -173,7 +171,7 @@ class GVParse(DataProvider):
             min_freq = self.defaults["time"]["min_freq"]
             periods  = self.defaults["time"]["periods"]
             self._actual_res_daterange = mk_daterange(start = datefrom, end=dateto, min_freq=min_freq, periods=periods)
-            self._daterange = self._actual_res_daterange.floor("h")
+            self._daterange = self._actual_res_daterange.floor('h').union(self._actual_res_daterange.ceil('h')).drop_duplicates()#self._actual_res_daterange.floor("h")
             # self._daterange = h5fun.mk_daterange(dfts=self.h5("/area/LOAD"), datefrom=datefrom, dateto=dateto)
         
         return self._daterange
@@ -238,11 +236,19 @@ class GVParse(DataProvider):
         Args:
             dt (pd.DatetimeIndex): externally provided datetime index
         """
-
         self.defaults["time"]["datefrom"] = dt[0].strftime("%Y-%m-%d %H:%M")
         self.defaults["time"]["dateto"]   = dt[-1].strftime("%Y-%m-%d %H:%M")
-        self.defaults["time"]["min_freq"] = round(dt.diff()[-1].total_seconds()/60)
         self.defaults["time"]["periods"]  = len(dt)
+        if self.defaults['time']['periods'] == 1:
+            if self.defaults["time"]["min_freq"] is not None:
+                pass
+            else:
+                # if only one time interval, then we must require
+                # the user to provide the min_freq
+                raise ValueError(f"min_freq must be set in energy market configuration")
+        else:
+            self.defaults["time"]["min_freq"] = round(dt.diff()[-1].total_seconds()/60)
+        
 
         # force recalculation of daterange
         self._daterange = None
@@ -371,7 +377,8 @@ class GVParse(DataProvider):
         bustype = {1: "PQ", 2: "PV", 3: "ref", 4: "isolated"}
         buses = dict()
         ### add load area name rather than id
-        h5fun.add_load_area(self.h5("/mdb/Bus"), self.h5("/mdb/Bus"), self.h5("/mdb/LoadArea"))
+        if 'LoadArea' not in self.h5('/mdb/Bus'):
+            h5fun.add_load_area(self.h5("/mdb/Bus"), self.h5("/mdb/Bus"), self.h5("/mdb/LoadArea"))
         bustab = self.h5("/mdb/Bus") ## alias for less typing
         for i in bustab.index:
             if not self.include_bus(bustab.loc[i, "BusID"]):
@@ -600,15 +607,42 @@ class GVParse(DataProvider):
         """
         return self.h5.get_cl(area).apply(lambda x: 0.0 if (x["PL"] == 0) else x["QL"]/x["PL"], axis=1)
 
+    def interpolate_time(self, df:Union[pd.DataFrame, pd.Series]) -> Union[pd.DataFrame,pd.Series]: #, #dtinterp:pd.DatetimeIndex,
+                        #  method:Union[str,None]=None) -> Union[pd.DataFrame,pd.Series]:
+        """interpolate the data in the input dataframe/series (indexed on self.daterange)
+        to indices of self.actual_res_daterange.
+        Interpolation method is defined in configuration: self.defaults["interpolate"]["method"]
+
+        Args:
+            df (Union[pd.DataFrame, pd.Series]): Input data at original resolution
+            # dtinterp (pd.DatetimeIndex): the time index for the interpolated data 
+            method (str, optional): interpolation method. Defaults to "zero". must be one of the
+                                    methods received by scipy.interpolate()
+
+        Returns:
+            Union[pd.DataFrame,pd.Series]: interpolated data on the new time index.
+        """
+
+        # create time index to be interpolated on (resolution equal to actual_res_daterange)
+        dtinterp = mk_daterange(start=self.daterange[0],end=self.daterange[-1],min_freq=self.defaults["time"]["min_freq"])
+        # reindex dataframe at resolution of interest and interpolate
+        df = df.reindex(dtinterp).interpolate(method=self.defaults['interpolate']['method'])
+
+        # return samples at the actual time slices of interest
+        return df.loc[self.actual_res_daterange]
+    
     def add_load(self):
         load = dict()
-        
+
         ### Conforming Load
         # loop over areas
         for area in self.h5("/area/LOAD").keys():
-            tmp = self.h5.area_ts_to_bus(area=area, dtrange=self.daterange)
+
+            tmp = self.h5.area_ts_to_bus(area=area, dtrange=self.daterange) # unique to load
+            tmp = self.interpolate_time(tmp)
             if self.get_reactive:
                 qp = self.get_qp(area)
+
             for k, v in tmp.items():
                 busid = int(k.split("_")[0])
                 if not self.include_bus(busid):

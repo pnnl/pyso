@@ -1,6 +1,7 @@
 from __future__ import annotations
 import pandas as pd
 import numpy as np
+from ..utils.timeutils import mk_daterange
 
 ### This is for type checking and syntax highlighting
 ### see: https://www.youtube.com/watch?v=UnKa_t-M_kM
@@ -60,6 +61,7 @@ def get_renewable_shape(self:GVParse, genname:str) -> np.ndarray:
     generation_key = "/generator/GENERATION"
     curtailment_key = "/generator/PRICE_MARKUP_RATIO"
     out = self.h5(generation_key).loc[self.daterange, genname] + self.h5(curtailment_key).loc[self.daterange, genname]
+    out = self.interpolate_time(df=out)
     return out.values
     
 def get_renewable_dispach_cost(self:GVParse, genkey:int) -> Union[float, dict]:
@@ -86,7 +88,7 @@ def renewable_ancillary_sevices(self:GVParse, gen:pd.Series, tmp:dict):
     Any renewable that should provide ancillary services is converted to a thermal
     generator
 
-    Currently Implemnted:
+    Currently Implemented:
     Regulation, Load Following, Spinning
 
     Args:

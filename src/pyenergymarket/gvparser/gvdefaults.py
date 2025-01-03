@@ -5,6 +5,9 @@ gvdefaults = {
         "min_freq": 60,
         "periods": 24
     },
+    "interpolate": {
+        "method": "linear"
+    },
     "simulation": {
         "thermal_model": "cost", # can be "cost" or "fuel". if cost, will convert fuel.
         "include_solution_vars": False # True includes solution vars like pg and reserves
