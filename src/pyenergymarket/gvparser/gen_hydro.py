@@ -2,6 +2,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 import copy
+from ..utils.timeutils import mk_daterange
 
 ### This is for type checking and syntax highlighting
 ### see: https://www.youtube.com/watch?v=UnKa_t-M_kM
@@ -49,4 +50,6 @@ def get_hydro_dispatch(self:GVParse, genname:str) -> np.ndarray:
     
     generation_key = "/generator/GENERATION"
     out = self.h5(generation_key).loc[self.daterange, genname]
+    out = self.interpolate_time(out)
+
     return out.values

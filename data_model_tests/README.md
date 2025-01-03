@@ -214,3 +214,29 @@ Similarly if Type and ID are 0 this overrides everything.
 Other columns:
 XX[Option]: Whether this type of unit can supply this kind of reserve
 XX[MaxPercentage]: is the maximum percent of capacity that can supply the reserve
+
+# Count On/Off Test
+The count on/off test validates the performance of the timeutils.count_onoff function.
+This function sets a new initial status based on the commitment history
+and previous initial status. For example, at hour 14, a unit committed for
+13 hours with an initial status of 3 will get an updated initial status of
+16 (meaning 16 hours online).
+
+If a unit changes status, the initial_status keyword won't matter. In instead at hour
+14 the unit was committed for the first 8 hours only, it will get a new
+initial_status of -6 (14-8 =  6 hours offline).
+
+This test can be run with
+```
+python test_count_onoff.py
+```
+
+This will use solutions from pyenergy_test_solution.json. If this file
+doesn't exist, you can specify the h5path the the test will invoke the test_energymarket.py.
+Optionally you can also include a verbose flag. This will
+print generator results to the terminal. If you would like to only see the generators
+that change status, you can also specify the 'different' flag.
+```
+python test_count_onoff.py --h5path <path-to-h5file.h5> [-v] [-d]
+```
+The test solution with updated initial status will be saved to count_onoff_test_solution.json.

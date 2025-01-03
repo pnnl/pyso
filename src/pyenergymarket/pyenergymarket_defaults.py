@@ -1,4 +1,4 @@
-energymarket_defaults = {
+energymarket_defaults = {    
     "time": {
         "datefrom": None,
         "dateto": None,
@@ -7,7 +7,7 @@ energymarket_defaults = {
         "lookahead": 0 # solution lookahead
     },
     "simulation": {
-        "price_model": "lmp", # can be "lmp" (fix commitment), 
+        "price_model": "lmp" # can be "lmp" (fix commitment), 
                                       #"achp" (approximate convex hull, relax binary),
                                       # None (don't calculate prices)
     },

@@ -77,7 +77,7 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
     ## According to Hitachi generator can start up at an point
     ## Assume generator can shutdown from any point.
     tmp["startup_capacity"] = tmp["p_max"] #min(tmp["p_min"] + tmp["ramp_up_60min"], tmp["p_max"])
-    tmp["shutdown_capcity"] = tmp["p_max"]
+    tmp["shutdown_capacity"] = tmp["p_max"]
 
     ## must run
     if thermalgeneral.MustRun:
