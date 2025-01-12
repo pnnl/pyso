@@ -25,6 +25,8 @@ pwdefaults = {
         "include_qg": True # True includes reactive power setpoint
     },
     "bus": {
-        "update_voltage": True # update vm and va set points from power flow case
+        "update_voltage": True, # update vm and va set points from power flow case
+        "min_acceptable_voltage": 0.7,
+        "max_acceptable_voltage": 1.3
     }
 }
