@@ -4,6 +4,8 @@ from egret.data.model_data import ModelData
 from copy import deepcopy
 import json
 import numpy as np
+import networkx as nx
+import pandas as pd
 
 def get_bus_id(md:ModelData, bus:str, field="id") -> int:
     """Under the ASSUMPTION that a field was added to the Egret
@@ -135,4 +137,35 @@ class NumpyEncoder(json.JSONEncoder):
         elif isinstance(obj, np.bool_):
             return bool(obj)
         else:
-            return super(NumpyEncoder, self).default(obj)            
+            return super(NumpyEncoder, self).default(obj) 
+
+
+def get_networkx_graph(md:ModelData) -> nx.Graph:
+    """Create network x graph model of the model data.
+    
+    Note: 
+        there is a version of this in Egret but it is more restrictive
+    and raises an error when there are parallel lines. Also, this version
+    includes dc_branch components
+
+    Args:
+        md (ModelData): egret model
+
+    Returns:
+        nx.Graph: Graph representation
+    """
+    ### AC branch attributes
+    branch_attrs = md.attributes(element_type='branch')
+    idx = branch_attrs.pop("names")
+    df = pd.DataFrame(branch_attrs, index=idx)
+    G : nx.Graph = nx.from_pandas_edgelist(df, source="from_bus", target="to_bus", 
+                                    edge_attr=True)
+    ### DC branch attributes
+    if "dc_branch" in md.data["elements"].keys():
+        dc_attributes = md.attributes(element_type="dc_branch")
+        dc_idx = dc_attributes.pop("names")
+        dfdc = pd.DataFrame(dc_attributes, index=dc_idx)
+        ## update Graph
+        G.update(nx.from_pandas_edgelist(dfdc, source="from_bus", target="to_bus", edge_attr=True))
+    
+    return G
