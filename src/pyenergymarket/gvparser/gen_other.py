@@ -111,6 +111,7 @@ def get_other_dispatch(self:GVParse, genname:str) -> np.ndarray:
     generation_key = "/generator/GENERATION"
     try:
         out = self.h5(generation_key).loc[self.daterange, genname]
+        out = self.interpolate_time(out)
         return out.values
     except KeyError:
         self.logger.warning(f"WARINING: Generator {genname} is in service but not in the GridView output. Skipping.")

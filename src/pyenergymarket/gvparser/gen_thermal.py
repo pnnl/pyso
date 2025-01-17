@@ -557,4 +557,5 @@ def get_as_supplied(self:GVParse, gen:pd.Series, regtyp:str) -> np.ndarray:
         raise KeyError(f"get_as_supplied: {regtyp} is not one of the supported regulation types.")
 
     out = self.h5(f"/generator/{self.as_egret2gv[regtyp]}_SERVED AMOUNT").loc[self.daterange, gen.GeneratorName]
+    out = self.interpolate_time(out)
     return out.values

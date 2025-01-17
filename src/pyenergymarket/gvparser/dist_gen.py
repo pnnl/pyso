@@ -112,6 +112,7 @@ def area_distgen(self:GVParse):
         ## get dispatch
         try:
             disp : pd.Series = self.h5("/generator/GENERATION").loc[self.daterange, gen.GeneratorName]
+            disp = self.interpolate_time(disp)
         except KeyError:
             ### skip if no output data. warn if the generator should be online.
             if self._gen_inservice(gen):
@@ -157,6 +158,7 @@ def btm_distgen(self:GVParse):
         gen : pd.Series = self.h5("/mdb/Generator").loc[lambda x: x["GeneratorKey"] == dist.GeneratorKey].squeeze()
         ## get dispatch
         disp : pd.Series = self.h5("/generator/GENERATION").loc[self.daterange, gen.GeneratorName]
+        disp = self.interpolate_time(disp)
         ## get load key
         key = f"{dist.LoadBusID}_{dist.LoadID}"
         
