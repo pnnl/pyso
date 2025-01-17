@@ -60,7 +60,9 @@ def get_renewable_shape(self:GVParse, genname:str) -> np.ndarray:
     ### For now, combine dispatched and curtailed MW to get input profile
     generation_key = "/generator/GENERATION"
     curtailment_key = "/generator/PRICE_MARKUP_RATIO"
-    out = self.h5(generation_key).loc[self.daterange, genname] + self.h5(curtailment_key).loc[self.daterange, genname]
+    out = self.h5(generation_key).loc[self.daterange, genname]
+    if self.renewable_shape_type == "full":
+        out += self.h5(curtailment_key).loc[self.daterange, genname]
     out = self.interpolate_time(df=out)
     return out.values
     

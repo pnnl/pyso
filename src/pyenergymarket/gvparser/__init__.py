@@ -135,6 +135,21 @@ class GVParse(DataProvider):
         self.mdl.write(savename, encoder=NumpyEncoder)
 
     @property
+    def renewable_shape_type(self) -> str:
+        """Indicate what type of shape to pull for renewables:
+            
+        Options:
+            full: capability shape = dispatch + curtailment
+            dispatch: dispatch only shape 
+        """
+        out = self.defaults["elements"]["generator"]["renewable_shape_type"]
+        out = out.lower()
+        if out not in ["full", "dispatch"]:
+            self.logger.warning(f"WARNING: renewable_shape_type must be either 'full' or 'dispatch' but {out} was given. Switching to 'full'.")
+            out = "full"
+        return out
+    
+    @property
     def get_reactive(self) -> bool:
         """indicate whether to include reactive power capability or not"""
         return self.defaults["reactive_power"]["include"]

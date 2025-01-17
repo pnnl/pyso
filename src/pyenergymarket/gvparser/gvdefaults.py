@@ -49,6 +49,7 @@ gvdefaults = {
             },
             "type_other_cost": 100.0, # $/MWh for unknown generator type
             "type_other_pos_neg_epsilon": 1e-6, # threshold to consider positive/negative generation exists.
+            "renewable_shape_type": "full", # full = dispatch + curtailed, dispatch = dispatch only.
             ### parameters mainly for debugging purposes
             "renewable_type_override": {},
             "ignore_non_fuel_startup": False,
