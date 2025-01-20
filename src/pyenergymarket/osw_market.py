@@ -17,7 +17,7 @@ import pandas as pd
 import numpy as np
 import copy
 from transitions import Machine
-from pyenergymarket import EnergyMarket
+from .engine import EnergyMarket
 from pyenergymarket.utils.timeutils import mk_daterange
 
 

@@ -16,7 +16,7 @@ import logging
 import pandas as pd
 import numpy as np
 from transitions import Machine
-from osw_market import OSWMarket
+from .osw_market import OSWMarket
 from pyenergymarket.utils.timeutils import count_onoff, mk_daterange
 
 # from typing import TYPE_CHECKING

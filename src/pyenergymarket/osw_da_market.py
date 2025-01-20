@@ -15,7 +15,7 @@ import json
 import logging
 import pandas as pd
 from transitions import Machine
-from osw_market import OSWMarket
+from .osw_market import OSWMarket
 
 
 
