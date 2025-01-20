@@ -101,7 +101,7 @@ class GVParse(DataProvider):
         self.data_convert()
         self.logger.info("complete")
         self.h5.close()
-    
+
     def write(self, savename:str):
         """Write the EGRET model to a json file
 
