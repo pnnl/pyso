@@ -52,15 +52,20 @@ Make sure to [install a solver](#solvers)
 
 Then proceed to verify the installation, see [these instructions](https://github.com/breldridge/Egret?tab=readme-ov-file#testing-the-installation)
 
-## Installing `pnnlpcm` package for GridView h5 handling
+## Installing `gridtune` package for GridView h5 handling and PowerWorld parsing
 Egret models based on GridView models are created by parsing the `h5` file created by GridView.
-To work with this file, the `pnnlpcm` package is required, which is hosted privately [here](https://devops.pnnl.gov/ntp/ntp_PCM).
+To work with this file, the `gridtune` package is required, which is hosted privately [here](https://tanuki.pnnl.gov/gridtune/gridtune).
 To get access reach out to Eran: <eran.schweitzer@pnnl.gov>.
 
-Once the repository is cloned it can be installed using the editable mode:
+Once the repository is cloned it can be installed using the editable mode (in the root directory):
 ```
-pip install -e <path-to-ntp-pcm>
+pip install -e ".[pcm,simauto]"
 ```
+
+**Notes**:
+* The `pcm` option is required for h5 handling
+* The `simauto` option is required for interacting with PowerWorld. This _only_ works on Windows machines (though the installation shouldn't fail)
+* Editable mode is not required. It's possible to leave out the `-e`. If changes are made to GridTUNE, the package will simply need to be reinstalled.
 
 ## installing `pyenergymarket`
 Install pyenergy market as an editable package via:
