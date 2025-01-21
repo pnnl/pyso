@@ -17,8 +17,8 @@ import pandas as pd
 import numpy as np
 import copy
 from transitions import Machine
-from .engine import EnergyMarket
-from pyenergymarket.utils.timeutils import mk_daterange
+from ..engine import EnergyMarket
+from ..utils.timeutils import mk_daterange
 
 
 logger = logging.getLogger(__name__)
