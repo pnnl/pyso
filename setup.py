@@ -12,7 +12,7 @@ def check_dependencies():
                         "optional": ["pnnlpcm"]
         }
         sources = {"egret": "https://github.com/pnnl-private/egret",
-                "pnnlpcm": "https://devops.pnnl.gov/ntp/ntp_PCM"}
+                "gridtune": "https://tanuki.pnnl.gov/gridtune/gridtune"}
         missing_dependencies = {"required": [], "optional": []}
 
         for typ, dlist in dependencies.items():

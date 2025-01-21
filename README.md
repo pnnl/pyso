@@ -59,11 +59,10 @@ To get access reach out to Eran: <eran.schweitzer@pnnl.gov>.
 
 Once the repository is cloned it can be installed using the editable mode (in the root directory):
 ```
-pip install -e ".[pcm,simauto]"
+pip install -e ".[simauto]"
 ```
 
 **Notes**:
-* The `pcm` option is required for h5 handling
 * The `simauto` option is required for interacting with PowerWorld. This _only_ works on Windows machines (though the installation shouldn't fail)
 * Editable mode is not required. It's possible to leave out the `-e`. If changes are made to GridTUNE, the package will simply need to be reinstalled.
 
@@ -79,7 +78,7 @@ pip install -e <path-to-pyenergymarket>[gv]
 ```
 
 After installation a `dependencies.log` file is created.
-If any of the editable dependencies (such as `egret` or `pnnlpcm`) are not installed this file will:
+If any of the editable dependencies (such as `egret` or `gridtune`) are not installed this file will:
 * indicate this
 * point to where to get the repositories (note: access is restricted)
 * reprise how to install
@@ -95,7 +94,7 @@ cd into repository folder
 pip install -e .
 
 The following OPTIONAL dependencies are missing:
- - pnnlpcm (source: https://devops.pnnl.gov/ntp/ntp_PCM)
+ - gridtune (source: https://tanuki.pnnl.gov/gridtune/gridtune)
 
 They should be installed as editable packages using pip:
 Clone repository from source

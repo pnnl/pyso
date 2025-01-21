@@ -1,4 +1,4 @@
-from simauto import SimAuto
+from gridtune.simauto import SimAuto
 from egret.data.model_data import ModelData
 import pandas as pd
 from ..utils.ioutils import merge_configs, Logger
@@ -27,8 +27,7 @@ class PWParse():
         if self.defaults["logging"]["file"] is not None:
             self.logger.set_logfile(self.defaults["logging"]["file"])
 
-        self.sa = SimAuto(logger_settings="")
-        self.sa()
+        self.sa = SimAuto()
         self.sa.open_case(pwbpath)
 
         self._tables = {}

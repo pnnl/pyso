@@ -1,4 +1,4 @@
-from pnnlpcm import h5fun
+from gridtune.pcm import h5fun
 import pandas as pd
 import numpy as np
 import networkx as nx
