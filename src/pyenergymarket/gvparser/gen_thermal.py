@@ -142,10 +142,11 @@ def fuel2cost(self:GVParse, tmp:dict, vom:float=0):
     ## Convert to cost curve with entries (MW, $/MWh)
     if isinstance(fuel_cost, dict):
         ### fuel cost is time series
-        tmp["p_cost"] = {"data_type": "time_series", "cost_curve_type": "piecewise",
-                        "values": []}
+        tmp["p_cost"] = {"data_type": "time_series", "values": []}
         for fc in fuel_cost["values"]:
-            tmp["p_cost"]["values"].append(mmbtu2dollar(p_fuel["values"], fc, vom))
+            tmp["p_cost"]["values"].append({"data_type": "cost_curve",
+                                            "cost_curve_type": "piecewise",
+                                            "values": mmbtu2dollar(p_fuel["values"], fc, vom)})
     else:
         ### single value fuel cost
         tmp["p_cost"] = {
@@ -326,7 +327,7 @@ def thermal_iocurve(self:GVParse, genkey:int) -> list[tuple]:
     
 
 def _from_generic_io_curve(self:GVParse, pmin:float, pmax:float, avghr:float, coeffs:list[float]) -> list[tuple]:
-    """Calculte the fuel burn curve (MW, MMBTU) based on the generic unitized coefficients
+    """Calculate the fuel burn curve (MW, MMBTU) based on the generic unitized coefficients
 
     Args:
         pmin (float): minimum output [MW]
