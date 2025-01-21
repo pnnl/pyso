@@ -2,13 +2,17 @@ import pyenergymarket as pyen
 import numpy as np
 from egret.data.model_data import ModelData
 from utilities import dictionary_testing
-
+import platform, os
 
 def run_energymarket():
 
-    h5path = r"\\PNL\Projects\ECOMP\Shared Data\H5Files\WECC240_20240807.h5"
-    loglevel = "INFO"
-    
+    if platform.system() == 'Windows':
+        h5path = r"\\PNL\Projects\ECOMP\Shared Data\H5Files\WECC240_20240807.h5"
+    else: # Assuming Mac and windows will use the same path, maybe not true...
+        h5path = '/Volumes/Shared Data/H5Files/WECC240_20240807.h5'
+        if not os.path.exists(h5path):
+            raise FileNotFoundError(f'{h5path} not found. Please mount smb://pnl/Projects/ECOMP/Shared Data')
+
     ### setup gridview parsing
     gvconfig = {
         "simulation": {
@@ -30,8 +34,7 @@ def run_energymarket():
         }
     }
 
-    gv = pyen.GVParse(h5path, default=gvconfig, logger_options={"level": loglevel})
-    
+    gv = pyen.GVParse(h5path, default=gvconfig)
     
     ### setup PyEnergyMarket
     pyenconfig = {
@@ -67,7 +70,12 @@ def save_energymarket():
 def test_energymarket():
 
     em = run_energymarket()
-    solpath = r"\\PNL\Projects\ECOMP\Shared Data\PyEnergyMarketTestData\test_fuelcurve_solution.json"
+    if platform.system() == 'Windows':
+        solpath = r"\\PNL\Projects\ECOMP\Shared Data\PyEnergyMarketTestData\test_fuelcurve_solution.json"
+    else:
+        solpath = '/Volumes/Shared Data/PyEnergyMarketTestData/test_fuelcurve_solution.json'
+        if not os.path.exists(solpath):
+            raise FileNotFoundError(f'{solpath} not found. Please mount smb://pnl/Projects/ECOMP/Shared Data')
     sol = ModelData.read(solpath)
 
     # assert em.mdl.data == sol.data
