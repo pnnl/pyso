@@ -579,6 +579,7 @@ class GVParse(DataProvider):
     from .gen_thermal import spinning_params
     from .gen_thermal import flexible_params
     from .gen_thermal import get_as_supplied
+    from .gen_thermal import as_result_exists
     
     ##### RENEWABLE GENERATION ################
     from .gen_renewable import _renewable_gen

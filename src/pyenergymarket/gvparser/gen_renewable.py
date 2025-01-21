@@ -110,8 +110,9 @@ def renewable_ancillary_sevices(self:GVParse, gen:pd.Series, tmp:dict):
         if self.add_solution:
             # include provided reserves
             for i in ["up", "down"]:
-                tmp[f"regulation_{i}_supplied"] = {"data_type": "time_series", 
-                                             "values": self.get_as_supplied(gen, f"regulation_{i}")}
+                if self.as_result_exists(f"regulation_{i}"):
+                    tmp[f"regulation_{i}_supplied"] = {"data_type": "time_series", 
+                                                "values": self.get_as_supplied(gen, f"regulation_{i}")}
     #### Flexible Ramping
     as_cap, as_frac = self.flexible_params(gen)
     if as_cap:
@@ -120,8 +121,9 @@ def renewable_ancillary_sevices(self:GVParse, gen:pd.Series, tmp:dict):
         if self.add_solution:
             # include provided reserves
             for i in ["up", "down"]:
-                tmp[f"flexible_ramp_{i}_supplied"] = {"data_type": "time_series", 
-                                             "values": self.get_as_supplied(gen, f"flexible_ramp_{i}")}
+                if self.as_result_exists(f"flexible_ramp_{i}"):
+                    tmp[f"flexible_ramp_{i}_supplied"] = {"data_type": "time_series", 
+                                                "values": self.get_as_supplied(gen, f"flexible_ramp_{i}")}
         
     #### Spinning
     as_cap, as_frac = self.spinning_params(gen)
@@ -130,7 +132,7 @@ def renewable_ancillary_sevices(self:GVParse, gen:pd.Series, tmp:dict):
         self.renewable2thermal(tmp)
         tmp["spinning_capacity"] = {"data_type": "time_series",
                                     "values": tmp["p_max"]["values"] * as_frac}
-        if self.add_solution:
+        if self.add_solution and self.as_result_exists("spinning_reserve"):
             tmp["spinning_reserve_supplied"] = {"data_type": "time_series",
                                                 "values": self.get_as_supplied(gen, "spinning_reserve")}
         

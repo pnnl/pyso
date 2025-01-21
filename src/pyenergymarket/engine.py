@@ -3,6 +3,7 @@ EnergyMarket class is here.
 """
 from .utils.ioutils import merge_configs, Logger
 from .utils.timeutils import mk_daterange
+from .utils.egretutils import NumpyEncoder
 from .pyenergymarket_defaults import energymarket_defaults
 import abc
 from egret.data.model_data import ModelData
@@ -100,9 +101,9 @@ class EnergyMarket:
 
     def save_model(self, filename:str):
         if self.mdl_sol is not None:
-            self.mdl_sol.write(filename)
+            self.mdl_sol.write(filename, encoder=NumpyEncoder)
         elif self.mdl is not None:
-            self.mdl.write(filename)
+            self.mdl.write(filename, encoder=NumpyEncoder)
         else:
             raise ValueError("No model currently loaded.")
         

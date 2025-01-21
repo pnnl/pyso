@@ -110,19 +110,21 @@ def _thermal_gen(self:GVParse, gen:pd.Series, tmp:dict):
         if self.add_solution:
             # include provided reserves
             for i in ["up", "down"]:
-                tmp[f"regulation_{i}_supplied"] = {"data_type": "time_series", 
-                                             "values": self.get_as_supplied(gen, f"regulation_{i}")}
+                if self.as_result_exists(f"regulation_{i}"):
+                    tmp[f"regulation_{i}_supplied"] = {"data_type": "time_series", 
+                                                "values": self.get_as_supplied(gen, f"regulation_{i}")}
     ### Flexible Ramp
     # there is no possibility of excluding generators here...all thermal generators can provide this
     if self.add_solution:
         for i in ["up", "down"]:
-            tmp[f"flexible_ramp_{i}_supplied"] = {"data_type": "time_series",
-                                                  "values": self.get_as_supplied(gen, f"flexible_ramp_{i}")}
+            if self.as_result_exists(f"flexible_ramp_{i}"):
+                tmp[f"flexible_ramp_{i}_supplied"] = {"data_type": "time_series",
+                                                    "values": self.get_as_supplied(gen, f"flexible_ramp_{i}")}
     ### Spinning
     as_check, as_frac = self.get_as_capability(gen, "SPOption", "SPMaxPercentage")
     if as_check:
         tmp["spinning_capacity"] = tmp["p_max"]*as_frac
-        if self.add_solution:
+        if self.add_solution and self.as_result_exists("spinning_reserve"):
             tmp["spinning_reserve_supplied"] = {"data_type": "time_series",
                                                 "values": self.get_as_supplied(gen, "spinning_reserve")}
     
@@ -542,7 +544,7 @@ def get_as_supplied(self:GVParse, gen:pd.Series, regtyp:str) -> np.ndarray:
 
     Args:
         gen (pd.Series): row from the /mdb/Generator key
-        rgtyp (str): regulation service to pull options are:
+        regtyp (str): regulation service to pull options are:
             regulation_up
             regulation_down
             flexible_ramp_up
@@ -559,3 +561,27 @@ def get_as_supplied(self:GVParse, gen:pd.Series, regtyp:str) -> np.ndarray:
     out = self.h5(f"/generator/{self.as_egret2gv[regtyp]}_SERVED AMOUNT").loc[self.daterange, gen.GeneratorName]
     out = self.interpolate_time(out)
     return out.values
+
+def as_result_exists(self:GVParse, regtyp:str) -> bool:
+    """Check whether solutions for the particular regulation type exist in the database
+
+    Args:
+        self (GVParse): _description_
+        regtyp (str): regulation service. Options are:
+            regulation_up
+            regulation_down
+            flexible_ramp_up
+            flexible_ramp_down
+            spinning_reserve
+
+    Returns:
+        bool: True=Solution exists, False=Solution doesn't exist
+    """
+
+    if regtyp not in self.as_egret2gv.keys():
+        raise KeyError(f"get_as_supplied: {regtyp} is not one of the supported regulation types.")
+    try:
+        self.h5(f"/generator/{self.as_egret2gv[regtyp]}_SERVED AMOUNT")
+        return True
+    except KeyError:
+        return False
