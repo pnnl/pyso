@@ -23,6 +23,23 @@ def get_bus_id(md:ModelData, bus:str, field="id") -> int:
     """
     return md.data["elements"]["bus"][bus][field]
 
+def get_bus_from_id(md:ModelData, busid:int, field="id") -> str:
+    """Reverse to get_bus_id. Under the ASSUMPTION that a field was added
+    to the Egret model that stores an integer reference to the bus, this function
+    returns the bus key that is associated with this integer
+
+    Args:
+        md (ModelData): Egret model
+        busid (int): integer bus number
+        field (str, optional): field where integer bus number is stored. Defaults to "id".
+
+    Returns:
+        str: the bus key in the Egret model
+    """
+    for bus, b_dict in md.elements("bus"):
+        if b_dict[field] == busid:
+            return bus
+
 def flatten_distributed_generators(md:ModelData):
     """Convert all distributed generators to individual generators
     There is an assumption that an id field exists that stores generator unit IDs

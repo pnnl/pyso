@@ -2,7 +2,7 @@ from simauto import SimAuto
 from egret.data.model_data import ModelData
 import pandas as pd
 from ..utils.ioutils import merge_configs, Logger
-from ..utils.egretutils import get_bus_id, get_networkx_graph
+from ..utils.egretutils import get_bus_id, get_networkx_graph, get_bus_from_id
 from .pwdefaults import pwdefaults
 import numpy as np
 from typing import Union
@@ -300,7 +300,8 @@ class PWParse():
         for i in shunts.index:
             s : pd.Series = shunts.loc[i]
             tmp = {
-                "bus": s.BusNum,
+                "busid": s.BusNum,
+                "bus": get_bus_from_id(self.md, s.BusNum, field="id"),
                 "id": s.ID,
                 "pw_status": s.Status,
                 "bs": s.Mvar, # initial value
@@ -313,6 +314,9 @@ class PWParse():
             }
             if (tmp["pw_status"] == "Open") and (tmp["shunt_type"] == "fixed"):
                 ## don't included fixed shunts that are out of service
+                continue
+            elif tmp["bus"] is None:
+                ## bus was not found in egret model. skip
                 continue
             self.md.data["elements"]["shunt"][f"{s.BusNum}_{s.ID}"] = tmp
         self.logger.info("Completed adding shunt elements.")
@@ -338,7 +342,8 @@ class PWParse():
                 ## there is no data here
                 continue
             tmp = {
-                "bus": s.BusNumLoc,
+                "busid": s.BusNumLoc,
+                "bus": get_bus_from_id(self.md, s.BusNumLoc, field="id"),
                 "id": s.ID,
                 "pw_status": s.Status,
                 "bs": s.MvarNom,
@@ -350,6 +355,9 @@ class PWParse():
             
             if (tmp["pw_status"] == "Open") and (tmp["shunt_type"] == "fixed"):
                 ## don't included fixed shunts that are out of service
+                continue
+            elif tmp["bus"] is None:
+                ## bus was not found in egret model. skip
                 continue
             self.md.data["elements"]["shunt"][f"{s.BusNumLoc}_{s.ID}"] = tmp
         self.logger.info("Completed adding line shunt elements.")
