@@ -9,7 +9,7 @@ import importlib.util
 def check_dependencies():
     with open("dependencies.log", "w") as f:
         dependencies = {"required": ["egret"],
-                        "optional": ["pnnlpcm"]
+                        "optional": ["gridtune"]
         }
         sources = {"egret": "https://github.com/pnnl-private/egret",
                 "gridtune": "https://tanuki.pnnl.gov/gridtune/gridtune"}
