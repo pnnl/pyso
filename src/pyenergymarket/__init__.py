@@ -1,4 +1,4 @@
 from .gvparser import GVParse
 from .engine import EnergyMarket
-from .pwparser import PWParse
+from . import pwparser
 from . import utils
