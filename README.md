@@ -46,7 +46,9 @@ Will shift to Mini WECC once it is available
 # Setup
 ## Intalling Egret
 To install Egret the repository needs to be cloned and then installed via pip in edit mode.
-See the instructions [here](https://github.com/breldridge/Egret?tab=readme-ov-file#installation)
+See the instructions [here](https://github.com/pnnl-private/egret?tab=readme-ov-file#installation).
+Please use the `develop` branch.
+This is on PNNL's private GitHub, if you need access reach out to either Eran (<eran.schweitzer@pnnl.gov>), or Trevor (<trevor.hardy@pnnl.gov>)
 
 Make sure to [install a solver](#solvers)
 
