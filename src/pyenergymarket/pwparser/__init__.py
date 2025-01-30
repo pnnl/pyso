@@ -213,6 +213,7 @@ class PWParse():
         gens = self.get_table("Gen")
         ### loop over generators
         for g, g_dict in self.md.elements(element_type='generator'):
+            self.logger.debug(f"DEBUG: processing generator {g}")
             bus = get_bus_id(self.md, g_dict["bus"]) ## note: this is not there by default in Egret
             id  = g_dict["id"]                  ## note: this is not there by default in Egret
             gen : pd.Series = gens.loc[lambda x: (x["BusNum"] == bus) & (x["ID"].str.strip() == id.strip())].squeeze()
@@ -228,6 +229,7 @@ class PWParse():
         ### loop over load in case other-type generators were placed there
         for l, l_dict in self.md.elements(element_type="load"):
             if "gv_generatorkey" in l_dict:
+                self.logger.debug(f"DEBUG: processing load {l} (formerly generator)")
                 bus = get_bus_id(self.md, l_dict["bus"]) ## note: this is not there by default in Egret
                 id  = l_dict["id"]                  ## note: this is not there by default in Egret
                 gen : pd.Series = gens.loc[lambda x: (x["BusNum"] == bus) & (x["ID"].str.strip() == id.strip())].squeeze()

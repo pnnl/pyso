@@ -148,6 +148,14 @@ class GVParse(DataProvider):
             self.logger.warning(f"WARNING: renewable_shape_type must be either 'full' or 'dispatch' but {out} was given. Switching to 'full'.")
             out = "full"
         return out
+
+    @property
+    def dist_gen_tol(self) -> float:
+        """Tolerance for distributed generator aggregation.
+        If the sum of fractions more than this tolerance away from 1, the factors
+        will be re-calculated.
+        """
+        return self.defaults["elements"]["generator"]["dist_gen_tol"]
     
     @property
     def get_reactive(self) -> bool:
@@ -503,10 +511,9 @@ class GVParse(DataProvider):
             if t == "other":
                 self.logger.warning(f"WARNING: treating generator {gen.GeneratorKey} {gen.GeneratorName} (type={gen.GeneratorType}) as other.")
             getattr(self, f"_{t}_gen")(gen, tmp)
-            # for t, v in self.defaults["elements"]["generator"]["generator_type_map"].items():
-            #     if gen.GeneratorType in v:
-            #         getattr(self, f"_{t}_gen")(gen, tmp)
-            #         break
+        
+        ### check and convert any negative generators
+        self.check_negative_gen()
 
     def _gen_inservice(self, gen:pd.Series) -> bool:
         """Test whether a generator (pandas series that is a row of the Generator table) is in service.
@@ -562,7 +569,53 @@ class GVParse(DataProvider):
         else:
             ## pmax is not time series, simply recall seting it as fixedpmax
             self.set_qlims(tmp, typ=typ, fixedpmax=tmp["p_max"])
+    
+    def check_negative_gen(self):
+        """Check whether any of the generators have operational ranges
+        below zero, which is not allowed in the Egret Model.
+        Example is MotorLoad, which is modeled as a generator in GridView.
+        """
+        remove_gens = []
+        for g, g_dict in self.mdl.elements("generator"):
+            flag = False
+            for i in ["p_max", "p_min"]:
+                if isinstance(g_dict[i], dict):
+                    if np.any(np.array(g_dict[i]["values"]) < 0):
+                        flag = True
+                elif g_dict[i] < 0:
+                    flag = True
+            if flag:
+                self.logger.warning(f"WARNING: Generator {g} is not Non-Negative, converting to Load.")
+                self.gen2load(g)
+                remove_gens.append(g)
+
+        ### remove converted generators
+        for g in remove_gens:
+            self.mdl.data["elements"]["generator"].pop(g)
+    
+    def gen2load(self, g:str):
+        """Convert generator g to a load, flipping the sign on p.
+        pg will be used if add_solution is true.
+        Otherwise, p_max is used.
+
+        Args:
+            g (str): key in generator dictionary to convert
+        """
+        tmp = copy.deepcopy(self.mdl.data["elements"]["generator"][g])
+        ## use values pg/qg if adding solution, else p_max/q_max
+        ## TODO: in some cases p_min might be better but it may be zero if coming from renewable.
+        set_key = "g" if self.add_solution else "_max"
         
+        tmp["p_load"] = copy.deepcopy(tmp[f"p{set_key}"])
+        if isinstance(tmp["p_load"], dict):
+            ## flip sign
+            tmp["p_load"]["values"] *= -1
+        else:
+            tmp["p_load"] *= -1
+
+        ## add to load dictionary
+        self.mdl.data["elements"]["load"][g] = tmp
+              
 
     ###### THERMAL GENERATION ################
     from .gen_thermal import _thermal_gen

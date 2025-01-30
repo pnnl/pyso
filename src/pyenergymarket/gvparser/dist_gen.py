@@ -63,14 +63,26 @@ def bus_distgen(self:GVParse, genkey:int, tmp:dict):
     ### create a dictionary with keys=bus names, values=fraction
     tmp["bus"] = dict()
     tmp["id"] = dict()
+    tmp["bus_id"]  = dict() #key by bus And ID for potential flattening
     for b, i, v in zip(disttab["Name"].astype(int), disttab["GeneratorID"], disttab["Percentage"]):
         if self.include_bus(b):
             bus_str = self.mk_bus_str(b)
-            tmp["bus"][bus_str] = v
-            tmp["id"][bus_str]  = i
+            tmp["bus_id"][f"{bus_str}_{i}"] = v
+            if bus_str in tmp["bus"]:
+                tmp["bus"][bus_str] += v
+            else:
+                tmp["bus"][bus_str] = v
+                tmp["id"][bus_str]  = i
     if len(tmp["bus"]) == 0:
-        raise ValueError(f"bus_distgen: distributed generator with genkey {genkey} is not distributed to an of the included buses!")
-
+        raise ValueError(f"bus_distgen: distributed generator with genkey {genkey} is not distributed to any of the included buses!")
+    s = sum(tmp["bus"].values())
+    if np.abs(s - 1.0) > self.dist_gen_tol:
+        self.logger.warning(f"WARNING: components of distributed generator with genkey {genkey} don't sum to 1 ({s:.2e}, tol={self.dist_gen_tol:.2e}). Adjusting weights.")
+        ## re-normalize
+        for k,v in tmp["bus"].items():
+            tmp["bus"][k] = v/s
+        for k,v in tmp["bus_id"].items():
+            tmp["bus_id"][k] = v/s
 ### IMPORTANT ############################################
 # Distributed generation is subtracted from load!
 

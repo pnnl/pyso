@@ -6,6 +6,7 @@ import json
 import numpy as np
 import networkx as nx
 import pandas as pd
+from typing import Union
 
 def get_bus_id(md:ModelData, bus:str, field="id") -> int:
     """Under the ASSUMPTION that a field was added to the Egret
@@ -40,7 +41,7 @@ def get_bus_from_id(md:ModelData, busid:int, field="id") -> str:
         if b_dict[field] == busid:
             return bus
 
-def flatten_distributed_generators(md:ModelData):
+def flatten_distributed_generators(md:ModelData, key="generator"):
     """Convert all distributed generators to individual generators
     There is an assumption that an id field exists that stores generator unit IDs
 
@@ -93,17 +94,26 @@ def flatten_distributed_generators(md:ModelData):
     ############################################
     new_gen = {}
     remove_gens = []
-    for g, g_dict in md.elements("generator"):
+    for g, g_dict in md.elements(key):
         if not isinstance(g_dict["bus"], dict):
             # not a distributed generator
             continue
         remove_gens.append(g)
-        for bus, frac in g_dict["bus"].items():
+        dist_key = "bus_id" if "bus_id" in g_dict else "bus"
+        for buskey, frac in g_dict[dist_key].items():
             ### copy parameter dictionary
             tmp = deepcopy(g_dict)
             ### update bus and generator ID
+            if dist_key == "bus_id":
+                ## split the last _ by reversing the string
+                id,bus = buskey[::-1].split("_", maxsplit=1)
+                ## undo the reverse
+                bus = bus[::-1]
+                id = id[::-1]
+            else:
+                bus = buskey
+                id = g_dict["id"][bus] ## NOTE: Not standard EGRET!!
             tmp["bus"] = bus
-            id = g_dict["id"][bus] ## NOTE: Not standard EGRET!!
             tmp["id"] = id
 
             ### scale parameteres
@@ -111,7 +121,7 @@ def flatten_distributed_generators(md:ModelData):
                 if isinstance(v, str) or isinstance(v, bool):
                     ## nothing to split
                     continue
-                if k in exclude_keys + ["bus", "id"]:
+                if k in exclude_keys + ["bus", "id", "bus_id"]:
                     continue
                 if isinstance(v,dict):
                     if v["data_type"] == "time_series":
@@ -136,12 +146,39 @@ def flatten_distributed_generators(md:ModelData):
     
     ##### remove generators
     for g in remove_gens:
-        md.data["elements"]["generator"].pop(g)
+        md.data["elements"][key].pop(g)
     
     ##### add new generators
-    md.data["elements"]["generator"].update(new_gen)
+    md.data["elements"][key].update(new_gen)
 
 
+def sum_properties(a:Union[float, dict], b:Union[float,dict]):
+
+    if type(a) != type(b):
+        raise TypeError("sum_properities: the two properties should be of the same type")
+    
+    if isinstance(a,dict):
+        return {"data_type": "time_series", "values": [i+j for i,j in zip(a["values"],b["values"])]}
+    else:
+        return a + b
+
+def get_total_load(md:ModelData):
+    out = None
+    for l, l_dict in md.elements("load"):
+        if out is None:
+            out = l_dict["p_load"]
+        else:
+            out = sum_properties(out, l_dict["p_load"])
+    return out
+
+def get_total_gen(md:ModelData):
+    out = None
+    for g, g_dict in md.elements("generator"):
+        if out is None:
+            out = g_dict["pg"]
+        else:
+            out = sum_properties(out, g_dict["pg"])
+    return out
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
