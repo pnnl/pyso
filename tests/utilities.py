@@ -33,7 +33,7 @@ def list_testing(l1, l2):
             assert i == approx(j)
 
 def os_safe_networkpath(path:str) -> str:
-    """Return a platform specific path onto the E-COMP network drive
+    r"""Return a platform specific path onto the E-COMP network drive
 
     Args:
         path (str): path in windows format (\\PNNL\Projects\ECOMP\...)
