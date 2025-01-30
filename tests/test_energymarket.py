@@ -1,11 +1,11 @@
 import pyenergymarket as pyen
 import numpy as np
 from egret.data.model_data import ModelData
-from utilities import os_safe_h5path, os_safe_solution_json
+from utilities import os_safe_networkpath
 
 def run_energymarket():
 
-    h5path = os_safe_h5path()
+    h5path = os_safe_networkpath(r"\\PNL\Projects\ECOMP\Shared Data\H5Files\WECC240_20240807.h5")
     loglevel = "INFO"
     
     ### setup gridview parsing
@@ -63,7 +63,7 @@ def save_energymarket():
 def test_energymarket():
 
     em = run_energymarket()
-    solpath = os_safe_solution_json("test_energymarket_solution.json")
+    solpath = os_safe_networkpath(r"\\PNL\Projects\ECOMP\Shared Data\PyEnergyMarketTestData\test_energymarket_solution.json")
     sol = ModelData.read(solpath)
 
     cost1 = em.mdl_sol.data["system"]["total_cost"]
