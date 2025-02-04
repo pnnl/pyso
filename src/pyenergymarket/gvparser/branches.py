@@ -38,7 +38,7 @@ def _collect_line(self:GVParse, data:pd.Series):
         tmp["circuit"] = data["CKT"]
         tmp["in_service"] = data["Status"]
         tmp["resistance"] = data["R"]
-        tmp["reactance"] = data["X"]
+        tmp["reactance"] = data["X"] if data["X"] != 0 else self.defaults["elements"]["branch"]["min_reactance"]
         tmp["charging_susceptance"] = data["B"]
         for k in ["long_term", "short_term", "emergency"]:
             tmp[f"rating_{k}"] = data[self.season + self.defaults["elements"]["branch"][f"rating_{k}"]]
@@ -56,7 +56,7 @@ def _collect_xfrm(self:GVParse, data:pd.Series):
         tmp["branch_type"] = "transformer" #change branch type
         
         ## add transformer specific data
-        tmp["transformer_tap_ratio"] = data["Ratio"]
+        tmp["transformer_tap_ratio"] = data["Ratio"] if data["Ratio"] != 0 else 1.0
         tmp["transformer_phase_shift"] = data["Angle"]
         return tmp
 
@@ -79,6 +79,12 @@ def _collect_dcline_brtab(self:GVParse, data:pd.Series):
         for k in ["short_term", "long_term", "emergency"]:
             tmp["rating_"+k] = data["DCLineMWLevel"]
         tmp["loss_factor"] =  data["X"]
+        if self.defaults["elements"]["dc_branch"]["include_dispatch"]:
+             ## Note: only populating flow at the from end!
+             brflow = self.get_branch_flow(data)
+             if brflow is not None:
+                tmp["pf"] = {"data_type": "time_series",
+                             "values": brflow}
         return tmp
     
 #TODO: this is INCOMPLETE!!!
@@ -92,3 +98,28 @@ def _collect_dcline_dctab(self:GVParse, data:pd.Series):
         tmp["rating_"+k] = data["DCLineMWLevel"]
     tmp["loss_factor"] =  data["X"]
     return tmp
+
+def get_branch_flow(self:GVParse, br:pd.Series, flow_key="/branch/FLOW", branchkey=None) -> np.ndarray:
+    """Return the flow for the dc branch for self.daterange
+
+    Args:
+        branchkey (str): branchkey (from_to_ckt)
+
+    Returns:
+        np.ndarray: array of MW values
+    """
+    
+    if branchkey is None:
+         branchkey = self.mk_br_str(br) # Note: without check because need actual key in output table
+    try:
+        out = self.h5(flow_key).loc[self.daterange, branchkey]
+        return out.values
+    except KeyError:
+        if (flow_key == "/branch/FLOW") and (br.DCLineNumber > 0):
+            ## in the case of DC branches in the main branch table, try dcline/FLOW
+            flow_key = "/dcline/FLOW"
+            branchkey = f'{br.BranchID}_-1_{br.CKT}'
+            return self.get_branch_flow(br, flow_key=flow_key, branchkey=branchkey)
+        else:
+            self.logger.warning(f"WARINING: Branch {branchkey} does not have flow values in GridView output. Skipping.")
+            return None

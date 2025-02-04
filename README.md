@@ -46,21 +46,27 @@ Will shift to Mini WECC once it is available
 # Setup
 ## Intalling Egret
 To install Egret the repository needs to be cloned and then installed via pip in edit mode.
-See the instructions [here](https://github.com/breldridge/Egret?tab=readme-ov-file#installation)
+See the instructions [here](https://github.com/pnnl-private/egret?tab=readme-ov-file#installation).
+Please use the `develop` branch.
+This is on PNNL's private GitHub, if you need access reach out to either Eran (<eran.schweitzer@pnnl.gov>), or Trevor (<trevor.hardy@pnnl.gov>)
 
 Make sure to [install a solver](#solvers)
 
 Then proceed to verify the installation, see [these instructions](https://github.com/breldridge/Egret?tab=readme-ov-file#testing-the-installation)
 
-## Installing `pnnlpcm` package for GridView h5 handling
+## Installing `gridtune` package for GridView h5 handling and PowerWorld parsing
 Egret models based on GridView models are created by parsing the `h5` file created by GridView.
-To work with this file, the `pnnlpcm` package is required, which is hosted privately [here](https://devops.pnnl.gov/ntp/ntp_PCM).
+To work with this file, the `gridtune` package is required, which is hosted privately [here](https://tanuki.pnnl.gov/gridtune/gridtune).
 To get access reach out to Eran: <eran.schweitzer@pnnl.gov>.
 
-Once the repository is cloned it can be installed using the editable mode:
+Once the repository is cloned it can be installed using the editable mode (in the root directory):
 ```
-pip install -e <path-to-ntp-pcm>
+pip install -e ".[simauto]"
 ```
+
+**Notes**:
+* The `simauto` option is required for interacting with PowerWorld. This _only_ works on Windows machines (though the installation shouldn't fail)
+* Editable mode is not required. It's possible to leave out the `-e`. If changes are made to GridTUNE, the package will simply need to be reinstalled.
 
 ## installing `pyenergymarket`
 Install pyenergy market as an editable package via:
@@ -74,7 +80,7 @@ pip install -e <path-to-pyenergymarket>[gv]
 ```
 
 After installation a `dependencies.log` file is created.
-If any of the editable dependencies (such as `egret` or `pnnlpcm`) are not installed this file will:
+If any of the editable dependencies (such as `egret` or `gridtune`) are not installed this file will:
 * indicate this
 * point to where to get the repositories (note: access is restricted)
 * reprise how to install
@@ -90,7 +96,7 @@ cd into repository folder
 pip install -e .
 
 The following OPTIONAL dependencies are missing:
- - pnnlpcm (source: https://devops.pnnl.gov/ntp/ntp_PCM)
+ - gridtune (source: https://tanuki.pnnl.gov/gridtune/gridtune)
 
 They should be installed as editable packages using pip:
 Clone repository from source

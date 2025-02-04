@@ -1,15 +1,22 @@
-from pnnlpcm import h5fun
+from gridtune.pcm import h5fun
 import pandas as pd
 import numpy as np
+import networkx as nx
 from egret.data.model_data import ModelData
 from .gvdefaults import gvdefaults
 from typing import Union, Callable, Iterable
 from ..utils.ioutils import merge_configs
 from ..utils.timeutils import mk_daterange
+from ..utils.egretutils import NumpyEncoder
 from ..engine import DataProvider
 import copy
 
 class GVParse(DataProvider):
+
+    from .topology_management import get_topology_subgraph
+    from .topology_management import include_bus
+    from .topology_management import include_branch
+
     def __init__(self, h5path:str, default:dict=None, **kwargs):
         """
         Inputs:
@@ -30,6 +37,9 @@ class GVParse(DataProvider):
 
         self._summer_time = None
         self._season = None
+        
+        ### topology graph
+        self.G : nx.Graph = None
 
         ## TODO: not sure what ends up being the label for 5: non spin, and 7: frequency
         self.astype2gvkey = {1: "REGULATION DOWN",
@@ -44,6 +54,18 @@ class GVParse(DataProvider):
                              4: "spinning_reserve",
                              5: "non_spinning_reserve",
                              6: "flexible_ramp_up"}
+        
+        self.as_egret2gv = {"regulation_down": "REGULATION DOWN",
+                            "flexible_ramp_down": "FLEXIBLE DOWN",
+                            "regulation_up": "REGULATION UP",
+                            "spinning_reserve": "SPINNING RESERVE",
+                            "flexible_ramp_up": "FLEXIBLE UP"}
+        
+        ## create a maping from gridview generator types to implemented parsing functions.
+        self.gentype2parse = {}
+        for t, v in self.defaults["elements"]["generator"]["generator_type_map"].items():
+            for i in v:
+                self.gentype2parse[i] = t
     
     def __call__(self, savename:str):
         """Parse gridview and write the EGRET model
@@ -79,6 +101,8 @@ class GVParse(DataProvider):
         """
         if not self.h5.is_open:
             self.h5.open()
+        if self.G is None:
+            self.get_topology_subgraph() # set the subgraph model
         self.logger.info("Adding system info...", end="")
         self.add_sys_info()
         self.logger.info("complete")
@@ -108,7 +132,55 @@ class GVParse(DataProvider):
         Args:
             savename (str): name to save to (.json)
         """
-        self.mdl.write(savename)
+        self.mdl.write(savename, encoder=NumpyEncoder)
+
+    @property
+    def renewable_shape_type(self) -> str:
+        """Indicate what type of shape to pull for renewables:
+            
+        Options:
+            full: capability shape = dispatch + curtailment
+            dispatch: dispatch only shape 
+        """
+        out = self.defaults["elements"]["generator"]["renewable_shape_type"]
+        out = out.lower()
+        if out not in ["full", "dispatch"]:
+            self.logger.warning(f"WARNING: renewable_shape_type must be either 'full' or 'dispatch' but {out} was given. Switching to 'full'.")
+            out = "full"
+        return out
+
+    @property
+    def dist_gen_tol(self) -> float:
+        """Tolerance for distributed generator aggregation.
+        If the sum of fractions more than this tolerance away from 1, the factors
+        will be re-calculated.
+        """
+        return self.defaults["elements"]["generator"]["dist_gen_tol"]
+    
+    @property
+    def get_reactive(self) -> bool:
+        """indicate whether to include reactive power capability or not"""
+        return self.defaults["reactive_power"]["include"]
+
+    @property
+    def add_solution(self) -> bool:
+        """indicate whether to include solution variables where appropriate"""
+        return self.defaults["simulation"]["include_solution_vars"]
+
+    @property
+    def refbus(self) -> int:
+        """return the reference bus for the model.
+        Reference bus is either specified in self.defaults["system"]["reference_bus"]
+        Or if None (default) it is queried from the GV database.
+
+        Returns:
+            int: reference bus number
+        """
+
+        refbus = self.defaults["system"]["reference_bus"]
+        if refbus is None:
+            refbus = self.h5("/mdb/Bus").loc[lambda x: x["Type"] == 3, "BusID"].squeeze()
+        return refbus
 
     @property
     def daterange(self) -> pd.DatetimeIndex:
@@ -253,11 +325,27 @@ class GVParse(DataProvider):
         return self.daterange
         
     def data_convert(self, d=None, l=None):
+        def iter(x):
+            if isinstance(x, dict):
+                for i,j in x.items():
+                    yield i,j
+            elif isinstance(x, list) or isinstance(x, tuple):
+                for i,j in enumerate(x):
+                    yield i, j
+            else:
+                raise TypeError(f"iter received type {type(x)}")
+
         if d is None:
             d = self.mdl.data
-        for k, v in d.items():
+        # for k, v in d.items():
+        for k, v in iter(d):
             if isinstance(v, dict):
                 self.data_convert(d=v)
+            # elif isinstance(d, list):
+            #     self.data_convert(v)
+            # elif isinstance(v, tuple):
+            #     d[k] = list(v)
+            #     self.data_convert(d[k])
             else:
                 ### modified from here: https://stackoverflow.com/questions/50916422/python-typeerror-object-of-type-int64-is-not-json-serializable
                 ### modifying data instead of passing decoder to Egret
@@ -268,11 +356,15 @@ class GVParse(DataProvider):
                 elif isinstance(v, np.ndarray):
                     ## TODO recurse down arrays
                     d[k] = v.tolist()
+                    # self.data_convert(d[k])
                 elif isinstance(v, np.bool_):
                     d[k] = bool(v)
 
     def mk_bus_str(self,busid:int):
         name, kv = self.h5("/mdb/Bus").loc[lambda x: x["BusID"] == busid, ["Name", "BaseKV"]].squeeze()
+        if isinstance(kv, str):
+            self.logger.error(f"ERROR: bus {busid}, name {name}, kv {kv}. kV is of type str.")
+            raise TypeError
         return f'{busid}_{name}_{kv:.0f}'
     
     def get_zone(self, busid:int):
@@ -282,12 +374,25 @@ class GVParse(DataProvider):
         """add system info"""
         sys = self.mdl.data["system"]
         sys["baseMVA"] = float(self.h5("/mdb/SimulationControl").loc[lambda x: x["Name"] == "BaseMVA", "Value"].squeeze())
-        refbus = self.h5("/mdb/Bus").loc[lambda x: x["Type"] == 3, "BusID"].squeeze()
-        sys["reference_bus"] = self.mk_bus_str(refbus)
+        sys["reference_bus"] = self.mk_bus_str(self.refbus)
         sys["reference_bus_angle"] = 0
         sys["load_mismatch_cost"] = float(self.h5("/mdb/SimulationControl").loc[lambda x: x["Name"] == "Load Shedding Penalty", "Value"].squeeze())
         sys["time_keys"] = self.actual_res_daterange.strftime("%Y-%m-%d %H:%M").to_list()
-        sys["time_period_length_minutes"] =  round(self.actual_res_daterange.diff()[-1].total_seconds()/60)
+        sys["time_period_length_minutes"] =  self.defaults["time"]["min_freq"]
+    
+    ###### Branches ################
+    def get_bus_voltage(self, b:pd.Series) -> float:
+        
+        vmin = self.defaults["elements"]["bus"]["v_min"]
+        vmax = self.defaults["elements"]["bus"]["v_max"]
+        vm = b.VM
+        if vm < vmin/2:
+            vm = 1.0
+            self.logger.warning(f"WARINING: {self.mk_bus_str(b.BusID)} bus voltage less than half of minimum, setting to 1.0.")
+        elif vm > vmax*2:
+            vm = 1.0
+            self.logger.warning(f"WARINING: {self.mk_bus_str(b.BusID)} bus voltage greater than twice of maximum, setting to 1.0.")
+        return vm
     
     def add_buses(self):
         """Add buses to Egret Model"""
@@ -299,12 +404,15 @@ class GVParse(DataProvider):
             h5fun.add_load_area(self.h5("/mdb/Bus"), self.h5("/mdb/Bus"), self.h5("/mdb/LoadArea"))
         bustab = self.h5("/mdb/Bus") ## alias for less typing
         for i in bustab.index:
+            if not self.include_bus(bustab.loc[i, "BusID"]):
+                # bus is not in subgraph
+                continue
             tmp = {}
             tmp["id"] = bustab.loc[i, "BusID"]
             tmp["name"] = bustab.loc[i, "Name"]
             tmp["base_kv"] = bustab.loc[i, "BaseKV"]
             tmp["matpower_bustype"] =  bustype[bustab.loc[i, "Type"]]
-            tmp["vm"] = bustab.loc[i, "VM"]
+            tmp["vm"] = self.get_bus_voltage(bustab.loc[i])
             tmp["va"] = bustab.loc[i, "VA"]
             tmp["area"] = bustab.loc[i, "LoadArea"] #use the load area from GridView
             tmp["zone"] = bustab.loc[i, "PSSEZoneID"]
@@ -324,6 +432,7 @@ class GVParse(DataProvider):
     from .branches import _collect_dcline_brtab
     from .branches import _collect_dcline_dctab
     from .branches import mk_br_str
+    from .branches import get_branch_flow
 
     def add_branches(self):
         """Add branches to Egret model"""
@@ -332,6 +441,12 @@ class GVParse(DataProvider):
         btab = h5fun.branchtab_with_bus_names(self.h5("/mdb/Branch"), self.h5("/mdb/Bus"))
         for i in range(btab.shape[0]):
             br = btab.iloc[i,:]
+            if not self.include_branch(br.FromBus, br.ToBus):
+                ## not in subgraph
+                continue
+            if np.isnan(br.FromBuskV) or np.isnan(br.ToBuskV):
+                self.logger.warning(f"WARNING: branch {self.mk_br_str(br)} has end buses that are not in the bus table. Skipping.")
+                continue
             if br.DCLineNumber > 0:
                 ## dc line
                 tmp = self._collect_dcline_brtab(br)
@@ -363,14 +478,27 @@ class GVParse(DataProvider):
         self.mdl.data["elements"]["generator"] = dict()
         for i in gentab.index:
             ## loop over generators and dispatch based on generator type
-            gen = gentab.loc[i] # pd.Series 
+            gen = gentab.loc[i] # pd.Series
+            if not self.include_bus(gen.BusID):
+                ## not in subgraph
+                continue
             if not self._gen_inservice(gen):
                 ## for now, don't copy any generators that are not in service
                 continue
-            self.h5.logger.debug(f"Processing Generator {gen.GeneratorKey} {gen.GeneratorName}")
+
+            if self.is_distgen(gen.GeneratorKey) in ["AREA", "BTM"]:
+                ## these types of distributed generators get distributed to load
+                continue
+
+            if not isinstance(gen.LoadArea, str):
+                self.logger.warning(f"WARNING: generator {gen.GeneratorKey} {gen.GeneratorName} is at bus {gen.BusID} which is not in the bus table. Skipping.")
+                continue
+            self.logger.debug(f"Processing Generator {gen.GeneratorKey} {gen.GeneratorName}")
+            
             ## Add general data
             tmp = {
                 "bus": self.mk_bus_str(gen.BusID),
+                "id": gen.GeneratorID,
                 "gv_generatorkey": gen.GeneratorKey,
                 "in_service": gen.ServiceStatus,
                 "unit_type": gen.SubType,
@@ -379,10 +507,13 @@ class GVParse(DataProvider):
             }
 
             ## dispatch based on GeneratorType
-            for t, v in self.defaults["elements"]["generator"]["generator_type_map"].items():
-                if gen.GeneratorType in v:
-                    getattr(self, f"_{t}_gen")(gen, tmp)
-                    break
+            t = self.gentype2parse.get(gen.GeneratorType, "other")
+            if t == "other":
+                self.logger.warning(f"WARNING: treating generator {gen.GeneratorKey} {gen.GeneratorName} (type={gen.GeneratorType}) as other.")
+            getattr(self, f"_{t}_gen")(gen, tmp)
+        
+        ### check and convert any negative generators
+        self.check_negative_gen()
 
     def _gen_inservice(self, gen:pd.Series) -> bool:
         """Test whether a generator (pandas series that is a row of the Generator table) is in service.
@@ -400,6 +531,92 @@ class GVParse(DataProvider):
 
         return gen.ServiceStatus and (gen.CommissionDate <= self.daterange[0]) and (gen.RetirementDate >= self.daterange[-1])
 
+    def get_default_pf(self, typ:str="other") -> float:
+        """return a default power factor for a generator of type typ.
+        Types are defined in the reactive_power->default_pf dictionary of the configuration.
+        The "other" key is returned if the provided type is not found
+
+        Args:
+            typ (str, optional): type of generation. Default is "other"
+
+        Returns:
+            float: default power factor
+        """
+        if typ not in self.defaults["reactive_power"]["default_pf"]:
+            typ = "other"
+        return self.defaults["reactive_power"]["default_pf"][typ]
+    
+    def set_qlims(self, tmp:dict, typ:str="other", fixedpmax:Union[None,float]=None):
+        """Populate the generation for a generator of typ with q limits.
+        Note: the limits are 
+
+        Args:
+            tmp (dict): _description_
+            typ (_type_, optional): _description_. Defaults to str="other".
+        """
+        pf = self.get_default_pf(typ)
+        if fixedpmax is not None:
+            s_max = fixedpmax/pf
+            sin_theta = np.sin(np.arccos(pf))
+            tmp["q_min"] = -s_max*sin_theta
+            tmp["q_max"] = s_max*sin_theta
+        elif isinstance(tmp["p_max"], dict):
+            ## time series
+            s_max :np.ndarray = tmp["p_max"]["values"]/pf
+            sin_theta = np.sin(np.arccos(pf))
+            tmp["q_min"] = {"data_type": "time_series", "values":-s_max*sin_theta}
+            tmp["q_max"] = {"data_type": "time_series", "values":s_max*sin_theta}
+        else:
+            ## pmax is not time series, simply recall seting it as fixedpmax
+            self.set_qlims(tmp, typ=typ, fixedpmax=tmp["p_max"])
+    
+    def check_negative_gen(self):
+        """Check whether any of the generators have operational ranges
+        below zero, which is not allowed in the Egret Model.
+        Example is MotorLoad, which is modeled as a generator in GridView.
+        """
+        remove_gens = []
+        for g, g_dict in self.mdl.elements("generator"):
+            flag = False
+            for i in ["p_max", "p_min"]:
+                if isinstance(g_dict[i], dict):
+                    if np.any(np.array(g_dict[i]["values"]) < 0):
+                        flag = True
+                elif g_dict[i] < 0:
+                    flag = True
+            if flag:
+                self.logger.warning(f"WARNING: Generator {g} is not Non-Negative, converting to Load.")
+                self.gen2load(g)
+                remove_gens.append(g)
+
+        ### remove converted generators
+        for g in remove_gens:
+            self.mdl.data["elements"]["generator"].pop(g)
+    
+    def gen2load(self, g:str):
+        """Convert generator g to a load, flipping the sign on p.
+        pg will be used if add_solution is true.
+        Otherwise, p_max is used.
+
+        Args:
+            g (str): key in generator dictionary to convert
+        """
+        tmp = copy.deepcopy(self.mdl.data["elements"]["generator"][g])
+        ## use values pg/qg if adding solution, else p_max/q_max
+        ## TODO: in some cases p_min might be better but it may be zero if coming from renewable.
+        set_key = "g" if self.add_solution else "_max"
+        
+        tmp["p_load"] = copy.deepcopy(tmp[f"p{set_key}"])
+        if isinstance(tmp["p_load"], dict):
+            ## flip sign
+            tmp["p_load"]["values"] *= -1
+        else:
+            tmp["p_load"] *= -1
+
+        ## add to load dictionary
+        self.mdl.data["elements"]["load"][g] = tmp
+              
+
     ###### THERMAL GENERATION ################
     from .gen_thermal import _thermal_gen
     from .gen_thermal import fuel2cost
@@ -414,6 +631,8 @@ class GVParse(DataProvider):
     from .gen_thermal import regulation_params
     from .gen_thermal import spinning_params
     from .gen_thermal import flexible_params
+    from .gen_thermal import get_as_supplied
+    from .gen_thermal import as_result_exists
     
     ##### RENEWABLE GENERATION ################
     from .gen_renewable import _renewable_gen
@@ -430,6 +649,32 @@ class GVParse(DataProvider):
     from .gen_storage import _storage_gen
     from .gen_storage import _storage_type10
     from .gen_storage import get_storage_vom
+
+    ##### Other Generation ####################
+    from .gen_other import _other_gen
+    from .gen_other import get_other_dispatch
+    from .gen_other import other_pos_gen
+    from .gen_other import other_neg_gen
+
+    ##### Load ################################
+    from .dist_gen import update_load
+    from .dist_gen import area_distgen
+    from .dist_gen import btm_distgen
+    from .dist_gen import is_distgen
+    from .dist_gen import bus_distgen
+
+    def get_qp(self, area:Union[str,None]=None) -> pd.Series:
+        """get a series of QL/PL ratios for the 
+        CONFORMING LOADS in area.
+        If area is None, all conforming loads are returned.
+
+        Args:
+            area (Union[str,None], optional): Load Area Name
+
+        Returns:
+            pd.Series: Series with index BusID_LoadID and values QL/PL
+        """
+        return self.h5.get_cl(area).apply(lambda x: 0.0 if (x["PL"] == 0) else x["QL"]/x["PL"], axis=1)
 
     def interpolate_time(self, df:Union[pd.DataFrame, pd.Series]) -> Union[pd.DataFrame,pd.Series]: #, #dtinterp:pd.DatetimeIndex,
                         #  method:Union[str,None]=None) -> Union[pd.DataFrame,pd.Series]:
@@ -461,42 +706,75 @@ class GVParse(DataProvider):
         ### Conforming Load
         # loop over areas
         for area in self.h5("/area/LOAD").keys():
+
             tmp = self.h5.area_ts_to_bus(area=area, dtrange=self.daterange) # unique to load
             tmp = self.interpolate_time(tmp)
+            if self.get_reactive:
+                qp = self.get_qp(area)
 
             for k, v in tmp.items():
                 busid = int(k.split("_")[0])
+                if not self.include_bus(busid):
+                    ### not in subgraph
+                    continue
+                loadid = k.split("_")[1]
                 load[k] = {
                     "bus" : self.mk_bus_str(busid),
+                    "id": loadid,
                     "in_service": True,
                     "area": area,
                     "zone": self.get_zone(busid),
                     "ncl": False,
+                    "distgen": [],
                     "p_load": {
                         "data_type": "time_series",
                         "values": v.values
                     }
                 }
+                if self.get_reactive:
+                    ### add q_load:
+                    load[k]["qp"] = qp[k] # store for modifications due to distributed generation
+                    load[k]["q_load"] = {
+                        "data_type": "time_series",
+                        "values": v.values * qp[k]
+                    }
+                
 
         ### Non-Conforming Load
         ncl = self.h5.get_ncl()
         for i in ncl.index:
             busid = ncl.loc[i,"BusID"]
+            if not self.include_bus(busid):
+                ### not in subgraph
+                continue
             k = f'{busid}_{ncl.loc[i, "LoadID"]}'
             load[k] = {
                 "bus": self.mk_bus_str(busid),
+                "id": ncl.loc[i, "LoadID"],
                 "in_service": True,
                 "area": ncl.loc[i, "LoadArea"],
                 "zone": self.get_zone(busid),
                 "ncl": True,
+                "distgen": [],
                 "p_load": {
                     "data_type": "time_series",
                     "values": ncl.loc[i, "PL"]*np.ones(len(self.daterange))
                 }
             }
+            if self.get_reactive:
+                ### add q_load:
+                load[k]["qp"] = 0 if (ncl.loc[i,"PL"] == 0) else ncl.loc[i, "QL"]/ncl.loc[i,"PL"] # store for consistency
+                load[k]["q_load"] = {
+                    "data_type": "time_series",
+                    "values": ncl.loc[i, "QL"]*np.ones(len(self.daterange))
+                }
 
         ### add to modele in
         self.mdl.data["elements"]["load"] = load
+
+        ### add distributed generation
+        self.area_distgen()
+        self.btm_distgen()
     
     def get_ts_param(self, key:str, filter_fun:Callable[[pd.DataFrame, int], pd.Series], 
                      typ:str="time_series", scale_key:Union[str,None]=None, scale_factor:float=1, 

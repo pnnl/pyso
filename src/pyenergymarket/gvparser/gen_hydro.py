@@ -27,13 +27,23 @@ def _hydro_gen(self:GVParse, gen:pd.Series, tmp:dict):
     tmp["p_max"] = {"data_type": "time_series", 
                     "values": self.get_hydro_dispatch(gen.GeneratorName)}
     tmp["p_min"] = 0 #copy.deepcopy(tmp["p_max"])
+
+    if self.add_solution:
+        tmp["pg"] = {"data_type": "time_series",
+                     "values": self.get_hydro_dispatch(gen.GeneratorName)}
     
+    if self.get_reactive:
+        self.set_qlims(tmp, typ="hydro", fixedpmax=gen.PSSEMaxCap)
+
     tmp["p_cost"] = self.get_renewable_dispach_cost(genkey)
     
     tmp["fuel"] = "Hydro"
 
     ### Ancillary Services
     self.renewable_ancillary_sevices(gen, tmp)
+    if self.is_distgen(genkey) == "BUS":
+        ## this is a distributed generator
+        self.bus_distgen(genkey, tmp)
     
     self.mdl.data["elements"]["generator"][gen.GeneratorName] = tmp
 
