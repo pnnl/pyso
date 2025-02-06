@@ -13,7 +13,6 @@ def dictionary_testing(d1:dict, d2:dict):
         d1 (dict): dictionary one
         d2 (dict): dictionary two
     """
-    print(f"d1: {d1}\nd2: {d2}")
     for k,v in d1.items():
         if isinstance(v, dict):
             dictionary_testing(v, d2[k])
@@ -23,7 +22,6 @@ def dictionary_testing(d1:dict, d2:dict):
             assert v == approx(d2[k])  
             
 def list_testing(l1, l2):
-    print(f"l1: {l1}\nl2: {l2}")
     for i, j in zip(l1, l2):
         if isinstance(i, dict):
             dictionary_testing(i,j)
