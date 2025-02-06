@@ -24,6 +24,13 @@ def _renewable_gen(self:GVParse, gen:pd.Series, tmp:dict):
     tmp["p_min"] = 0.0
     tmp["p_max"] = {"data_type": "time_series", 
                     "values": self.get_renewable_shape(gen.GeneratorName)}
+    
+    if self.add_solution:
+        tmp["pg"] = {"data_type": "time_series",
+                     "values": self.get_other_dispatch(gen.GeneratorName)}
+        
+    if self.get_reactive:
+        tmp["power_factor"] = self.get_default_pf("renewable")
     tmp["p_cost"] = self.get_renewable_dispach_cost(genkey)
     hrsource = self.h5("/mdb/HourlyResource").loc[lambda x: x["GeneratorKey"] == genkey].squeeze()
     if hrsource.Type in self.defaults["elements"]["generator"]["renewable_type_override"]:
@@ -32,6 +39,10 @@ def _renewable_gen(self:GVParse, gen:pd.Series, tmp:dict):
         tmp["fuel"] = self.h5("/mdb/HourlyResourceType").loc[lambda x: x["TypeID"] == hrsource.Type, "Comments"].squeeze()
 
     self.renewable_ancillary_sevices(gen, tmp)
+    if self.is_distgen(genkey) == "BUS":
+        ## this is a distributed generator
+        self.bus_distgen(genkey, tmp)
+
     self.mdl.data["elements"]["generator"][gen.GeneratorName] = tmp
 
 
@@ -49,7 +60,9 @@ def get_renewable_shape(self:GVParse, genname:str) -> np.ndarray:
     ### For now, combine dispatched and curtailed MW to get input profile
     generation_key = "/generator/GENERATION"
     curtailment_key = "/generator/PRICE_MARKUP_RATIO"
-    out = self.h5(generation_key).loc[self.daterange, genname] + self.h5(curtailment_key).loc[self.daterange, genname]
+    out = self.h5(generation_key).loc[self.daterange, genname]
+    if self.renewable_shape_type == "full":
+        out += self.h5(curtailment_key).loc[self.daterange, genname]
     out = self.interpolate_time(df=out)
     return out.values
     
@@ -94,13 +107,24 @@ def renewable_ancillary_sevices(self:GVParse, gen:pd.Series, tmp:dict):
         tmp["p_min_agc"] = tmp["p_min"]
         tmp["p_max_agc"] = {"data_type": "time_series",
                             "values": tmp["p_max"]["values"] * as_frac}
-    
+        if self.add_solution:
+            # include provided reserves
+            for i in ["up", "down"]:
+                if self.as_result_exists(f"regulation_{i}"):
+                    tmp[f"regulation_{i}_supplied"] = {"data_type": "time_series", 
+                                                "values": self.get_as_supplied(gen, f"regulation_{i}")}
     #### Flexible Ramping
     as_cap, as_frac = self.flexible_params(gen)
     if as_cap:
         ### convert to thermal so it can provide reserves
         self.renewable2thermal(tmp)
-
+        if self.add_solution:
+            # include provided reserves
+            for i in ["up", "down"]:
+                if self.as_result_exists(f"flexible_ramp_{i}"):
+                    tmp[f"flexible_ramp_{i}_supplied"] = {"data_type": "time_series", 
+                                                "values": self.get_as_supplied(gen, f"flexible_ramp_{i}")}
+        
     #### Spinning
     as_cap, as_frac = self.spinning_params(gen)
     if as_cap:
@@ -108,6 +132,9 @@ def renewable_ancillary_sevices(self:GVParse, gen:pd.Series, tmp:dict):
         self.renewable2thermal(tmp)
         tmp["spinning_capacity"] = {"data_type": "time_series",
                                     "values": tmp["p_max"]["values"] * as_frac}
+        if self.add_solution and self.as_result_exists("spinning_reserve"):
+            tmp["spinning_reserve_supplied"] = {"data_type": "time_series",
+                                                "values": self.get_as_supplied(gen, "spinning_reserve")}
         
 def renewable2thermal(self:GVParse, tmp:dict):
     """Convert a renewable generator to a thermal one
@@ -156,3 +183,9 @@ def renewable2thermal(self:GVParse, tmp:dict):
 
     ### Force on (shouldn't matter since pmin=0)
     tmp["fixed_commitment"] = 1 
+
+    if self.get_reactive and ("q_max" not in tmp):
+        ## IMPORTANT: change in Usage of POWER FACTOR.
+        ## In renewable model it is a fixed number, when transitioning to thermal it will change to a +\- range!
+        self.set_qlims(tmp, typ="renewable", fixedpmax=maxcap if self.defaults["reactive_power"]["renewable2thermal_fixed"] else None)
+        

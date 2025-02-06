@@ -9,10 +9,10 @@ import importlib.util
 def check_dependencies():
     with open("dependencies.log", "w") as f:
         dependencies = {"required": ["egret"],
-                        "optional": ["pnnlpcm"]
+                        "optional": ["gridtune"]
         }
         sources = {"egret": "https://github.com/pnnl-private/egret",
-                "pnnlpcm": "https://devops.pnnl.gov/ntp/ntp_PCM"}
+                "gridtune": "https://tanuki.pnnl.gov/gridtune/gridtune"}
         missing_dependencies = {"required": [], "optional": []}
 
         for typ, dlist in dependencies.items():
