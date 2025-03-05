@@ -99,8 +99,7 @@ class GVParse(DataProvider):
     def parse(self):
         """Parse the gridview model for the given date range into an EGRET Model
         """
-        if not self.h5.is_open:
-            self.h5.open()
+        
         if self.G is None:
             self.get_topology_subgraph() # set the subgraph model
         self.logger.info("Adding system info...", end="")
@@ -124,7 +123,6 @@ class GVParse(DataProvider):
         self.logger.info("Converting data for saving...", end="")
         self.data_convert()
         self.logger.info("complete")
-        self.h5.close()
 
     def write(self, savename:str):
         """Write the EGRET model to a json file

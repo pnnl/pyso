@@ -4,6 +4,7 @@ import sys
 from egret.data.model_data import ModelData
 from utilities import dictionary_testing, os_safe_networkpath
 import platform
+import pytest
 
 def main():
     # logfile = "wecc_test_parsing.log"
@@ -59,18 +60,29 @@ def main():
     
     pw.logger.info("\nPower World Parsing\n===========================\n")
     pw.update_model(em.mdl)
+    pw.sa.close()
+    pw.logger.info("Finished Power World Parsing.")
     return em
+
+@pytest.fixture
+def get_data():
+    if platform.system() == 'Windows': 
+        return main()
+    else:
+        return None
 
 def save_model():
     em = main()
     em.save_model("test_acpfmodel_solution.json")
 
-def test_acpfmodel():
+def test_acpfmodel(get_data):
     if platform.system() == 'Windows':
-        em = main()
+        em = get_data
+        em.logger.info("Finished Parsing Model.")
         solpath = os_safe_networkpath(r"\\PNL\Projects\ECOMP\Shared Data\PyEnergyMarketTestData\test_acpfmodel_solution.json")
         sol = ModelData.read(solpath)
 
+        em.logger.info("Starting Comparison")
         dictionary_testing(em.mdl.data, sol.data)
 
 if __name__ == "__main__":
