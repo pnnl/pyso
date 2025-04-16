@@ -81,7 +81,7 @@ class OSWDAMarket(OSWMarket):
                 "market_interval": 86400
             }
 
-    def clear_market(self, local_save:bool=True, get_mdl:bool=True):
+    def clear_market(self, local_save:bool=False, get_mdl:bool=True):
         """
         Overloaded method of OSWMarket
 
