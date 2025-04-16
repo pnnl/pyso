@@ -12,12 +12,15 @@ trevor.hardy@pnnl.gov
 """
 import datetime
 import json
+import os
 import logging
 import pandas as pd
 import numpy as np
 from transitions import Machine
 from .osw_market import OSWMarket
-from ..utils.timeutils import count_onoff, mk_daterange
+from ..utils.ioutils import Logger
+from ..utils.timeutils import mk_daterange
+import copy
 
 # from typing import TYPE_CHECKING
 # if TYPE_CHECKING:
@@ -46,7 +49,8 @@ class OSWRTMarket(OSWMarket):
 
     """
 
-    def __init__(self, start_date, end_date, market_name:str="rt_energy_market", market_timing:dict=None, min_freq:int=15, window:int=4, **kwargs):
+    def __init__(self, start_date, end_date, market_name:str="rt_energy_market", market_timing:dict=None, min_freq:int=15,
+                 window:int=4, lookahead:int=0, **kwargs):
         """
         Class that specifically runs the OSW RT energy market
 
@@ -56,7 +60,9 @@ class OSWRTMarket(OSWMarket):
         """
         super().__init__(market_name, market_timing, start_date, end_date, **kwargs)
         self.em.configuration["min_freq"] = min_freq
-        self.em.configuration["window"] = window
+        self.em.configuration["time"]["window"] = window
+        self.em.configuration["time"]["lookahead"] = lookahead
+        self.em.configuration["window"] = window + lookahead
         self.__dict__.update(kwargs)
         if self.market_timing == None:
             self.market_timing = {
@@ -92,8 +98,9 @@ class OSWRTMarket(OSWMarket):
     #     """
     #     self.move_to_next_state()
 
-        
-    def interpolate_market_start_times(self, start_date, end_date, freq='15min', start_time=' 00:00:00'):
+
+    def interpolate_market_start_times(self, start_date:str, end_date:str, freq:str='15min',
+                                       start_time:str=' 00:00:00'):
         """
         Overloaded method of OSWMarket:
         Interpolates 15 (by default) minute data between two date strings.
@@ -107,28 +114,47 @@ class OSWRTMarket(OSWMarket):
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
 
-    def clear_market(self, local_save=False):
+    def update_em_model(self):
+        """ Updates the Egret model before solving. Logic to use either previous RT or DA input """
+        if self.em.mdl_sol is not None:
+            self.update_model_from_previous(self.em.mdl_sol)
+        # If no solution (first pass) check for an initial day-ahead solution
+        elif self.da_mdl_sol is not None:
+            use_initial_p = True
+            fix_infeasible = False
+            # If using a pre-simulation, there may be infeasibilities in the first RT interval,
+            # so we require a fix
+            if self.pre_simulation_days is not None:
+                if self.pre_simulation_days > 0:
+                    fix_infeasible = True
+            self.update_model_from_previous(self.da_mdl_sol, use_initial_p=use_initial_p,
+                                            fix_infeasible=fix_infeasible)
+
+    def clear_market(self, local_save:bool=False, get_mdl:bool=True):
         """
         Callback method that runs EGRET and clears a market.
 
         This method must be overloaded in an instance of this class to
         implement the necessary operates to clear the market in question.
+
+         Args:
+            local_save (bool, optional): if True, will save a JSON with the results at each timestep
+            get_mdl (bool, optional): if True, will get Egret model from parser (otherwise uses existing mdl)
         """
         if self.current_start_time > max(self.start_times):
             logger.warning(f"RT Market: Current start time {self.current_start_time} is past horizon {max(self.start_times)}"
-                        "Market will not be cleared")
+                           "Market will not be cleared")
             return
         self.em.get_model(self.current_start_time)
-        if self.em.mdl_sol is not None:
-            self.update_model_from_previous(self.em.mdl_sol)
-        # If no solution (first pass) check for an initial day-ahead solution
-        elif self.da_mdl_sol is not None:
-            self.update_model_from_previous(self.da_mdl_sol, day_ahead_input=True)
+        self.update_em_model()
+        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         self.market_results = self.em.mdl_sol
-        self.update_commitment_hist()
+        # If using fixed commitment history we do not want to update this during real-time
+        # self.update_commitment_hist()
         if local_save:
-            self.em.save_model(f'{self.market_name}_results_{self.timestep}.json')
+            os.makedirs('data', exist_ok=True)
+            self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
 
         self.timestep += 1
         if self.timestep >= len(self.start_times):
@@ -138,11 +164,7 @@ class OSWRTMarket(OSWMarket):
         else:
             self.current_start_time = self.start_times[self.timestep]
 
-        # self.start_times = self.start_times.delete(0) # remove the first element
-        # if len(self.start_times) > 0:
-        #     self.current_start_time = self.start_times[0] # and then clock through to the next one
-
-    def join_da_commitment(self, da_commitment):
+    def join_da_commitment(self, da_commitment:dict):
         """
         Takes the day-ahead commitment schedule and interpolates onto the real-time intervals
         Commitment values are kept constant for each hour
@@ -161,10 +183,9 @@ class OSWRTMarket(OSWMarket):
             end += datetime.timedelta(hours=1)
         # Note inclusive='left' ensures we do not get 00:00:00 on the next day (assuming 24hr input)
         da_timestamps_interp = pd.to_datetime(mk_daterange(start=min(da_commitment["timestamps"]),
-                                            end=end, min_freq=min_freq, inclusive='left'))
-        # Loop through all generators (Maybe create a separate function to launch this loop?)
+                                                           end=end, min_freq=min_freq, inclusive='left'))
+        # Loop through all generators
         da_commitment_interp = {'timestamps': da_timestamps_interp}
-        idx = 1
         for etype, edict in da_commitment.items():
             if etype != 'timestamps':
                 for unit, u_dict in edict.items():
@@ -179,7 +200,7 @@ class OSWRTMarket(OSWMarket):
         # This will just add any new da_commitment values to the existing commitment history
         self.update_commitment_hist(keep='old', merge_dict=da_commitment_interp)
 
-    def fill_real_time(self, da_list: list):
+    def fill_real_time(self, da_list:list) -> list:
         """
         Takes a list of values from the (hourly) day-ahead market and copies into a longer
         list based on the real-time frequency in minutes. For example, if min_freq=15
@@ -194,14 +215,53 @@ class OSWRTMarket(OSWMarket):
         # Determine the number of times to copy values
         remainder = 60 % min_freq
         if remainder != 0:
-            print(f"Warning: min_freq {min_freq} is not a divisor of 60. Results may be inaccurate")
+            logger.warning(f"Parameter min_freq {min_freq} is not a divisor of 60. Results may be inaccurate")
         num_copy = int(60 / min_freq)
         # Use numpy arrays and repeat function for fast copying
         da_array = np.array(da_list)
         rt_array = da_array.repeat(num_copy)
         return list(rt_array)
 
-    def update_model_from_previous(self, mdl_com:ModelData, day_ahead_input=False):
+    def _fix_infeasible(self, gen:str):
+        """ Checks for conflicts with initial status and commitment and adjusts so solution is feasible in Egret
+            Note, these fixes ensure feasibility but may not be the ideal choices for all physical scenarios.
+        """
+        def _get_pmin(g_dict):
+            """ Gets pmin value, grabbing 1st value if a timeseries dict is used """
+            if isinstance(g_dict["p_min"],dict):
+                pmin = g_dict["p_min"]['values'][0]
+            else:
+                pmin = g_dict["p_min"]
+            g_dict['initial_p_output'] = pmin
+            return pmin
+
+        g_dict = self.em.mdl.data['elements']['generator'][gen]
+        # Don't change wind/solar
+        if g_dict["fuel"] in ['Solar', 'Wind']:
+            return
+        # If starting with power and committed off set to p_min
+        if g_dict['initial_p_output'] > 0 and g_dict['fixed_commitment']['values'][0] == 0:
+            pmin = _get_pmin(g_dict)
+            g_dict['initial_p_output'] = pmin
+            # Set status to minimum up time since it just turned off
+            minimum_up_time = 0
+            if 'minimum_up_time' in g_dict.keys():
+                minimum_up_time = g_dict['minimum_up_time']
+            elif 'min_up_time' in g_dict.keys():
+                minimum_up_time = g_dict['min_up_time']
+            g_dict['initial_status'] = max(1, minimum_up_time)
+        elif g_dict['initial_p_output'] == 0 and g_dict['fixed_commitment']['values'][0] == 1:
+            pmin = _get_pmin(g_dict)
+            # Set status to -minimum down time since it just turned on
+            minimum_down_time = 0
+            if 'minimum_down_time' in g_dict.keys():
+                minimum_down_time = g_dict['minimum_down_time']
+            elif 'min_down_time' in g_dict.keys():
+                minimum_down_time = g_dict['min_down_time']
+            g_dict['initial_status'] = -max(1, minimum_down_time)
+
+    def update_model_from_previous(self, mdl_com:ModelData, use_initial_p:bool=False, fix_infeasible:bool=False,
+                                   fixed_commit:bool=True):
         """
         Pull last setpoint data from mdl_sol timeseries and
         update the current self.mdl with generator values from solution.
@@ -215,30 +275,38 @@ class OSWRTMarket(OSWMarket):
             for g, g_dict in mdl_com.elements(element_type='generator'):
                 # Initial power is the last power cleared in the previous window
                 # If initializing from day-ahead initial power is same as day-ahead initial power
-                if day_ahead_input:
-                    self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = g_dict['initial_p_output']
+                if use_initial_p:
+                    self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(g_dict['initial_p_output'])
                 else:
-                    self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = g_dict['pg']['values'][time_window - 1]
+                    self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(g_dict['pg']['values'][time_window - 1])
                 # we should also update the q/reactive power, but this first test will be dc only
                 # self.mdl.data['elements']['generator'][g]['initial_q_output'] = g_dict['qg']['values'][self.configuration['time']['window'] - 1]
-
-                # Load the commitment history and find the index corresponding to the current time
-                commit_hist = self.commitment_hist['generator'][g]
-                if self.current_start_time in self.commitment_hist['timestamps']:
-                    t0idx = np.where(self.current_start_time == np.array(self.commitment_hist['timestamps']))[0][0]
-                else:
-                    t0idx = len(self.commitment_hist['timestamps'])
-                # Function to find initial status (number of hours the unit has been on or off)
-                self.em.mdl.data['elements']['generator'][g]['initial_status'] = (
-                    count_onoff(commit_hist, t0idx-1, min_freq=min_freq))
+                # Update initial status for this generator
+                commit_hist, t0idx = self.update_initial_status(g, min_freq, return_commit=True)
                 # It's possible for t0idx in the last interval to have no commitments available.
                 # If so, skip. Otherwise, pass the commitments for the appropriate window
                 if t0idx < len(commit_hist['commitment']['values']):
-                    # Setting 'commitment' (setting 'fixed_commitment' leads to infeasibilities)
                     commit_hist_window = commit_hist['commitment']['values'][t0idx:t0idx + time_window + lookahead]
-                    self.em.mdl.data['elements']['generator'][g]['commitment'] = {'data_type':'time_series',
-                                                                              'values': commit_hist_window}
-
+                    # If missing lookahead (possible at end of horizon) duplicate the last value
+                    if len(commit_hist_window) < time_window + lookahead:
+                        add_len = time_window + lookahead - len(commit_hist_window)
+                        if isinstance(commit_hist_window, list):
+                            commit_hist_window = commit_hist_window + [commit_hist_window[-1]]*add_len
+                        elif isinstance(commit_hist_window, np.ndarray):
+                            commit_hist_window = np.concatenate((commit_hist_window, np.ones(add_len)*commit_hist_window[-1]))
+                    # Standard behavior is to fix commitment, but we can send commitment without fixing if we want
+                    # a more flexible RT market.
+                    if fixed_commit:
+                        # Only fix the values in the window (Set all lookahead values to None)
+                        # commit_hist_window[time_window:] = [None for i in range(len(commit_hist_window[time_window:]))]
+                        self.em.mdl.data['elements']['generator'][g]['fixed_commitment'] = {'data_type':'time_series',
+                                                                                            'values': commit_hist_window}
+                        # Pass to check for scenarios that give infeasible results (only if taking DA input)
+                        if fix_infeasible:
+                            self._fix_infeasible(g)
+                    else:
+                        self.em.mdl.data['elements']['generator'][g]['commitment'] = {'data_type': 'time_series',
+                                                                                      'values': commit_hist_window}
         else:
             raise ValueError("no model currently loaded.")
     

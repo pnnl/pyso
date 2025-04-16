@@ -37,6 +37,8 @@ class EnergyMarket:
         self.configuration = copy.deepcopy(energymarket_defaults)
         if config is not None:
             merge_configs(self.configuration, config)
+        if "solver_options" not in self.configuration["solve_arguments"].keys():
+            self.configuration["solve_arguments"]["solver_options"] = None
         
         ### set up logger
         self.logger =Logger(**self.configuration["logging"])
@@ -92,8 +94,8 @@ class EnergyMarket:
         self.logger.info(f"Solving Model\n")
         self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
+                                        solver_options=self.configuration["solve_arguments"]["solver_options"],
                                         **self.configuration["solve_arguments"]["kwargs"])
-        
         pricing_model = self.configuration["simulation"]["price_model"]
         if  pricing_model is not None:
             self.logger.info(f"Solving pricing model\n")
@@ -107,7 +109,7 @@ class EnergyMarket:
         else:
             raise ValueError("No model currently loaded.")
         
-    def pricing_model(self, pricing_model:str):
+    def pricing_model(self, pricing_model:str, use_mdl_sol:bool=True):
         """Run a pricing model (with binaries relaxed) and extract locational prices
         and reserve prices.
         
@@ -118,8 +120,12 @@ class EnergyMarket:
 
         Args:
             pricing_model (str): pricing model, options are "lmp" or "achp"
+            use_mdl_sol (bool, optional): If True, uses mdl_sol, else uses mdl
         """
-        pricing_instance = self.mdl_sol.clone()
+        if use_mdl_sol:
+            pricing_instance = self.mdl_sol.clone()
+        else:
+            pricing_instance = self.mdl.clone()
         ## copy from Prescient/prescient/engine/egret/egret_plugin.py
         ## function solve_deterministic_day_ahead_pricing_problem
         if pricing_model == "lmp":
@@ -140,21 +146,23 @@ class EnergyMarket:
         ## solve relaxed problem to populate LMPs
         self.mdl_price : ModelData = solve_unit_commitment(pricing_instance, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
+                                        solver_options=self.configuration["solve_arguments"]["solver_options"],
                                         relaxed=True,
                                         **self.configuration["solve_arguments"]["kwargs"]) 
 
-        ## update prices in solution
-        for b, b_dict in self.mdl_price.elements(element_type="bus"):
-            self.mdl_sol.data["elements"]["bus"][b]["lmp"] = b_dict["lmp"]
+        if use_mdl_sol:
+            ## update prices in solution
+            for b, b_dict in self.mdl_price.elements(element_type="bus"):
+                self.mdl_sol.data["elements"]["bus"][b]["lmp"] = b_dict["lmp"]
 
-        for elem in ["area", "zone"]:
-            for a, a_dict in self.mdl_price.elements(element_type=elem):
-                for k in a_dict.keys():
-                    if "_price" in k:
-                        self.mdl_sol.data["elements"][elem][a][k] = a_dict[k]
-        for k, v in self.mdl_price.data["system"].items():
-            if "_price" in k:
-                self.mdl_sol.data["system"][k] = v
+            for elem in ["area", "zone"]:
+                for a, a_dict in self.mdl_price.elements(element_type=elem):
+                    for k in a_dict.keys():
+                        if "_price" in k:
+                            self.mdl_sol.data["elements"][elem][a][k] = a_dict[k]
+            for k, v in self.mdl_price.data["system"].items():
+                if "_price" in k:
+                    self.mdl_sol.data["system"][k] = v
         
 
 
