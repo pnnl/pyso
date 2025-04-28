@@ -436,9 +436,9 @@ class GVParse(DataProvider):
         """Add branches to Egret model"""
         
         branch = dict()
-        btab = h5fun.branchtab_with_bus_names(self.h5("/mdb/Branch"), self.h5("/mdb/Bus"))
-        for i in range(btab.shape[0]):
-            br = btab.iloc[i,:]
+        self.h5.add_branch_busnames()
+        for i in range(self.h5("/mdb/Branch").shape[0]):
+            br = self.h5("/mdb/Branch").iloc[i,:]
             if not self.include_branch(br.FromBus, br.ToBus):
                 ## not in subgraph
                 continue
