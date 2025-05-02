@@ -18,6 +18,7 @@ import numpy as np
 from transitions import Machine
 from .osw_market import OSWMarket
 from ..utils.timeutils import count_onoff, mk_daterange
+from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
 
 # from typing import TYPE_CHECKING
 # if TYPE_CHECKING:
@@ -107,7 +108,7 @@ class OSWRTMarket(OSWMarket):
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
 
-    def clear_market(self, local_save=False):
+    def clear_market(self, local_save=False, contingency_list=None):
         """
         Callback method that runs EGRET and clears a market.
 
@@ -124,6 +125,8 @@ class OSWRTMarket(OSWMarket):
         # If no solution (first pass) check for an initial day-ahead solution
         elif self.da_mdl_sol is not None:
             self.update_model_from_previous(self.da_mdl_sol, day_ahead_input=True)
+        # Modifications to model before solve, depending on use-case
+        self.apply_contingencies(contingency_list=contingency_list)
         self.em.solve_model()
         self.market_results = self.em.mdl_sol
         self.update_commitment_hist()
@@ -132,7 +135,7 @@ class OSWRTMarket(OSWMarket):
 
         self.timestep += 1
         if self.timestep >= len(self.start_times):
-            # Add a day (exact value doesn't matter, just need something past the horizon)
+            # Add an interval (exact value doesn't matter, just need something past the horizon)
             min_freq = self.em.configuration["min_freq"]
             self.current_start_time += datetime.timedelta(minutes=min_freq)
         else:

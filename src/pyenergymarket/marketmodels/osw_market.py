@@ -19,7 +19,7 @@ import copy
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import mk_daterange
-
+from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -226,7 +226,61 @@ class OSWMarket():
                     self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
         self.commitment_hist['timestamps'] = _commit_times_hist
 
-    def clear_market(self, local_save=False):
+    def apply_contingencies(self, contingency_list=None, scale_branch_list=['4202_4203_1', '4001_4204_1'],
+                            scale_ratio=1.5):
+        """ If including contingencies, turn off unused branches """
+        # Apply contingencies: mark specified branches out of service
+        if contingency_list:
+            branches = self.em.mdl.data['elements']['branch']
+            dc_branches = self.em.mdl.data['elements']['dc_branch']
+            for br in contingency_list:
+                if br in branches:
+                    branches[br]['in_service'] = False
+                    logger.info(f"Applied contingency: set {br}.in_service = False")
+                elif br in dc_branches:
+                    dc_branches[br]['in_service'] = False
+                    logger.info(f"Applied contingency: set {br}.in_service = False to dc_branch")
+                else:
+                    logger.warning(f"Contingency branch '{br}' not found in model")
+
+        # Scale rating parameters for specified branches by scale_ratio
+        if scale_branch_list and scale_ratio != 1.0:
+            branches = self.em.mdl.data['elements']['branch']
+            # Parameters that should be scaled
+            parameters = [
+                'rating_long_term',
+                'rating_short_term',
+                'winter_a',
+                'winter_c',
+                'summer_a',
+                'summer_c'
+            ]
+            for br in scale_branch_list:
+                branch_data = branches.get(br)
+                if branch_data:
+                    for param in parameters:
+                        if param in branch_data:
+                            original = branch_data[param]
+                            # Multiply the original value by the given ratio
+                            branch_data[param] = original * scale_ratio
+                            logger.info(
+                                f"Scaled {param} for branch '{br}': "
+                                f"{original} -> {branch_data[param]}"
+                            )
+                        else:
+                            # Warn if a parameter is missing
+                            logger.warning(
+                                f"Parameter '{param}' not found in branch '{br}'"
+                            )
+                else:
+                    # Warn if the branch isn't found
+                    logger.warning(
+                        f"Branch '{br}' not found; cannot scale parameters"
+                    )
+        # Egret script to add a generator at each node at load curtailment cost (ensures feasibility)
+        add_load_curtail(self.em.mdl)
+
+    def clear_market(self, local_save=False, contingency_list=None):
         """
         Callback method that runs EGRET and clears a market.
 
@@ -245,6 +299,8 @@ class OSWMarket():
                         "Market will not be cleared")
             return
         self.em.get_model(self.current_start_time)
+        # Modifications to model before solve, depending on use-case
+        self.apply_contingencies(contingency_list=contingency_list)
         self.em.solve_model()
         if local_save:
             self.em.save_model(f'{self.market_name}_results_{self.timestep}.json')
