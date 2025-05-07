@@ -128,6 +128,8 @@ class OSWRTMarket(OSWMarket):
         # Modifications to model before solve, depending on use-case
         self.apply_contingencies(contingency_list=contingency_list)
         self.em.solve_model()
+        # Put back in_service=False branches (these are removed by default in Egret solution)
+        self.restore_lines()
         self.market_results = self.em.mdl_sol
         self.update_commitment_hist()
         if local_save:

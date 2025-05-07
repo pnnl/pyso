@@ -280,6 +280,34 @@ class OSWMarket():
         # Egret script to add a generator at each node at load curtailment cost (ensures feasibility)
         add_load_curtail(self.em.mdl)
 
+    def restore_lines(self):
+        """ Egret removes lines with in_service set to False. We will add them back in here,
+            setting the pf (power flow) values to zero
+        """
+        line_types = ['branch', 'dc_branch']
+        for line_type in line_types:
+            # Loop through the input model branches
+            for branch, branch_dict in self.em.mdl.data['elements'][line_type].items():
+                # Look for out-of-service lines
+                if not branch_dict['in_service']:
+                    mdl_sol_dict = self.em.mdl_sol.data['elements'][line_type]
+                    # Double-check that the branch isn't already in the model solution
+                    if branch in mdl_sol_dict.keys():
+                        continue
+                    # Add a copy of the model dict with this branch
+                    mdl_sol_dict[branch] = copy.deepcopy(branch_dict)
+                    # Set power flow == 0
+                    empty_list = [0.0 for i in range(len(self.em.mdl.data['system']['time_keys']))]
+                    if 'pf' in mdl_sol_dict[branch].keys():
+                        mdl_sol_dict[branch]['pf']['values'] = empty_list
+                    else:
+                        mdl_sol_dict[branch]['pf'] = {'data_type': 'time_series',
+                                                      'values': empty_list}
+                    # Also add no pf_violation
+                    mdl_sol_dict[branch]['pf_violation'] = {'data_type': 'time_series',
+                                                            'values': empty_list}
+
+
     def clear_market(self, local_save=False, contingency_list=None):
         """
         Callback method that runs EGRET and clears a market.
@@ -302,6 +330,8 @@ class OSWMarket():
         # Modifications to model before solve, depending on use-case
         self.apply_contingencies(contingency_list=contingency_list)
         self.em.solve_model()
+        # Put back in_service=False branches (these are removed by default in Egret solution)
+        self.restore_lines()
         if local_save:
             self.em.save_model(f'{self.market_name}_results_{self.timestep}.json')
         self.market_results = self.em.mdl_sol
