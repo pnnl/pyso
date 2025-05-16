@@ -3,3 +3,6 @@ __pycache__/
 dependencies.log
 .idea/*
 *.DS_Store
+
+# put stuff that shouldn't be tracked in a scratch folder
+*/scratch/*
