@@ -104,6 +104,7 @@ class OSWDAMarket(OSWMarket):
         update the current self.mdl with generator values from previous DA market
         """
         if (self.em.mdl is not None) and (mdl_com is not None):
+            # Update generator starting output
             for g, g_dict in mdl_com.elements(element_type='generator'):
                 # If we have a solution from last market, we load the power from the last time into the initial power
                 if self.em.mdl_sol is not None:
@@ -118,5 +119,8 @@ class OSWDAMarket(OSWMarket):
                     self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = prev_ending_p
                     # Update initial status for this generator
                     self.update_initial_status(g, 60)
+            # Update storage unit initial/ending soc
+            for s, s_dict in mdl_com.elements(element_type='storage'):
+                self.update_state_of_charge(s, market_type='day_ahead')
         else:
             raise ValueError("no model currently loaded.")

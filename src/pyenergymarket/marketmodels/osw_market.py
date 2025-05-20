@@ -20,7 +20,7 @@ import copy
 from numba.cuda.cudaimpl import ptx_max_f4
 from transitions import Machine
 from ..engine import EnergyMarket
-from ..utils.timeutils import count_onoff, mk_daterange
+from ..utils.timeutils import count_onoff, mk_daterange, get_value_at_time
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -92,6 +92,7 @@ class OSWMarket():
         self.state_machine.on_enter_clearing("clear_market")
         self.validate_market_timing(self.market_timing)
         self.commitment_hist = None
+        self.storage_soc = None
         self.pre_simulation_days = None
 
         # This translates all the kwarg key-value pairs into class attributes
@@ -148,6 +149,27 @@ class OSWMarket():
                                                  {'data_type': 'time_series',
                                                   'values': []}}
         return commitment_dict
+
+    # @staticmethod
+    # def _prep_storage_soc(storage_dict, etype, unit):
+    #     """
+    #     Creates an empty dictionary structure for the commitment history for a given element and generator/unit
+    #
+    #     Args:
+    #         etype (str): Type of element ('generator', 'storage', etc.)
+    #         unit (str): Name of unit (typical use case is Egret generator name)
+    #     """
+    #     if etype not in commitment_dict.keys():
+    #         commitment_dict[etype] = {unit: {'initial_status': None,
+    #                                          'commitment':
+    #                                              {'data_type': 'time_series',
+    #                                               'values': []}}}
+    #     if unit not in commitment_dict[etype].keys():
+    #         commitment_dict[etype][unit] = {'initial_status': None,
+    #                                         'commitment':
+    #                                             {'data_type': 'time_series',
+    #                                              'values': []}}
+    #     return commitment_dict
 
     def update_commitment_hist(self, keep='new', merge_dict=None):
         """
@@ -219,6 +241,41 @@ class OSWMarket():
                     self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
         self.commitment_hist['timestamps'] = _commit_times_hist
 
+    def update_storage_soc(self):
+        """
+        Saves the storage state-of-charge at the corresponding times. This could possible be merged into a
+        common function with update_commitment_hist that accepts element type and keys, but that may be hard
+        to get correct for general cases.
+        """
+        # If no storage units are in the model, don't continue
+        if 'storage' not in self.em.mdl_sol.data['elements'].keys():
+            return
+        # Time keys - we pad the last interval since Egret gives soc values at END of interval while keys are START
+        time_keys = pd.to_datetime(self.em.mdl_sol.data['system']['time_keys'])
+        time_delta_end_minutes = int((time_keys[-1] - time_keys[-2]).total_seconds() / 60.0)
+        time_keys = time_keys.append(pd.to_datetime([time_keys[-1] + dt.timedelta(minutes=time_delta_end_minutes)]))
+        # Create dict if needed with the timestamps as a top level key (shared by all storage units)
+        use_soc_init = False
+        if self.storage_soc is None:
+            self.storage_soc = {'timestamps': time_keys, 'storage': {}}
+            # The first time through we use soc init (all other times it is same as last of previous)
+            use_soc_init = True
+        else:
+            # Don't copy the first interval (it was added last time by the end padding)
+            self.storage_soc['timestamps'].append(time_keys[1:])
+        # loop through storage units
+        for storage, storage_dict in self.em.mdl_sol.data['elements']['storage'].items():
+            soc_values = storage_dict['state_of_charge']['values']
+            if use_soc_init:
+                soc_init = storage_dict['initial_state_of_charge']
+                soc_values = np.append(np.array([soc_init]), soc_values)
+            # If previous values are in the storage dictionary, we will append new values to the end
+            if storage in self.storage_soc['storage'].keys():
+                prev_soc_values = self.storage_soc['storage'][storage]['state_of_charge']['values']
+                soc_values = np.append(prev_soc_values, soc_values)
+            self.storage_soc['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
+                                                                        'values': soc_values}}
+
     def valid_time_horizon(self):
         """ Returns T if current start time is within the horizon, otherwise F """
         if self.current_start_time > max(self.start_times):
@@ -239,7 +296,7 @@ class OSWMarket():
         # TODO: load self.em.mdl_price results into a format that can be sent to each generator
         # we want to send the price corresponding to the generator bus(es).
 
-    def clear_market(self, local_save=False, get_mdl=True):
+    def clear_market(self, local_save=True, get_mdl=True):
         """
         Callback method that runs EGRET and clears a market.
 
@@ -256,11 +313,13 @@ class OSWMarket():
 
         if get_mdl:
             self.em.get_model(self.current_start_time)
+        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         if local_save:
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
         self.market_results = self.em.mdl_sol
         self.update_commitment_hist()
+        self.update_storage_soc() # Note this is intended for DA only right now - RT uses DA values
         self.timestep += 1
         if self.timestep >= len(self.start_times):
             # Add a day (exact value doesn't matter, just need something past the horizon)
@@ -331,7 +390,7 @@ class OSWMarket():
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
 
-    def update_initial_status(self, gen:str, min_freq:int, return_commit=False):
+    def update_initial_status(self, gen:str, min_freq:int, return_commit:bool=False):
         """ Updates the initial status of the egret ModelData object for the given generator """
         # Load the commitment history and find the index corresponding to the current time
         commit_hist = self.commitment_hist['generator'][gen]
@@ -353,4 +412,50 @@ class OSWMarket():
         # Option to return commitment history and starting commitment index (used in RT market)
         if return_commit:
             return commit_hist, t0idx
-    
+
+    def update_state_of_charge(self, storage, market_type='day_ahead'):
+        """
+        Updates the state of charge in the egret ModelData object for the given storage
+        Two situations:
+            market_type = 'day_ahead' populates init_state_of_charge from the end of the previous solution
+                           and sends end_state_of_charge = init_state_of_charge
+            market_type = 'real_time' populates initial state of charge based on self.storage_soc (saved from DA)
+                          at the current time and end_state_of_charge at the end of the window + lookahead
+        """
+        if market_type == 'day_ahead':
+            # If no solution exists (first time) just use whatever is already in the input model
+            if self.em.mdl_sol is None:
+                return
+            # Use soc and end of window (these are the values saved, excluding lookahead)
+            window = self.em.configuration["time"]["window"]
+            self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] \
+                = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window-1]
+            self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] \
+                = self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge']
+        elif market_type == 'real_time':
+            # If no saved storage, we have no reference to use
+            if self.storage_soc is None:
+                return
+            # Initial soc is the self.storage_soc at current time (which may require interpolation)
+            # We restrict to the last 48 intervals (assumes soc is stored hourly, which is true at time of creation)
+            limit = 48
+            da_soc_series = self.storage_soc['storage'][storage]['state_of_charge']['values'][-limit:]
+            da_time_keys = self.storage_soc['timestamps'][-limit:]
+            lookup_init_soc = get_value_at_time(da_soc_series, da_time_keys, self.current_start_time)
+            self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] = lookup_init_soc
+            # For end soc we use the same da series and time keys, but find end interval time
+            periods = self.em.configuration["time"]["window"] + self.em.configuration["time"]["lookahead"]
+            min_freq = self.em.configuration["time"]["min_freq"]
+            daterange = mk_daterange(self.current_start_time, min_freq=min_freq, periods=periods)
+            # While loop ensures that we don't extend past the horizon
+            end_soc_found = False
+            lookback, limit = 1, len(daterange)
+            lookup_end_soc = None
+            while not end_soc_found and lookback < limit:
+                try:
+                    lookup_end_soc = get_value_at_time(da_soc_series, da_time_keys, daterange[-1])
+                    end_soc_found = True
+                except ValueError:
+                    lookback += 1
+            if lookup_end_soc is not None:
+                self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] = lookup_end_soc
