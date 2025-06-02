@@ -22,9 +22,11 @@ def get_value_at_time(time_series:Union[list, np.ndarray], time_keys:Union[list,
           time_keys (Union[list, np.ndarray, pd.date_range]): A list or array of times
           target_time (Union[str, pd.Timestamp]): The time at which to return a value
           interp (str, optional): Interpolation method used for the time series Defaults to 'linear'.
-                                  # Future option: - choose from pd.Series.interpolate options.
-          wrap (str, optional): If extrapolating before/after time_keys, selects how to extend time_series
-          min_freq (
+                                  Choose from pd.Series.interpolate options or
+                                  'beginning' -> Fills in the entire interval with the beginning value (step function)
+          wrap (Union[str,None]): If extrapolating before/after time_keys, selects how to extend time_series
+          min_freq (Union[float,None]): Option to enter the frequency in minutes used for interpolation.
+                                        If None, this will be inferred from target_time.
           reference_value (Union[float,None]): If extrapolating before/after time_keys,
                                                sets reference value (overrides 'wrap' keyword)
 
@@ -44,7 +46,7 @@ def get_value_at_time(time_series:Union[list, np.ndarray], time_keys:Union[list,
     # Get times into a consistent format
     time_keys = pd.to_datetime(time_keys)
     target_time = pd.to_datetime(target_time)
-    # If we are already at one of the times then return the value
+    # If we are already at one of the times then return the value - no need to interpolate
     if target_time in time_keys:
         target_index = np.where(time_keys == target_time)[0][0]
         return time_series[target_index]
@@ -53,8 +55,10 @@ def get_value_at_time(time_series:Union[list, np.ndarray], time_keys:Union[list,
 
     # Extend the time_series and values by +/- 1 interval (cast as pd.DatetimeIndex to allow use of .append() method)
     # We allow +/- 1 interval - if doing this we will extend the arrays
-    intvl_st = pd.to_datetime([time_keys[1]-time_keys[0]])
-    intvl_end = pd.to_datetime([time_keys[-1]-time_keys[-2]])
+    t_delta_st = time_keys[1]-time_keys[0]
+    intvl_st = pd.to_datetime([time_keys[0]-t_delta_st]) # 1 interval before start
+    t_delta_end = time_keys[-1]-time_keys[-2] # t_delta_end is equal to t_delta_st for uniform intervals
+    intvl_end = pd.to_datetime([time_keys[-1] + t_delta_end]) # 1 interval after end
     if reference_value is not None:
         v1, v2 = reference_value, reference_value
     else:

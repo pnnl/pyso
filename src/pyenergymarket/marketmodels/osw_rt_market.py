@@ -85,7 +85,7 @@ class OSWRTMarket(OSWMarket):
                 "market_interval": 900
             }
             # starts at midnight
-        self.start_times = self.interpolate_market_start_times(start_date, end_date)
+        self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=f'{min_freq}min')
         # Space for day-ahead solution (used at initialization)
         self.da_mdl_sol = None
 
@@ -151,7 +151,7 @@ class OSWRTMarket(OSWMarket):
         self.em.solve_model()
         self.market_results = self.em.mdl_sol
         # If using fixed commitment history we do not want to update this during real-time
-        # self.update_commitment_hist()
+        # self.store_commitment_hist()
         if local_save:
             os.makedirs('data', exist_ok=True)
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
@@ -198,7 +198,7 @@ class OSWRTMarket(OSWMarket):
                     da_commitment_interp[etype][unit]['initial_status'] = u_dict['initial_status']
         # Call method from the base class. Keep old ensures RT values aren't overwritten.
         # This will just add any new da_commitment values to the existing commitment history
-        self.update_commitment_hist(keep='old', merge_dict=da_commitment_interp)
+        self.store_commitment_hist(keep='old', merge_dict=da_commitment_interp)
 
     def fill_real_time(self, da_list:list) -> list:
         """
