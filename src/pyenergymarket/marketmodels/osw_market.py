@@ -19,7 +19,7 @@ import copy
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import mk_daterange
-from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
+# from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -226,8 +226,8 @@ class OSWMarket():
                     self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
         self.commitment_hist['timestamps'] = _commit_times_hist
 
-    def apply_contingencies(self, contingency_list=None, scale_branch_list=['4202_4203_1', '4001_4204_1'],
-                            scale_ratio=1.5):
+    def apply_contingencies(self, contingency_list=None, scale_branch_list=['4202_4203_1'],
+                            scale_ratio=1.2):
         """ If including contingencies, turn off unused branches """
         # Apply contingencies: mark specified branches out of service
         if contingency_list:
@@ -278,7 +278,7 @@ class OSWMarket():
                         f"Branch '{br}' not found; cannot scale parameters"
                     )
         # Egret script to add a generator at each node at load curtailment cost (ensures feasibility)
-        add_load_curtail(self.em.mdl)
+        # add_load_curtail(self.em.mdl)
 
     def restore_lines(self):
         """ Egret removes lines with in_service set to False. We will add them back in here,

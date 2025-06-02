@@ -18,7 +18,7 @@ import numpy as np
 from transitions import Machine
 from .osw_market import OSWMarket
 from ..utils.timeutils import count_onoff, mk_daterange
-from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
+# from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
 
 # from typing import TYPE_CHECKING
 # if TYPE_CHECKING:
