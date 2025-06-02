@@ -185,16 +185,16 @@ class GVParse(DataProvider):
         """Get date range based on the values in self.defaults["time"]
         floors the result to hourly resolution since this is what is in the GV database
         """
-        
+
         if self._daterange is None:
             datefrom = self.defaults["time"]["datefrom"]
             dateto   = self.defaults["time"]["dateto"]
             min_freq = self.defaults["time"]["min_freq"]
             periods  = self.defaults["time"]["periods"]
             self._actual_res_daterange = mk_daterange(start = datefrom, end=dateto, min_freq=min_freq, periods=periods)
-            self._daterange = self._actual_res_daterange.floor('h').union(self._actual_res_daterange.ceil('h')).drop_duplicates()#self._actual_res_daterange.floor("h")
             # self._daterange = h5fun.mk_daterange(dfts=self.h5("/area/LOAD"), datefrom=datefrom, dateto=dateto)
-        
+            self._daterange = self._actual_res_daterange.floor('h').union(self._actual_res_daterange.ceil('h')).drop_duplicates()#self._actual_res_daterange.floor("h")
+
         return self._daterange
     
     @property
@@ -450,7 +450,9 @@ class GVParse(DataProvider):
                 tmp = self._collect_dcline_brtab(br)
                 if "dc_branch" not in self.mdl.data["elements"]:
                     self.mdl.data["elements"]["dc_branch"] = dict()
-                self.mdl.data["elements"]["dc_branch"][self.mk_br_str(br, self.mdl.data["elements"]["dc_branch"].keys())] = tmp
+                # Checking the keys ends up creating duplicate DC branches. Populating dc branches without the check
+                # self.mdl.data["elements"]["dc_branch"][self.mk_br_str(br, self.mdl.data["elements"]["dc_branch"].keys())] = tmp
+                self.mdl.data["elements"]["dc_branch"][self.mk_br_str(br)] = tmp
                 continue # don't add to branch set!!!
             elif (br.PhaseShiftLB != 0) and (br.PhaseShiftUB != 0):
                 ## PAR
@@ -756,7 +758,7 @@ class GVParse(DataProvider):
                 "distgen": [],
                 "p_load": {
                     "data_type": "time_series",
-                    "values": ncl.loc[i, "PL"]*np.ones(len(self.daterange))
+                    "values": ncl.loc[i, "PL"]*np.ones(len(self.actual_res_daterange))
                 }
             }
             if self.get_reactive:
@@ -764,7 +766,7 @@ class GVParse(DataProvider):
                 load[k]["qp"] = 0 if (ncl.loc[i,"PL"] == 0) else ncl.loc[i, "QL"]/ncl.loc[i,"PL"] # store for consistency
                 load[k]["q_load"] = {
                     "data_type": "time_series",
-                    "values": ncl.loc[i, "QL"]*np.ones(len(self.daterange))
+                    "values": ncl.loc[i, "QL"]*np.ones(len(self.actual_res_daterange))
                 }
 
         ### add to modele in
@@ -812,7 +814,7 @@ class GVParse(DataProvider):
         #     tmp = {"data_type": "time_series", "values": []}
         tmp = []
         ## collect data for each time interval
-        for t in self.daterange:
+        for t in self.actual_res_daterange: # Need to use actual daterange to ensure correct RT implementation
             _scale_factor = scale_factor # copy for this time instant of any additional/external scale factor
             year = t.year
             month = t.month
@@ -826,7 +828,7 @@ class GVParse(DataProvider):
         unique_vals = np.unique(tmp)
         if len(unique_vals) == 1:
             return unique_vals[0]
-        
+
         if typ == "time_series":
             return {"data_type": "time_series", "values": tmp}
         elif typ == "avg":
