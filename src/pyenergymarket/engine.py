@@ -37,8 +37,6 @@ class EnergyMarket:
         self.configuration = copy.deepcopy(energymarket_defaults)
         if config is not None:
             merge_configs(self.configuration, config)
-        if "solver_options" not in self.configuration["solve_arguments"].keys():
-            self.configuration["solve_arguments"]["solver_options"] = None
         
         ### set up logger
         self.logger =Logger(**self.configuration["logging"])
@@ -94,7 +92,6 @@ class EnergyMarket:
         self.logger.info(f"Solving Model\n")
         self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
-                                        solver_options=self.configuration["solve_arguments"]["solver_options"],
                                         **self.configuration["solve_arguments"]["kwargs"])
         pricing_model = self.configuration["simulation"]["price_model"]
         if  pricing_model is not None:
@@ -142,7 +139,6 @@ class EnergyMarket:
         ## solve relaxed problem to populate LMPs
         self.mdl_price : ModelData = solve_unit_commitment(pricing_instance, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
-                                        solver_options=self.configuration["solve_arguments"]["solver_options"],
                                         relaxed=True,
                                         **self.configuration["solve_arguments"]["kwargs"]) 
 
@@ -158,7 +154,7 @@ class EnergyMarket:
         for k, v in self.mdl_price.data["system"].items():
             if "_price" in k:
                 self.mdl_sol.data["system"][k] = v
-        
+
     def storage2load(self, mdl:ModelData):
         """Convert all storage to pairs of loads to fix it for pricing evaluation
 
