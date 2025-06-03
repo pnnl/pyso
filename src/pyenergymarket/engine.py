@@ -109,7 +109,7 @@ class EnergyMarket:
         else:
             raise ValueError("No model currently loaded.")
         
-    def pricing_model(self, pricing_model:str, use_mdl_sol:bool=True):
+    def pricing_model(self, pricing_model:str):
         """Run a pricing model (with binaries relaxed) and extract locational prices
         and reserve prices.
         
@@ -120,12 +120,8 @@ class EnergyMarket:
 
         Args:
             pricing_model (str): pricing model, options are "lmp" or "achp"
-            use_mdl_sol (bool, optional): If True, uses mdl_sol, else uses mdl
         """
-        if use_mdl_sol:
-            pricing_instance = self.mdl_sol.clone()
-        else:
-            pricing_instance = self.mdl.clone()
+        pricing_instance = self.mdl_sol.clone()
         ## copy from Prescient/prescient/engine/egret/egret_plugin.py
         ## function solve_deterministic_day_ahead_pricing_problem
         if pricing_model == "lmp":
@@ -150,22 +146,19 @@ class EnergyMarket:
                                         relaxed=True,
                                         **self.configuration["solve_arguments"]["kwargs"]) 
 
-        if use_mdl_sol:
-            ## update prices in solution
-            for b, b_dict in self.mdl_price.elements(element_type="bus"):
-                self.mdl_sol.data["elements"]["bus"][b]["lmp"] = b_dict["lmp"]
+        ## update prices in solution
+        for b, b_dict in self.mdl_price.elements(element_type="bus"):
+            self.mdl_sol.data["elements"]["bus"][b]["lmp"] = b_dict["lmp"]
 
-            for elem in ["area", "zone"]:
-                for a, a_dict in self.mdl_price.elements(element_type=elem):
-                    for k in a_dict.keys():
-                        if "_price" in k:
-                            self.mdl_sol.data["elements"][elem][a][k] = a_dict[k]
-            for k, v in self.mdl_price.data["system"].items():
-                if "_price" in k:
-                    self.mdl_sol.data["system"][k] = v
+        for elem in ["area", "zone"]:
+            for a, a_dict in self.mdl_price.elements(element_type=elem):
+                for k in a_dict.keys():
+                    if "_price" in k:
+                        self.mdl_sol.data["elements"][elem][a][k] = a_dict[k]
+        for k, v in self.mdl_price.data["system"].items():
+            if "_price" in k:
+                self.mdl_sol.data["system"][k] = v
         
-
-
     def storage2load(self, mdl:ModelData):
         """Convert all storage to pairs of loads to fix it for pricing evaluation
 
