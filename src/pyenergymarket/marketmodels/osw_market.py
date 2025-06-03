@@ -229,16 +229,6 @@ class OSWMarket():
             return False
         return True
 
-    def get_price_forecast(self):
-        """ Runs a pricing instance with binaries relaxed to get price forecasts for market participants """
-        if not self.valid_time_horizon():
-            return
-        # Get
-        self.em.get_model(self.current_start_time)
-        self.em.pricing_model("achp", use_mdl_sol=False)
-        # TODO: load self.em.mdl_price results into a format that can be sent to each generator
-        # we want to send the price corresponding to the generator bus(es).
-
     def clear_market(self, local_save=False, get_mdl=True):
         """
         Callback method that runs EGRET and clears a market.
