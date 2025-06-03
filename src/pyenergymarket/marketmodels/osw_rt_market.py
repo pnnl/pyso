@@ -148,13 +148,12 @@ class OSWRTMarket(OSWMarket):
                            "Market will not be cleared")
             return
         self.em.get_model(self.current_start_time)
+        # If no solution (first pass) check for an initial day-ahead solution
         if self.em.mdl_sol is not None:
             self.update_model_from_previous(self.em.mdl_sol)
-        # If no solution (first pass) check for an initial day-ahead solution
-        elif self.da_mdl_sol is not None:
-            self.update_model_from_previous(self.da_mdl_sol, day_ahead_input=True)
         # Modifications to model before solve, depending on use-case
         self.update_em_model(contingency_list=contingency_list)
+        # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
