@@ -229,7 +229,7 @@ class OSWMarket():
             return False
         return True
 
-    def clear_market(self, local_save=False, get_mdl=True):
+    def clear_market(self, local_save=True):
         """
         Callback method that runs EGRET and clears a market.
 
@@ -238,14 +238,12 @@ class OSWMarket():
 
         Args:
             local_save (bool, optional): if True, will save a JSON with the results at each timestep
-            get_mdl (bool, optional): if True, will get Egret model from parser (otherwise uses existing mdl)
         """
         # Don't run market if this start time exceeds the start time list
         if not self.valid_time_horizon():
             return
 
-        if get_mdl:
-            self.em.get_model(self.current_start_time)
+        self.em.get_model(self.current_start_time)
         self.em.solve_model()
         if local_save:
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')

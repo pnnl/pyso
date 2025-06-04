@@ -80,19 +80,3 @@ class OSWDAMarket(OSWMarket):
                 "initial_state": "idle",
                 "market_interval": 86400
             }
-
-    def clear_market(self, local_save:bool=False, get_mdl:bool=True):
-        """
-        Overloaded method of OSWMarket
-
-        Grab all the bids and run the DA UC optimization and then return the results
-
-        market_results is an attribute of the OSWMarket class
-        """
-        # Update generator starting status based on previous solution, when available
-        # If doing so, do not, create a new model when calling the parent class method
-        if self.em.mdl_sol is not None:
-            self.em.get_model(self.current_start_time)
-            get_mdl = False
-        # Call osw_market.py clear market. If model was loaded and updated, do not get the model again
-        super().clear_market(local_save=local_save, get_mdl=get_mdl)

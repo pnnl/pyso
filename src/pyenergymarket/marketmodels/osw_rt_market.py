@@ -88,6 +88,7 @@ class OSWRTMarket(OSWMarket):
         self.start_times = self.interpolate_market_start_times(start_date, end_date)
         # Space for day-ahead solution (used at initialization)
         self.da_mdl_sol = None
+        self.fixed_commitment = True # Option to use a fixed or flexible commitment
 
     # def collect_bids(self, gen_commitment):
     #     """
@@ -129,7 +130,7 @@ class OSWRTMarket(OSWMarket):
                     fix_infeasible = True
         self.update_model_commitment(fix_infeasible=fix_infeasible)
 
-    def clear_market(self, local_save:bool=False, get_mdl:bool=True):
+    def clear_market(self, local_save:bool=True):
         """
         Callback method that runs EGRET and clears a market.
 
@@ -138,7 +139,6 @@ class OSWRTMarket(OSWMarket):
 
          Args:
             local_save (bool, optional): if True, will save a JSON with the results at each timestep
-            get_mdl (bool, optional): if True, will get Egret model from parser (otherwise uses existing mdl)
         """
         if self.current_start_time > max(self.start_times):
             logger.warning(f"RT Market: Current start time {self.current_start_time} is past horizon {max(self.start_times)}"
@@ -146,15 +146,16 @@ class OSWRTMarket(OSWMarket):
             return
         # For first RT market, we will load starting values from the first DA market.
         rt_from_da = False
-        if self.mdl_sol is None:
+        if self.em.mdl_sol is None:
             rt_from_da = True
         self.em.get_model(self.current_start_time, rt_from_da=rt_from_da)
         self.update_em_model()
-        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
+        # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         self.market_results = self.em.mdl_sol
         # If using fixed commitment history we do not want to update this during real-time
-        # self.update_commitment_hist()
+        if not self.fixed_commitment:
+            self.update_commitment_hist()
         if local_save:
             os.makedirs('data', exist_ok=True)
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
@@ -263,15 +264,13 @@ class OSWRTMarket(OSWMarket):
                 minimum_down_time = g_dict['min_down_time']
             g_dict['initial_status'] = -max(1, minimum_down_time)
 
-    def update_model_commitment(self, fix_infeasible:bool=False, fixed_commit:bool=True):
+    def update_model_commitment(self, fix_infeasible:bool=False):
         """
         Pull last setpoint data from mdl_sol timeseries and
         update the current self.mdl with generator values from solution.
 
         Args:
             fix_infeasible (bool, optional): if True, fix possible infeasible states in self.em.mdl
-            fixed_commit (bool, optional): if True, fix commitments to DA. If false, commitments are set to day-ahead
-                                           values, but not fixed (so they may be optimized by Egret).
         """
         # Windows
         time_window = self.em.configuration['time']['window']
@@ -301,7 +300,7 @@ class OSWRTMarket(OSWMarket):
                             commit_hist_window = np.concatenate((commit_hist_window, np.ones(add_len)*commit_hist_window[-1]))
                     # Standard behavior is to fix commitment, but we can send commitment without fixing if we want
                     # a more flexible RT market.
-                    if fixed_commit:
+                    if self.fixed_commitment:
                         # Only fix the values in the window (Set all lookahead values to None)
                         # commit_hist_window[time_window:] = [None for i in range(len(commit_hist_window[time_window:]))]
                         g_dict['fixed_commitment'] = {'data_type':'time_series', 'values': commit_hist_window}
