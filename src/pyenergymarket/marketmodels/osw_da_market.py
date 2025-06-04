@@ -93,30 +93,6 @@ class OSWDAMarket(OSWMarket):
         # If doing so, do not, create a new model when calling the parent class method
         if self.em.mdl_sol is not None:
             self.em.get_model(self.current_start_time)
-            self.update_model_from_previous(self.em.mdl_sol)
             get_mdl = False
         # Call osw_market.py clear market. If model was loaded and updated, do not get the model again
         super().clear_market(local_save=local_save, get_mdl=get_mdl)
-
-    def update_model_from_previous(self, mdl_com:ModelData):
-        """
-        Pull last setpoint data from mdl_sol timeseries and
-        update the current self.mdl with generator values from previous DA market
-        """
-        if (self.em.mdl is not None) and (mdl_com is not None):
-            for g, g_dict in mdl_com.elements(element_type='generator'):
-                # If we have a solution from last market, we load the power from the last time into the initial power
-                if self.em.mdl_sol is not None:
-                    # Get hour 23 value (if there is a lookahead, this isn't the last value)
-                    if self.current_start_time in self.em.mdl_sol.data["system"]["time_keys"]:
-                        tidx = np.where(self.current_start_time == np.array(self.em.mdl_sol.data["system"]["time_keys"]))[0][0]
-                        tidx -= 1 # tidx above gives the first hour of this day, we want the last hour of previous day
-                    # If not, use the last available time
-                    else:
-                        tidx = -1
-                    prev_ending_p = self.em.mdl_sol.data["elements"]["generator"][g]["pg"]["values"][tidx]
-                    self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = prev_ending_p
-                    # Update initial status for this generator
-                    self.update_initial_status(g, 60)
-        else:
-            raise ValueError("no model currently loaded.")

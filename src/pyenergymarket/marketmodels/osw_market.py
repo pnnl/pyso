@@ -320,27 +320,4 @@ class OSWMarket():
         # Generate hourly datetime index
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
-
-    def update_initial_status(self, gen:str, min_freq:int, return_commit=False):
-        """ Updates the initial status of the egret ModelData object for the given generator """
-        # Load the commitment history and find the index corresponding to the current time
-        commit_hist = self.commitment_hist['generator'][gen]
-        if self.current_start_time in self.commitment_hist['timestamps']:
-            t0idx = np.where(self.current_start_time == np.array(self.commitment_hist['timestamps']))[0][0]
-        else:
-            t0idx = len(self.commitment_hist['timestamps'])
-        # If we are at the first point, we just use the 'initial_status' value for that generator
-        if t0idx == 0:
-            # If using day-ahead, update the initial status to ensure the units can meet commitments
-            gen_dict = self.em.mdl.data['elements']['generator'][gen]
-            initial_status = gen_dict['initial_status']
-            self.em.mdl.data['elements']['generator'][gen]['initial_status'] = initial_status
-        # Otherwise we look at all the intervals before t0idx (excluding current interval) to get initial_status
-        else:
-            # Function to find initial status (number of hours the unit has been on or off)
-            self.em.mdl.data['elements']['generator'][gen]['initial_status'] = (
-                count_onoff(commit_hist, t0idx - 1, min_freq=min_freq))
-        # Option to return commitment history and starting commitment index (used in RT market)
-        if return_commit:
-            return commit_hist, t0idx
     

@@ -2,7 +2,7 @@
 EnergyMarket class is here.
 """
 from .utils.ioutils import merge_configs, Logger
-from .utils.timeutils import mk_daterange
+from .utils.timeutils import mk_daterange, count_onoff
 from .utils.egretutils import NumpyEncoder
 from .pyenergymarket_defaults import energymarket_defaults
 import abc
@@ -67,12 +67,13 @@ class EnergyMarket:
         else:
             self.set_property(value, *args[1:], d=d[args[0]])
 
-    
-    def get_model(self, start:Union[str, pd.Timestamp]):
+    def get_model(self, start:Union[str, pd.Timestamp], mdl_sol:Union[ModelData, None]=None, rt_from_da:bool=False):
         """form the Egret Model at start time
 
         Args:
             start (Union[str, pd.Timestamp]): time start time of the model
+            mdl_sol (Union[ModelData, None]): Egret ModelData with solutions to pass to update_initial_conditions
+            rt_from_da (bool): Special case for starting a simulation in which the first RT market uses a DA solution
         """
 
         periods = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
@@ -83,8 +84,53 @@ class EnergyMarket:
         # get the model for the specified time range 
         self.logger.info(f"Forming model starting at: {daterange[0]} - {daterange[-1]}")
         self.mdl = self.data_provider.get_model(daterange)
+        # Update initial conditions (from the data provider) to those from the latest model solution
+        self.update_initial_conditions(mdl_sol=mdl_sol, rt_from_da=rt_from_da)
 
+    def update_initial_conditions(self, mdl_sol:Union[ModelData, None]=None, rt_from_da:bool=False):
+        """ This function updates 'initial_p_output' and 'initial_status' for all
+            generators in an Egret ModelData object. For the reference it will make a
+            selection in this order:
+            1. Use the mdl_sol input variable
+            2. If mdl_sol is None, uses solution saved to EnergyMarket, self.mdl_sol
+            3. If self.mdl_sol is None, will not make any updates
 
+        Args:
+            mdl_sol (Union[ModelData, None]): Egret ModelData with solutions, defaults to None
+            rt_from_da (bool): Special case for starting a simulation in which the first RT market uses a DA solution
+        """
+        # The number of intervals between the start of the last model solve and the upcoming model solve:
+        window = self.configuration["time"]["window"]
+        # The duration in minutes of each interval:
+        min_freq = self.configuration["time"]["min_freq"]
+
+        # Select the appropriate previous model solution
+        previous_mdl_sol = mdl_sol
+        if previous_mdl_sol is None:
+            # No need to proceed if no solutions are available
+            if self.mdl_sol is None:
+                return
+            previous_mdl_sol = self.mdl_sol
+
+        # Loop through all generators in the upcoming model (self.mdl) and update initial_p_output and initial_status
+        for g, g_dict in self.mdl.elements(element_type='generator'):
+            # When starting a simulation we generally run DA first, then RT. In this case, we use the starting
+            # values from the DA model for the RT model.
+            if rt_from_da:
+                g_dict['initial_p_output'] = float(
+                    previous_mdl_sol.data['elements']['generator'][g]['initial_p_output'])
+                g_dict['initial_status'] = float(previous_mdl_sol.data['elements']['generator'][g]['initial_status'])
+            # In all other cases, we use the results from end of the previous cleared market.
+            else:
+                # Initial power is the last power cleared in the previous window (subtract 1 to get on 0-base)
+                g_dict['initial_p_output'] = float(
+                    previous_mdl_sol.data['elements']['generator'][g]['pg']['values'][window - 1])
+                # we could also update the q/reactive power, but this first test will be dc only
+                # g_dict['initial_q_output'] = float(
+                #                 previous_mdl_sol.data['elements']['generator'][g]['qg']['values'][window - 1])
+                # Update initial status for this generator, using timeutils function
+                new_initial_status = count_onoff(previous_mdl_sol.data['elements']['generator'][g], window-1, min_freq)
+                g_dict['initial_status'] = new_initial_status
 
     def solve_model(self):
         """Run the egret model in self.mdl
