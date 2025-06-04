@@ -130,7 +130,7 @@ class OSWRTMarket(OSWMarket):
                     fix_infeasible = True
         self.update_model_commitment(fix_infeasible=fix_infeasible)
 
-    def clear_market(self, local_save:bool=True):
+    def clear_market(self, local_save:bool=False):
         """
         Callback method that runs EGRET and clears a market.
 

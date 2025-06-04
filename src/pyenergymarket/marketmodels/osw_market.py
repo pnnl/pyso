@@ -229,7 +229,7 @@ class OSWMarket():
             return False
         return True
 
-    def clear_market(self, local_save=True):
+    def clear_market(self, local_save=False):
         """
         Callback method that runs EGRET and clears a market.
 
