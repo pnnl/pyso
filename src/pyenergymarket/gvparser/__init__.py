@@ -436,6 +436,7 @@ class GVParse(DataProvider):
         """Add branches to Egret model"""
         
         branch = dict()
+        dc_branch = dict()
         self.h5.add_branch_busnames()
         for i in range(self.h5("/mdb/Branch").shape[0]):
             br = self.h5("/mdb/Branch").iloc[i,:]
@@ -450,10 +451,9 @@ class GVParse(DataProvider):
                 tmp = self._collect_dcline_brtab(br)
                 if "dc_branch" not in self.mdl.data["elements"]:
                     self.mdl.data["elements"]["dc_branch"] = dict()
-                # Checking the keys ends up creating duplicate DC branches. Populating dc branches without the check
-                # self.mdl.data["elements"]["dc_branch"][self.mk_br_str(br, self.mdl.data["elements"]["dc_branch"].keys())] = tmp
-                self.mdl.data["elements"]["dc_branch"][self.mk_br_str(br)] = tmp
-                continue # don't add to branch set!!!
+                # Check to see if this element has already been added to the dc_branch dict
+                dc_branch[self.mk_br_str(br, check=dc_branch.keys())] = tmp
+                continue # don't add dc_branches to branch set!!!
             elif (br.PhaseShiftLB != 0) and (br.PhaseShiftUB != 0):
                 ## PAR
                 tmp = self._collect_par(br)
@@ -467,6 +467,9 @@ class GVParse(DataProvider):
             branch[self.mk_br_str(br, check=branch.keys())] = tmp
         ### add to model
         self.mdl.data["elements"]["branch"] = branch
+        if len(dc_branch.keys()) > 0:
+            # Only populate dc_branches if there is at least one branch in the model
+            self.mdl.data["elements"]["dc_branch"] = dc_branch
 
           
         # note, will want to distinguish between lines and transformers, PARS, and dclines
