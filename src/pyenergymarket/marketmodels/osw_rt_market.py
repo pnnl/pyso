@@ -117,8 +117,9 @@ class OSWRTMarket(OSWMarket):
 
     def update_em_model(self):
         """ Applies updates to the Egret model before solving. Logic to use either previous RT or DA input
-            Note that generator initial power and initial status is already updated automatically in em.get_model()
         """
+        # Update generator initial power and initial status
+        self.em.update_initial_conditions(self.em.mdl_sol, rt_from_da=rt_from_da)
         # If using a pre-simulation, there may be infeasibilities in the first RT interval, so we require a fix
         # Check for the conditions in which this can happen
         fix_infeasible = False
@@ -148,7 +149,7 @@ class OSWRTMarket(OSWMarket):
         rt_from_da = False
         if self.em.mdl_sol is None:
             rt_from_da = True
-        self.em.get_model(self.current_start_time, rt_from_da=rt_from_da)
+        self.em.get_model(self.current_start_time)
         self.update_em_model()
         # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()

@@ -244,6 +244,7 @@ class OSWMarket():
             return
 
         self.em.get_model(self.current_start_time)
+        self.em.update_initial_conditions(self.em.mdl_sol)
         self.em.solve_model()
         if local_save:
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')

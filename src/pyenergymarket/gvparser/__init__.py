@@ -449,8 +449,6 @@ class GVParse(DataProvider):
             if br.DCLineNumber > 0:
                 ## dc line
                 tmp = self._collect_dcline_brtab(br)
-                if "dc_branch" not in self.mdl.data["elements"]:
-                    self.mdl.data["elements"]["dc_branch"] = dict()
                 # Check to see if this element has already been added to the dc_branch dict
                 dc_branch[self.mk_br_str(br, check=dc_branch.keys())] = tmp
                 continue # don't add dc_branches to branch set!!!
