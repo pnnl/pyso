@@ -119,7 +119,7 @@ class OSWRTMarket(OSWMarket):
         """ Applies updates to the Egret model before solving. Logic to use either previous RT or DA input
         """
         # Update generator initial power and initial status
-        self.em.update_initial_conditions(self.em.mdl_sol, rt_from_da=rt_from_da)
+        self.em.update_initial_conditions(self.em.mdl_sol, update_mode='copy')
         # If using a pre-simulation, there may be infeasibilities in the first RT interval, so we require a fix
         # Check for the conditions in which this can happen
         fix_infeasible = False
