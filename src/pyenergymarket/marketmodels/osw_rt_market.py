@@ -155,7 +155,21 @@ class OSWRTMarket(OSWMarket):
         self.update_em_model(contingency_list=contingency_list)
         # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
-        self.em.solve_model()
+        try:
+            self.em.solve_model()
+        except:
+            print("\nException found - error solving model. Retrying with doubled ramp rates.\n")
+            for g, g_dict in self.em.mdl.elements(element_type='generator'):
+                ramp_keys = ["ramp_up_60min", "ramp_down_60min"]
+                for ramp_key in ramp_keys:
+                    if ramp_key in g_dict.keys():
+                        g_dict[ramp_key] = g_dict[ramp_key]*2
+            for s, s_dict in self.em.mdl.elements(element_type='storage'):
+                ramp_keys = ["ramp_up_input_60min", "ramp_down_input_60min", "ramp_up_output_60min", "ramp_down_output_60min"]
+                for ramp_key in ramp_keys:
+                    if ramp_key in s_dict.keys():
+                        s_dict[ramp_key] = s_dict[ramp_key]*2
+            self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
         self.market_results = self.em.mdl_sol
