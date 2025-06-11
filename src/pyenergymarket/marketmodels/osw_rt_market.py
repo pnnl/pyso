@@ -86,7 +86,9 @@ class OSWRTMarket(OSWMarket):
                 "market_interval": 900
             }
             # starts at midnight
-        self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=f'{min_freq}min')
+        # Start times jump ahead by the window size (in intervals)*frequency (in minutes)
+        min_window = int(min_freq*window)
+        self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=f'{min_window}min')
         # Space for day-ahead solution (used at initialization)
         self.da_mdl_sol = None
 
@@ -158,7 +160,7 @@ class OSWRTMarket(OSWMarket):
         try:
             self.em.solve_model()
         except:
-            print("\nException found - error solving model. Retrying with doubled ramp rates.\n")
+            logger.error("\nException found - error solving model. Retrying with doubled ramp rates.\n")
             for g, g_dict in self.em.mdl.elements(element_type='generator'):
                 ramp_keys = ["ramp_up_60min", "ramp_down_60min"]
                 for ramp_key in ramp_keys:
