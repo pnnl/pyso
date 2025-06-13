@@ -512,12 +512,12 @@ class OSWMarket():
             market_type = 'real_time' populates initial state of charge based on self.storage_soc (saved from DA)
                           at the current time and end_state_of_charge at the end of the window + lookahead
         """
+        window = self.em.configuration["time"]["window"]
         if market_type == 'day_ahead':
             # If no solution exists (first time) just use whatever is already in the input model
             if self.em.mdl_sol is None:
                 return
             # Use soc and end of window (these are the values saved, excluding lookahead)
-            window = self.em.configuration["time"]["window"]
             self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] \
                 = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window-1]
             self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] \
@@ -531,7 +531,12 @@ class OSWMarket():
             limit = 48
             da_soc_series = self.storage_soc['storage'][storage]['state_of_charge']['values'][-limit:]
             da_time_keys = self.storage_soc['timestamps'][-limit:]
-            lookup_init_soc = get_value_at_time(da_soc_series, da_time_keys, self.current_start_time)
+            # We get initial soc from the last RT interval, when available. Otherwise we lookup from DA value
+            if self.em.mdl_sol is None:
+                lookup_init_soc = get_value_at_time(da_soc_series, da_time_keys, self.current_start_time)
+            else:
+                lookup_init_soc \
+                    = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window - 1]
             # Bound soc on interval [0, 1]
             lookup_init_soc = min(1, max(0, lookup_init_soc))
             self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] = lookup_init_soc
