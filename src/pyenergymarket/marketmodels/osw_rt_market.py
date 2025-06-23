@@ -304,8 +304,9 @@ class OSWRTMarket(OSWMarket):
             if use_initial_p:
                 self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(g_dict['initial_p_output'])
             else:
-                self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(
-                    g_dict['pg']['values'][time_window - 1])
+                # self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(
+                #     g_dict['pg']['values'][time_window - 1])
+                self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(g_dict['initial_p_output'])
             # we should also update the q/reactive power, but this first test will be dc only
             # self.mdl.data['elements']['generator'][g]['initial_q_output'] = g_dict['qg']['values'][self.configuration['time']['window'] - 1]
             # Update initial status for this generator
