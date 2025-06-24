@@ -91,6 +91,7 @@ class OSWRTMarket(OSWMarket):
         self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=f'{min_window}min')
         # Space for day-ahead solution (used at initialization)
         self.da_mdl_sol = None
+        self.fixed_commitment = True # Option to use a fixed or flexible commitment
 
     # def collect_bids(self, gen_commitment):
     #     """
@@ -118,23 +119,24 @@ class OSWRTMarket(OSWMarket):
         return start_time_index
 
     def update_em_model(self, contingency_list=None):
-        """ Updates the Egret model before solving. Logic to use either previous RT or DA input """
-        if self.em.mdl_sol is not None:
-            self.update_model_from_previous(self.em.mdl_sol)
-        # If no solution (first pass) check for an initial day-ahead solution
-        elif self.da_mdl_sol is not None:
-            use_initial_p = True
-            fix_infeasible = False
-            # If using a pre-simulation, there may be infeasibilities in the first RT interval,
-            # so we require a fix
+        """ Applies updates to the Egret model before solving. Logic to use either previous RT or DA input
+        """
+        # Update generator initial power and initial status
+        self.em.update_initial_conditions(self.em.mdl_sol, update_mode='copy')
+        # If using a pre-simulation, there may be infeasibilities in the first RT interval, so we require a fix
+        # Check for the conditions in which this can happen
+        fix_infeasible = False
+        if self.em.mdl_sol is None:
+            # Only apply fix_infeasible when no previous real-time model exists and we have at least 1
+            # pre-simulation day
             if self.pre_simulation_days is not None:
                 if self.pre_simulation_days > 0:
                     fix_infeasible = True
-            self.update_model_from_previous(self.da_mdl_sol, use_initial_p=use_initial_p,
-                                            fix_infeasible=fix_infeasible)
+        self.update_model_commitment(fix_infeasible=fix_infeasible)
         self.apply_contingencies(contingency_list=contingency_list)
+        self.update_storage()
 
-    def clear_market(self, local_save:bool=True, get_mdl:bool=True, contingency_list=None):
+    def clear_market(self, local_save:bool=False, contingency_list:list=None):
         """
         Callback method that runs EGRET and clears a market.
 
@@ -143,19 +145,17 @@ class OSWRTMarket(OSWMarket):
 
          Args:
             local_save (bool, optional): if True, will save a JSON with the results at each timestep
-            get_mdl (bool, optional): if True, will get Egret model from parser (otherwise uses existing mdl)
         """
         if self.current_start_time > max(self.start_times):
             logger.warning(f"RT Market: Current start time {self.current_start_time} is past horizon {max(self.start_times)}"
                            "Market will not be cleared")
             return
+        # For first RT market, we will load starting values from the first DA market.
+        rt_from_da = False
+        if self.em.mdl_sol is None:
+            rt_from_da = True
         self.em.get_model(self.current_start_time)
-        # If no solution (first pass) check for an initial day-ahead solution
-        if self.em.mdl_sol is not None:
-            self.update_model_from_previous(self.em.mdl_sol)
-        # Modifications to model before solve, depending on use-case
         self.update_em_model(contingency_list=contingency_list)
-        # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         try:
             self.em.solve_model()
@@ -165,18 +165,19 @@ class OSWRTMarket(OSWMarket):
                 ramp_keys = ["ramp_up_60min", "ramp_down_60min"]
                 for ramp_key in ramp_keys:
                     if ramp_key in g_dict.keys():
-                        g_dict[ramp_key] = g_dict[ramp_key]*2
+                        g_dict[ramp_key] = g_dict[ramp_key] * 2
             for s, s_dict in self.em.mdl.elements(element_type='storage'):
                 ramp_keys = ["ramp_up_input_60min", "ramp_down_input_60min", "ramp_up_output_60min", "ramp_down_output_60min"]
                 for ramp_key in ramp_keys:
                     if ramp_key in s_dict.keys():
-                        s_dict[ramp_key] = s_dict[ramp_key]*2
+                        s_dict[ramp_key] = s_dict[ramp_key] * 2
             self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
         self.market_results = self.em.mdl_sol
         # If using fixed commitment history we do not want to update this during real-time
-        # self.store_commitment_hist()
+        if not self.fixed_commitment:
+            self.store_commitment_hist()
         if local_save:
             os.makedirs('data', exist_ok=True)
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
@@ -285,72 +286,58 @@ class OSWRTMarket(OSWMarket):
                 minimum_down_time = g_dict['min_down_time']
             g_dict['initial_status'] = -max(1, minimum_down_time)
 
-    def _update_generators(self, mdl_com:ModelData, use_initial_p:bool=False, fix_infeasible:bool=False,
-                                   fixed_commit:bool=True):
-        """
-        Code to pass relevant previous model results into the current Egret model. These include:
-            Initial power (correct time key power from the previous result)
-            Initial status - updated based on last interval's on/off status
-            Commitment history - pass commitment, which is fixed by default
-        """
-        time_window = self.em.configuration['time']['window']
-        lookahead = self.em.configuration['time']['lookahead']
-        min_freq = self.em.configuration["min_freq"]
-        logger.debug(f"Updating commitment history for RT market at timestep {self.timestep}"
-                     f"(time is {self.current_start_time}")
-        for g, g_dict in mdl_com.elements(element_type='generator'):
-            # Initial power is the last power cleared in the previous window
-            # If initializing from day-ahead initial power is same as day-ahead initial power
-            if use_initial_p:
-                self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(g_dict['initial_p_output'])
-            else:
-                self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(
-                    g_dict['pg']['values'][time_window - 1])
-            # we should also update the q/reactive power, but this first test will be dc only
-            # self.mdl.data['elements']['generator'][g]['initial_q_output'] = g_dict['qg']['values'][self.configuration['time']['window'] - 1]
-            # Update initial status for this generator
-            commit_hist, t0idx = self.update_initial_status(g, min_freq, return_commit=True)
-            # It's possible for t0idx in the last interval to have no commitments available.
-            # If so, skip. Otherwise, pass the commitments for the appropriate window
-            if t0idx < len(commit_hist['commitment']['values']):
-                commit_hist_window = commit_hist['commitment']['values'][t0idx:t0idx + time_window + lookahead]
-                # If missing lookahead (possible at end of horizon) duplicate the last value
-                if len(commit_hist_window) < time_window + lookahead:
-                    add_len = time_window + lookahead - len(commit_hist_window)
-                    if isinstance(commit_hist_window, list):
-                        commit_hist_window = commit_hist_window + [commit_hist_window[-1]] * add_len
-                    elif isinstance(commit_hist_window, np.ndarray):
-                        commit_hist_window = np.concatenate(
-                            (commit_hist_window, np.ones(add_len) * commit_hist_window[-1]))
-                # Standard behavior is to fix commitment, but we can send commitment without fixing if we want
-                # a more flexible RT market.
-                if fixed_commit:
-                    # Only fix the values in the window (Set all lookahead values to None)
-                    # commit_hist_window[time_window:] = [None for i in range(len(commit_hist_window[time_window:]))]
-                    self.em.mdl.data['elements']['generator'][g]['fixed_commitment'] = {'data_type': 'time_series',
-                                                                                        'values': commit_hist_window}
-                    # Pass to check for scenarios that give infeasible results (only if taking DA input)
-                    if fix_infeasible:
-                        self._fix_infeasible(g)
-                else:
-                    self.em.mdl.data['elements']['generator'][g]['commitment'] = {'data_type': 'time_series',
-                                                                                  'values': commit_hist_window}
-
-    def _update_storage(self, mdl_com:ModelData):
-        """ Calls osw_market.update_state_of_charge for each storage unit """
-        for s, _ in mdl_com.elements(element_type='storage'):
-            self.update_state_of_charge(s, market_type='real_time')
-
-    def update_model_from_previous(self, mdl_com:ModelData, use_initial_p:bool=False, fix_infeasible:bool=False,
-                                   fixed_commit:bool=True):
+    def update_model_commitment(self, fix_infeasible:bool=False):
         """
         Pull last setpoint data from mdl_sol timeseries and
         update the current self.mdl with generator values from solution.
+
+        Args:
+            fix_infeasible (bool, optional): if True, fix possible infeasible states in self.em.mdl
         """
-        if (self.em.mdl is not None) and (mdl_com is not None):
-            self._update_generators(mdl_com, use_initial_p=use_initial_p, fix_infeasible=fix_infeasible,
-                                    fixed_commit=fixed_commit)
-            self._update_storage(mdl_com)
+        # Windows
+        time_window = self.em.configuration['time']['window']
+        lookahead = self.em.configuration['time']['lookahead']
+        logger.debug(f"Updating commitment history for RT market at timestep {self.timestep}"
+                     f"(time is {self.current_start_time}")
+        if self.em.mdl is not None:
+            for g, g_dict in self.em.mdl.elements(element_type='generator'):
+                # Load the commitment history for this generator
+                commit_hist = self.commitment_hist['generator'][g]
+                # Match timestamps to find the appropriate index from the commitment history
+                if self.current_start_time in self.commitment_hist['timestamps']:
+                    t0idx = np.where(self.current_start_time == np.array(self.commitment_hist['timestamps']))[0][0]
+                else:
+                    raise ValueError(f"Time {self.current_start_time} is not in commitment history timestamps.")
+
+                # It is possible for t0idx in the last interval to have no commitments available (if no day-ahead
+                # lookahead) If so, there are no commitments to add. Otherwise, pass the commitments for the
+                # appropriate window
+                if t0idx < len(commit_hist['commitment']['values']):
+                    commit_hist_window = commit_hist['commitment']['values'][t0idx:t0idx + time_window + lookahead]
+                    # If missing lookahead (possible at end of horizon) duplicate the last value
+                    if len(commit_hist_window) < time_window + lookahead:
+                        add_len = time_window + lookahead - len(commit_hist_window)
+                        # Handling for list or array format
+                        if isinstance(commit_hist_window, list):
+                            commit_hist_window = commit_hist_window + [commit_hist_window[-1]] * add_len
+                        elif isinstance(commit_hist_window, np.ndarray):
+                            commit_hist_window = np.concatenate(
+                                (commit_hist_window, np.ones(add_len) * commit_hist_window[-1]))
+                    # Standard behavior is to fix commitment, but we can send commitment without fixing if we want
+                    # a more flexible RT market.
+                    if self.fixed_commitment:
+                        # Only fix the values in the window (Set all lookahead values to None)
+                        # commit_hist_window[time_window:] = [None for i in range(len(commit_hist_window[time_window:]))]
+                        g_dict['fixed_commitment'] = {'data_type': 'time_series', 'values': commit_hist_window}
+                        # Pass to check for scenarios that give infeasible results (only if taking initial DA input)
+                        if fix_infeasible:
+                            self._fix_infeasible(g)
+                    else:
+                        g_dict['commitment'] = {'data_type': 'time_series', 'values': commit_hist_window}
         else:
-            raise ValueError("no model currently loaded.")
-    
+            raise ValueError("No Egret model currently loaded.")
+
+    def update_storage(self):
+        """ Calls osw_market.update_state_of_charge for each storage unit """
+        for s, _ in self.em.mdl.elements(element_type='storage'):
+            self.update_state_of_charge(s, market_type='real_time')
