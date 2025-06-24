@@ -95,6 +95,7 @@ class OSWMarket():
         self.commitment_hist = None
         self.storage_soc = None
         self.pre_simulation_days = None
+        self.extra_gens = {}
 
         # This translates all the kwarg key-value pairs into class attributes
         self.__dict__.update(kwargs)
@@ -296,6 +297,13 @@ class OSWMarket():
         # Egret script to add a generator at each node at load curtailment cost (ensures feasibility)
         # add_load_curtail(self.em.mdl)
 
+    def add_gens(self):
+        """ Adds generators, including full Egret model data information to the model.
+            This will look for any generators in the self.extra_gens dictionary.
+        """
+        for g, gdict in self.extra_gens.items():
+            self.em.mdl.data['elements']['generator'][g] = gdict
+
     def restore_lines(self):
         """ Egret removes lines with in_service set to False. We will add them back in here,
             setting the pf (power flow) values to zero
@@ -402,6 +410,8 @@ class OSWMarket():
         self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         # Modifications to model before solve, depending on use-case
         self.apply_contingencies(contingency_list=contingency_list)
+        self.add_gens()
+        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()

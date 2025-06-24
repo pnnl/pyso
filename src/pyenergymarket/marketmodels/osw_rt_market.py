@@ -133,6 +133,7 @@ class OSWRTMarket(OSWMarket):
             self.update_model_from_previous(self.da_mdl_sol, use_initial_p=use_initial_p,
                                             fix_infeasible=fix_infeasible)
         self.apply_contingencies(contingency_list=contingency_list)
+        self.add_gens()
 
     def clear_market(self, local_save:bool=True, get_mdl:bool=True, contingency_list=None):
         """
@@ -155,7 +156,7 @@ class OSWRTMarket(OSWMarket):
             self.update_model_from_previous(self.em.mdl_sol)
         # Modifications to model before solve, depending on use-case
         self.update_em_model(contingency_list=contingency_list)
-        # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
+        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         try:
             self.em.solve_model()
