@@ -92,9 +92,12 @@ class OSWMarket():
         self.state_machine.on_enter_bidding("collect_bids")
         self.state_machine.on_enter_clearing("clear_market")
         self.validate_market_timing(self.market_timing)
+        # Default settings for various user inputs
         self.commitment_hist = None
         self.storage_soc = None
         self.pre_simulation_days = None
+        self.local_save = False
+        self.contingency_list = None
 
         # This translates all the kwarg key-value pairs into class attributes
         self.__dict__.update(kwargs)
@@ -242,11 +245,11 @@ class OSWMarket():
                     self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
         self.commitment_hist['timestamps'] = _commit_times_hist
 
-    def apply_contingencies(self, contingency_list=None, scale_branch_list=['4202_4203_1'],
+    def apply_contingencies(self, scale_branch_list=['4202_4203_1'],
                             scale_ratio=1.2):
         """ If including contingencies, turn off unused branches """
         # Apply contingencies: mark specified branches out of service
-        if contingency_list:
+        if self.contingency_list:
             branches = self.em.mdl.data['elements']['branch']
             dc_branches = self.em.mdl.data['elements']['dc_branch']
             for br in contingency_list:
@@ -372,15 +375,13 @@ class OSWMarket():
             return False
         return True
 
-    def clear_market(self, local_save=False, contingency_list=None):
+    def clear_market(self):
         """
         Callback method that runs EGRET and clears a market.
 
         This method must be overloaded in an instance of this class to
         implement the necessary operates to clear the market in question.
 
-        Args:
-            local_save (bool, optional): if True, will save a JSON with the results at each timestep
         """
         # Don't run market if this start time exceeds the start time list
         if not self.valid_time_horizon():
@@ -389,11 +390,11 @@ class OSWMarket():
         self.em.get_model(self.current_start_time)
         # Modifications to model before solve, depending on use-case
         self.em.update_initial_conditions(self.em.mdl_sol)
-        self.apply_contingencies(contingency_list=contingency_list)
+        self.apply_contingencies()
         self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
-        if local_save:
+        if self.local_save:
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
         self.market_results = self.em.mdl_sol
         self.store_commitment_hist()
@@ -419,6 +420,8 @@ class OSWMarket():
         """
         self.last_state = self.current_state
         self.next_state()
+        print("Next state:", dir(self.next_state))
+        exit()
         # self.current_state = self.state_machine.state
         self.current_state = self.state
         logger.debug(self.market_name, "Last state:", self.last_state)
