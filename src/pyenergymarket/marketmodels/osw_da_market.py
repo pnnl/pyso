@@ -81,6 +81,9 @@ class OSWDAMarket(OSWMarket):
                 "market_interval": 86400
             }
 
+    # def collect_bids(self):
+    #     print("DA COLLECTED BIDS")
+
     def clear_market(self, local_save:bool=True, get_mdl:bool=True):
         """
         Overloaded method of OSWMarket
