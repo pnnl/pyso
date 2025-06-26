@@ -82,6 +82,9 @@ class OSWMarket():
         self.next_state_time = 0
         self.market_results = {}
         self.state_list = list(market_timing["states"].keys())
+
+        self.osw_bids = {}
+        
         self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
         self.state_machine.add_ordered_transitions()
         self.new_data = False # Whethere there is new data to be published to the federation
@@ -105,8 +108,13 @@ class OSWMarket():
 
         This method must be overloaded in an instance of this class to
         implement the necessary operations to update the market in question.
-        """
-        pass
+        # """
+
+        print("BIDS COLLECTED", self.market_name, self.osw_bids)
+        for key in self.osw_bids.keys():
+            self.em.mdl.data['elements']['generator'][key] = self.osw_bids[key]
+
+        # print(market, bid['time'], key, self.markets[f"{market}_energy_market"].em.mdl.data['elements']['generator'][key])
 
     def reset_timestep(self, timestep=0, shift_commitment=True):
         """ Resets the timestep to 0 (option to fix to a different value)
@@ -399,6 +407,11 @@ class OSWMarket():
 
         if get_mdl:
             self.em.get_model(self.current_start_time)
+
+        self.collect_bids() 
+        for g in self.em.mdl.data['elements']['generator']:
+            print(self.market_name, g)
+
         self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         # Modifications to model before solve, depending on use-case
         self.apply_contingencies(contingency_list=contingency_list)

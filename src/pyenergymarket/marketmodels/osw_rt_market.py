@@ -157,6 +157,9 @@ class OSWRTMarket(OSWMarket):
         self.update_em_model(contingency_list=contingency_list)
         # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
+        
+        self.collect_bids()
+
         try:
             self.em.solve_model()
         except:
@@ -172,6 +175,10 @@ class OSWRTMarket(OSWMarket):
                     if ramp_key in s_dict.keys():
                         s_dict[ramp_key] = s_dict[ramp_key]*2
             self.em.solve_model()
+
+        for g in self.em.mdl.data['elements']['generator']:
+            print(self.market_name, g)
+
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
         self.market_results = self.em.mdl_sol
@@ -303,10 +310,9 @@ class OSWRTMarket(OSWMarket):
             # If initializing from day-ahead initial power is same as day-ahead initial power
             if use_initial_p:
                 self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(g_dict['initial_p_output'])
-            else:
-                # self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(
-                #     g_dict['pg']['values'][time_window - 1])
-                self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(g_dict['initial_p_output'])
+            # else:
+            #     self.em.mdl.data['elements']['generator'][g]['initial_p_output'] = float(
+            #         g_dict[g]['values'][time_window - 1])
             # we should also update the q/reactive power, but this first test will be dc only
             # self.mdl.data['elements']['generator'][g]['initial_q_output'] = g_dict['qg']['values'][self.configuration['time']['window'] - 1]
             # Update initial status for this generator
