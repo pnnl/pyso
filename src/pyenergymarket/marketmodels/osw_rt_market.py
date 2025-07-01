@@ -119,7 +119,7 @@ class OSWRTMarket(OSWMarket):
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
 
-    def update_em_model(self):
+    def update_em_model(self, contingency_list=None):
         """ Applies updates to the Egret model before solving. Logic to use either previous RT or DA input
         """
         # Update generator initial power and initial status
@@ -138,7 +138,7 @@ class OSWRTMarket(OSWMarket):
                 if self.pre_simulation_days > 0:
                     fix_infeasible = True
         self.update_model_commitment(fix_infeasible=fix_infeasible)
-        self.apply_contingencies()
+        self.apply_contingencies(contingency_list=contingency_list)
         self.update_storage()
 
     def clear_market(self, contingency_list:list=None):
@@ -334,19 +334,15 @@ class OSWRTMarket(OSWMarket):
                             if 'fast_start' in g_dict.keys() and g_dict['fast_start']:
                                 # If all are on (1) don't change. Otherwise check for all off or mix of on/off
                                 if sum(commit_hist_window) == time_window + lookahead:
-                                    print("Case 1:", commit_hist_window)
                                     pass
                                 # If all are off, pass these to the commitment variable (starts as off, but allows turn on)
                                 elif sum(commit_hist_window) == 0:
-                                    print("Case 2:", commit_hist_window)
                                     commit_type = 'commitment'
                                 # Special case - mixed commitment. Pass all to commitment AND fix any 1 values
                                 # but use None instead of 0 for off
                                 else:
-                                    print("Case 3:", commit_hist_window)
                                     g_dict['commitment'] = {'data_type': 'time_series', 'values': commit_hist_window}
                                     commit_hist_window = [v if v == 1 else None for v in commit_hist_window]
-                                    print("   Case 3 updated:", commit_hist_window)
                         # Update the commitment (fixed_commitment or commitment for fast-start units)
                         g_dict[commit_type] = {'data_type': 'time_series', 'values': commit_hist_window}
                         # Pass to check for scenarios that give infeasible results (only if taking initial DA input)

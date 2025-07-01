@@ -55,7 +55,8 @@ class OSWMarket():
     """
     pass
 
-    def __init__(self, market_name, market_timing, start_date, end_date, market:EnergyMarket=None, **kwargs):
+    def __init__(self, market_name, market_timing, start_date, end_date, market:EnergyMarket=None, local_save=False,
+                 **kwargs):
         """
         Generic version of all the markets used in the E-COMP LDRD intiative.
         As such, this is fairly particular to those needs and is 
@@ -96,8 +97,7 @@ class OSWMarket():
         self.commitment_hist = None
         self.storage_soc = None
         self.pre_simulation_days = None
-        self.local_save = False
-        self.contingency_list = None
+        self.local_save = local_save
 
         # This translates all the kwarg key-value pairs into class attributes
         self.__dict__.update(kwargs)
@@ -245,11 +245,11 @@ class OSWMarket():
                     self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
         self.commitment_hist['timestamps'] = _commit_times_hist
 
-    def apply_contingencies(self, scale_branch_list=['4202_4203_1'],
+    def apply_contingencies(self, contingency_list=None, scale_branch_list=['4202_4203_1'],
                             scale_ratio=1.2):
         """ If including contingencies, turn off unused branches """
         # Apply contingencies: mark specified branches out of service
-        if self.contingency_list:
+        if contingency_list:
             branches = self.em.mdl.data['elements']['branch']
             dc_branches = self.em.mdl.data['elements']['dc_branch']
             for br in contingency_list:
@@ -375,7 +375,7 @@ class OSWMarket():
             return False
         return True
 
-    def clear_market(self):
+    def clear_market(self, contingency_list=None):
         """
         Callback method that runs EGRET and clears a market.
 
@@ -389,8 +389,8 @@ class OSWMarket():
 
         self.em.get_model(self.current_start_time)
         # Modifications to model before solve, depending on use-case
-        self.em.update_initial_conditions(self.em.mdl_sol)
-        self.apply_contingencies()
+        self.em.update_initial_conditions(self.em.mdl_sol)q
+        self.apply_contingencies(contingency_list=contingency_list)
         self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
@@ -413,15 +413,13 @@ class OSWMarket():
         """
         pass
     
-    def move_to_next_state(self) -> str:
+    def move_to_next_state(self, *args, **kwargs) -> str:
         """
         Transitions to the next state in the state machine and updates
         appropriate object parameters.
         """
         self.last_state = self.current_state
-        self.next_state()
-        print("Next state:", dir(self.next_state))
-        exit()
+        self.next_state(*args, **kwargs)
         # self.current_state = self.state_machine.state
         self.current_state = self.state
         logger.debug(self.market_name, "Last state:", self.last_state)
