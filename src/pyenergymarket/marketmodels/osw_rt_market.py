@@ -123,7 +123,11 @@ class OSWRTMarket(OSWMarket):
         """ Applies updates to the Egret model before solving. Logic to use either previous RT or DA input
         """
         # Update generator initial power and initial status
-        self.em.update_initial_conditions(self.em.mdl_sol, update_mode='copy')
+        # For first RT market, we will copy starting values from the first DA market.
+        update_mode = 'calculate'
+        if self.em.mdl_sol is None:
+            update_mode = 'copy'
+        self.em.update_initial_conditions(self.em.mdl_sol, update_mode=update_mode)
         # If using a pre-simulation, there may be infeasibilities in the first RT interval, so we require a fix
         # Check for the conditions in which this can happen
         fix_infeasible = False
@@ -149,10 +153,6 @@ class OSWRTMarket(OSWMarket):
             logger.warning(f"RT Market: Current start time {self.current_start_time} is past horizon {max(self.start_times)}"
                            "Market will not be cleared")
             return
-        # For first RT market, we will load starting values from the first DA market.
-        rt_from_da = False
-        if self.em.mdl_sol is None:
-            rt_from_da = True
         self.em.get_model(self.current_start_time)
         self.update_em_model(contingency_list=contingency_list)
         self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
