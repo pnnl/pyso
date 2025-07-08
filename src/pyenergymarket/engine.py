@@ -99,7 +99,8 @@ class EnergyMarket:
         """
         # Two different update modes (can add more as needed)
         update_options = ['calculate', 'copy']
-        assert update_mode in update_options, f"Invalid update_mode {update_mode}, must be one of {update_options}"
+        if update_mode not in update_options:
+            raise ValueError(f"Invalid update_mode: {update_mode}, must be one of {update_options}")
         # The number of intervals between the start of the last model solve and the upcoming model solve:
         window = self.configuration["time"]["window"]
         # The duration in minutes of each interval:
@@ -115,8 +116,8 @@ class EnergyMarket:
 
         # Loop through all generators in the upcoming model (self.mdl) and update initial_p_output and initial_status
         for g, g_dict in self.mdl.elements(element_type='generator'):
-            # When starting a simulation we generally run DA first, then RT. In this case, we copy the starting
-            # values from the DA model for the RT model.
+            # When simulating multiple market instances, we may copy information from one market to another.
+            # For example, we may want to pass day-ahead results to a real-time market.
             if update_mode == 'copy':
                 g_dict['initial_p_output'] = float(
                     previous_mdl_sol.data['elements']['generator'][g]['initial_p_output'])

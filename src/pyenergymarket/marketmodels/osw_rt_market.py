@@ -59,10 +59,9 @@ class OSWRTMarket(OSWMarket):
         state.
         """
         super().__init__(market_name, market_timing, start_date, end_date, **kwargs)
-        self.em.configuration["min_freq"] = min_freq
+        self.em.configuration["time"]["min_freq"] = min_freq
         self.em.configuration["time"]["window"] = window
         self.em.configuration["time"]["lookahead"] = lookahead
-        self.em.configuration["window"] = window + lookahead
         self.__dict__.update(kwargs)
         if self.market_timing == None:
             self.market_timing = {
@@ -164,7 +163,7 @@ class OSWRTMarket(OSWMarket):
         self.timestep += 1
         if self.timestep >= len(self.start_times):
             # Add a day (exact value doesn't matter, just need something past the horizon)
-            min_freq = self.em.configuration["min_freq"]
+            min_freq = self.em.configuration["time"]["min_freq"]
             self.current_start_time += datetime.timedelta(minutes=min_freq)
         else:
             self.current_start_time = self.start_times[self.timestep]
@@ -177,7 +176,7 @@ class OSWRTMarket(OSWMarket):
         day-ahead market clearing to add the coming day's commitment values
         """
         # Duplicate day-ahead values onto the (likely) more frequent real-time intervals
-        min_freq = self.em.configuration["min_freq"]
+        min_freq = self.em.configuration["time"]["min_freq"]
         # Update the da_commitment timestamps - add an hour to the last timestamp to ensure we go to the end of the day
         end = max(da_commitment["timestamps"])
         if isinstance(end, str):
@@ -216,7 +215,7 @@ class OSWRTMarket(OSWMarket):
         Returns:
             rt_list (list): list of values copied into the real-time frequency
         """
-        min_freq = self.em.configuration["min_freq"]
+        min_freq = self.em.configuration["time"]["min_freq"]
         # Determine the number of times to copy values
         remainder = 60 % min_freq
         if remainder != 0:
