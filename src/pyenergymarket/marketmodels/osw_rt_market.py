@@ -117,12 +117,15 @@ class OSWRTMarket(OSWMarket):
     def update_em_model(self):
         """ Applies updates to the Egret model before solving. Logic to use either previous RT or DA input
         """
-        # For first RT market, we will load starting values from the first DA market.
+        # Default is to calculate values based on previous solution
         update_mode = 'calculate'
+        use_sol = self.em.mdl_sol
+        # For first RT market, we will copy starting values from the first DA market.
         if self.em.mdl_sol is None:
             update_mode = 'copy'
+            use_sol = self.da_mdl_sol
         # Update generator initial power and initial status
-        self.em.update_initial_conditions(self.em.mdl_sol, update_mode=update_mode)
+        self.em.update_initial_conditions(use_sol, update_mode=update_mode)
         # If using a pre-simulation, there may be infeasibilities in the first RT interval, so we require a fix
         # Check for the conditions in which this can happen
         fix_infeasible = False
