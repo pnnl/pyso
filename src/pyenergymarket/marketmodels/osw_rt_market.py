@@ -158,7 +158,7 @@ class OSWRTMarket(OSWMarket):
         self.update_em_model(contingency_list=contingency_list)
         # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
 
-        self.collect_bids()
+        # self.collect_bids()
 
         try:
             self.em.solve_model()

@@ -85,6 +85,7 @@ class OSWMarket():
         self.state_list = list(market_timing["states"].keys())
 
         self.osw_bids = {}
+        self.extra_gens = {}
 
         self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
         self.state_machine.add_ordered_transitions()
