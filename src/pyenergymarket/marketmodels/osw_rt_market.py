@@ -140,6 +140,7 @@ class OSWRTMarket(OSWMarket):
         self.update_model_commitment(fix_infeasible=fix_infeasible)
         self.apply_contingencies(contingency_list=contingency_list)
         self.update_storage()
+        self.add_gens()
 
     def clear_market(self, contingency_list:list=None):
         """
@@ -155,7 +156,10 @@ class OSWRTMarket(OSWMarket):
             return
         self.em.get_model(self.current_start_time)
         self.update_em_model(contingency_list=contingency_list)
-        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
+        # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
+
+        self.collect_bids()
+
         try:
             self.em.solve_model()
         except:
@@ -171,6 +175,10 @@ class OSWRTMarket(OSWMarket):
                     if ramp_key in s_dict.keys():
                         s_dict[ramp_key] = s_dict[ramp_key] * 2
             self.em.solve_model()
+
+        for g in self.em.mdl.data['elements']['generator']:
+            print(self.market_name, g)
+
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
         self.market_results = self.em.mdl_sol

@@ -83,6 +83,9 @@ class OSWMarket():
         self.next_state_time = 0
         self.market_results = {}
         self.state_list = list(market_timing["states"].keys())
+
+        self.osw_bids = {}
+
         self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
         self.state_machine.add_ordered_transitions()
         self.new_data = False # Whethere there is new data to be published to the federation
@@ -108,8 +111,13 @@ class OSWMarket():
 
         This method must be overloaded in an instance of this class to
         implement the necessary operations to update the market in question.
-        """
-        pass
+        # """
+
+        print("BIDS COLLECTED", self.market_name, self.osw_bids)
+        for key in self.osw_bids.keys():
+            self.em.mdl.data['elements']['generator'][key] = self.osw_bids[key]
+
+        # print(market, bid['time'], key, self.markets[f"{market}_energy_market"].em.mdl.data['elements']['generator'][key])
 
     def reset_timestep(self, timestep=0, shift_commitment=True):
         """ Resets the timestep to 0 (option to fix to a different value)
@@ -299,6 +307,13 @@ class OSWMarket():
         # Egret script to add a generator at each node at load curtailment cost (ensures feasibility)
         # add_load_curtail(self.em.mdl)
 
+    def add_gens(self):
+        """ Adds generators, including full Egret model data information to the model.
+            This will look for any generators in the self.extra_gens dictionary.
+        """
+        for g, gdict in self.extra_gens.items():
+            self.em.mdl.data['elements']['generator'][g] = gdict
+
     def restore_lines(self):
         """ Egret removes lines with in_service set to False. We will add them back in here,
             setting the pf (power flow) values to zero
@@ -391,6 +406,8 @@ class OSWMarket():
         # Modifications to model before solve, depending on use-case
         self.em.update_initial_conditions(self.em.mdl_sol)
         self.apply_contingencies(contingency_list=contingency_list)
+        self.add_gens()
+        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
