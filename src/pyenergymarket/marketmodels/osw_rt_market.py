@@ -128,6 +128,7 @@ class OSWRTMarket(OSWMarket):
         if self.em.mdl_sol is None:
             update_mode = 'copy'
         self.em.update_initial_conditions(self.em.mdl_sol, update_mode=update_mode)
+        self.add_gens()
         # If using a pre-simulation, there may be infeasibilities in the first RT interval, so we require a fix
         # Check for the conditions in which this can happen
         fix_infeasible = False
@@ -140,7 +141,6 @@ class OSWRTMarket(OSWMarket):
         self.update_model_commitment(fix_infeasible=fix_infeasible)
         self.apply_contingencies(contingency_list=contingency_list)
         self.update_storage()
-        self.add_gens()
 
     def clear_market(self, contingency_list:list=None):
         """

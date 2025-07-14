@@ -405,9 +405,9 @@ class OSWMarket():
 
         self.em.get_model(self.current_start_time)
         # Modifications to model before solve, depending on use-case
+        self.add_gens()
         self.em.update_initial_conditions(self.em.mdl_sol)
         self.apply_contingencies(contingency_list=contingency_list)
-        self.add_gens()
         self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
