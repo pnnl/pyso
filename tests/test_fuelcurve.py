@@ -38,7 +38,7 @@ def run_energymarket():
         "time": {
             "datefrom": None,
             "dateto": None,
-            "min_freq": 60, # period length in minutes
+            "min_freq": 15, # period length in minutes
             "window": 1, # solution window
             "lookahead": 1 # solution lookahead
         },
@@ -52,7 +52,7 @@ def run_energymarket():
     em =pyen.EnergyMarket(gv, config=pyenconfig)
     
     # ### get model for the specified time range
-    em.get_model("2032-01-31 23:00:00")
+    em.get_model("2032-01-31 23:45:00")
     
     return em
 
