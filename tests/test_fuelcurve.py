@@ -52,7 +52,7 @@ def run_energymarket():
     em =pyen.EnergyMarket(gv, config=pyenconfig)
     
     # ### get model for the specified time range
-    em.get_model("2032-01-31 23:00:00")
+    em.get_model("2032-01-31 23:45:00")
     
     return em
 

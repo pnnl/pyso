@@ -14,10 +14,11 @@ import datetime
 import json
 import logging
 import pandas as pd
+import numpy as np
 from transitions import Machine
 from .osw_market import OSWMarket
 
-
+from egret.data.model_data import ModelData
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -29,7 +30,7 @@ class OSWDAMarket(OSWMarket):
 
     For the off-shore-wind use case, we only need three market states so
     those will be hard-coded as below. The way this market works, all of 
-    the activity of the market takes place at the transisitions. I'm 
+    the activity of the market takes place at the transitions. I'm
     (TDH) using the "transitions" library which allows the definition
     of callback functions when entering (and exiting) any given state
     and this is the primary method by which the activity will in the
@@ -42,7 +43,8 @@ class OSWDAMarket(OSWMarket):
 
     """
 
-    def __init__(self, start_date, end_date, market_name:str="da_energy_market", market_timing:dict=None, min_freq:int=60, window:int=24, lookahead:int=0, **kwargs):
+    def __init__(self, start_date, end_date, market_name:str="da_energy_market", market_timing:dict=None,
+                 min_freq:int=60, window:int=24, lookahead:int=0, **kwargs):
         """
         Class the specifically runs the OSW DA energy market
 
@@ -78,16 +80,3 @@ class OSWDAMarket(OSWMarket):
                 "initial_state": "idle",
                 "market_interval": 86400
             }
-        
-
-# def clear_market(self):
-#     """
-#     Overloaded method of OSWMarket
-#
-#     Grab all the bids and run the DA UC optimization and then return the results
-#
-#     market_results is an attribute of the OSWMarket class
-#     """
-#     pass
-
-    

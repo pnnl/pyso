@@ -3,3 +3,5 @@ __pycache__/
 dependencies.log
 .idea/*
 *.DS_Store
+# place things that shouldn't be committed in a folder called scratch
+*/scratch/*

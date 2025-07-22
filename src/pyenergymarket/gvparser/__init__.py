@@ -185,16 +185,16 @@ class GVParse(DataProvider):
         """Get date range based on the values in self.defaults["time"]
         floors the result to hourly resolution since this is what is in the GV database
         """
-        
+
         if self._daterange is None:
             datefrom = self.defaults["time"]["datefrom"]
             dateto   = self.defaults["time"]["dateto"]
             min_freq = self.defaults["time"]["min_freq"]
             periods  = self.defaults["time"]["periods"]
             self._actual_res_daterange = mk_daterange(start = datefrom, end=dateto, min_freq=min_freq, periods=periods)
-            self._daterange = self._actual_res_daterange.floor('h').union(self._actual_res_daterange.ceil('h')).drop_duplicates()#self._actual_res_daterange.floor("h")
             # self._daterange = h5fun.mk_daterange(dfts=self.h5("/area/LOAD"), datefrom=datefrom, dateto=dateto)
-        
+            self._daterange = self._actual_res_daterange.floor('h').union(self._actual_res_daterange.ceil('h')).drop_duplicates()#self._actual_res_daterange.floor("h")
+
         return self._daterange
     
     @property
@@ -436,6 +436,7 @@ class GVParse(DataProvider):
         """Add branches to Egret model"""
         
         branch = dict()
+        dc_branch = dict()
         self.h5.add_branch_busnames()
         for i in range(self.h5("/mdb/Branch").shape[0]):
             br = self.h5("/mdb/Branch").iloc[i,:]
@@ -448,10 +449,9 @@ class GVParse(DataProvider):
             if br.DCLineNumber > 0:
                 ## dc line
                 tmp = self._collect_dcline_brtab(br)
-                if "dc_branch" not in self.mdl.data["elements"]:
-                    self.mdl.data["elements"]["dc_branch"] = dict()
-                self.mdl.data["elements"]["dc_branch"][self.mk_br_str(br, self.mdl.data["elements"]["dc_branch"].keys())] = tmp
-                continue # don't add to branch set!!!
+                # Check to see if this element has already been added to the dc_branch dict
+                dc_branch[self.mk_br_str(br, check=dc_branch.keys())] = tmp
+                continue # don't add dc_branches to branch set!!!
             elif (br.PhaseShiftLB != 0) and (br.PhaseShiftUB != 0):
                 ## PAR
                 tmp = self._collect_par(br)
@@ -465,6 +465,9 @@ class GVParse(DataProvider):
             branch[self.mk_br_str(br, check=branch.keys())] = tmp
         ### add to model
         self.mdl.data["elements"]["branch"] = branch
+        if len(dc_branch.keys()) > 0:
+            # Only populate dc_branches if there is at least one branch in the model
+            self.mdl.data["elements"]["dc_branch"] = dc_branch
 
           
         # note, will want to distinguish between lines and transformers, PARS, and dclines
@@ -756,7 +759,7 @@ class GVParse(DataProvider):
                 "distgen": [],
                 "p_load": {
                     "data_type": "time_series",
-                    "values": ncl.loc[i, "PL"]*np.ones(len(self.daterange))
+                    "values": ncl.loc[i, "PL"]*np.ones(len(self.actual_res_daterange))
                 }
             }
             if self.get_reactive:
@@ -764,7 +767,7 @@ class GVParse(DataProvider):
                 load[k]["qp"] = 0 if (ncl.loc[i,"PL"] == 0) else ncl.loc[i, "QL"]/ncl.loc[i,"PL"] # store for consistency
                 load[k]["q_load"] = {
                     "data_type": "time_series",
-                    "values": ncl.loc[i, "QL"]*np.ones(len(self.daterange))
+                    "values": ncl.loc[i, "QL"]*np.ones(len(self.actual_res_daterange))
                 }
 
         ### add to modele in
@@ -812,7 +815,7 @@ class GVParse(DataProvider):
         #     tmp = {"data_type": "time_series", "values": []}
         tmp = []
         ## collect data for each time interval
-        for t in self.daterange:
+        for t in self.actual_res_daterange: # Need to use actual daterange to ensure correct RT implementation
             _scale_factor = scale_factor # copy for this time instant of any additional/external scale factor
             year = t.year
             month = t.month
@@ -826,7 +829,7 @@ class GVParse(DataProvider):
         unique_vals = np.unique(tmp)
         if len(unique_vals) == 1:
             return unique_vals[0]
-        
+
         if typ == "time_series":
             return {"data_type": "time_series", "values": tmp}
         elif typ == "avg":

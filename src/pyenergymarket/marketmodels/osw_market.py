@@ -16,10 +16,11 @@ import logging
 import pandas as pd
 import numpy as np
 import copy
+
+from numba.cuda.cudaimpl import ptx_max_f4
 from transitions import Machine
 from ..engine import EnergyMarket
-from ..utils.timeutils import mk_daterange
-
+from ..utils.timeutils import count_onoff, mk_daterange
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -74,9 +75,9 @@ class OSWMarket():
         self.timestep = 0
         self.current_start_time = self.start_times[self.timestep]
         self.last_state = None
+        self.send_horizon_message = True # Will send a message when timestamp is past the horizon
         self.market_timing  = market_timing
         self.last_state_time = 0
-        # self.next_state_time = None 
         self.next_state_time = 0
         self.market_results = {}
         self.state_list = list(market_timing["states"].keys())
@@ -91,15 +92,7 @@ class OSWMarket():
         self.state_machine.on_enter_clearing("clear_market")
         self.validate_market_timing(self.market_timing)
         self.commitment_hist = None
-        
-
-        # Define callback_functions
-        # self.state_machine.on_enter_clearing("calc_transition_times")
-
-        # Adding definitions for state transition callbacks
-        # "self.clear_market" is the name of the method called when entering
-        # the "clearing" state
-        # _e.g.:_ self.state_machine.on_enter_clearing("self.clear_market")
+        self.pre_simulation_days = None
 
         # This translates all the kwarg key-value pairs into class attributes
         self.__dict__.update(kwargs)
@@ -113,29 +106,27 @@ class OSWMarket():
         """
         pass
 
-    # def init_commitment_hist(self, init_default=1):
-    #     """
-    #     Creates dictionaries for commitment and initial status of generators (and storage).
-    #     These are empty to start and will be appended as markets are cleared
-    #     Args:
-    #         init_default (Union[float, int]): starting status. Negative # = off  Defaults to 1
-    #                                                            Positive # = on
-    #     """
-    #     if self.em is None:
-    #         raise ValueError("Cannot set commitment/status dictionaries without a market model")
-    #     else:
-    #         # (Empty) history of commitments for all model elements with a commitment variable.
-    #         # Using the same structure as Egret and looking at the data within the Egret model
-    #         self.commitment_hist = {}
-    #         for etype, e_dict in self.em.mdl.data['elements'].items():
-    #             # etype is 'generator', 'renewable', 'load', etc. - Egret types. e_dict holds each unit's info
-    #             # Check that this element could be committed (optional - slight speedup but risk of missing new types
-    #             if etype in ['generator', 'storage']:
-    #                 for unit, u_dict in e_dict.items():
-    #                     self.commitment_hist[etype] = {unit: {'commitment':
-    #                                                               {'data_type':'time_series',
-    #                                                                'timestamps':[],
-    #                                                                'values':[]}}}
+    def reset_timestep(self, timestep=0, shift_commitment=True):
+        """ Resets the timestep to 0 (option to fix to a different value)
+            This also sends the commitment history backward by the number
+            of timesteps.
+        """
+        self.timestep = timestep
+        self.current_start_time = self.start_times[self.timestep] # Also reset current start time
+        # Option to also shift the commitment history times back by the
+        # start/stop time difference. This behavior is intended to support
+        # pre-simulation runs in which the commitments happened in the past
+        if shift_commitment:
+            # Compute the time to shift as the difference between the
+            start_time = self.start_times[0]
+            commitment_end_time = self.commitment_hist['timestamps'][-1]
+            # We also add the interval for day-ahead since the end time is not inclusive of the last time step
+            if 'day_ahead' in self.market_name.lower():
+                interval = commitment_end_time - self.commitment_hist['timestamps'][-2]
+                commitment_end_time += interval
+            time_shift = commitment_end_time - start_time
+            for i in range(len(self.commitment_hist['timestamps'])):
+                self.commitment_hist['timestamps'][i] -= time_shift
 
     @staticmethod
     def _prep_commitment_hist(commitment_dict, etype, unit):
@@ -171,7 +162,7 @@ class OSWMarket():
                                Note, if merge_dict is specified, Egret model will be ignored. Keep='new' will use
                                the merge_dict values in case of duplicate timestamps.
         """
-        assert keep in ['new', 'old'], "keep must be either 'new' or 'old'"
+        assert keep in ['new', 'old'], f"keep must be either 'new' or 'old', not {keep}"
         # Create dict if needed with the timestamps as a top level key (shared by all generators/elements)
         if self.commitment_hist is None:
             self.commitment_hist = {'timestamps':[]}
@@ -188,7 +179,7 @@ class OSWMarket():
             loop_dict = merge_dict
         for etype, e_dict in loop_dict.items():
             # etype is 'generator', 'renewable', 'load', etc. - Egret types. e_dict holds each unit's info
-            # Restrict to committable elements (optional - slight speedup but risk of missing new types
+            # Restrict to committable elements (optional - slight speedup but risk of missing new types)
             if etype in ['generator']:
                 for unit, u_dict in e_dict.items():
                     # Add empty key if it doesn't already exist. Structure matches Egret (with timestamps added)
@@ -201,6 +192,7 @@ class OSWMarket():
                     # We will use the new value (from the model) as the latest
                     # [Optional] Could clean this up with np.intersect1d or something
                     commit_values_hist = self.commitment_hist[etype][unit]['commitment']['values']
+                    _commit_vals_hist = copy.copy(commit_values_hist)
                     if merge_dict is None:
                         if 'commitment' in u_dict.keys():
                             commit_values_new = u_dict['commitment']['values']
@@ -222,9 +214,20 @@ class OSWMarket():
                     sorted_inds = np.argsort(_commit_times_hist)
                     _commit_times_hist = list(np.array(_commit_times_hist)[sorted_inds])
                     commit_values_hist = list(np.array(commit_values_hist)[sorted_inds])
+                    commit_values_hist = [int(cvh) for cvh in commit_values_hist] # Change to int instead of int64
                     # Set commitment values
                     self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
         self.commitment_hist['timestamps'] = _commit_times_hist
+
+    def valid_time_horizon(self):
+        """ Returns T if current start time is within the horizon, otherwise F """
+        if self.current_start_time > max(self.start_times):
+            if self.send_horizon_message:
+                logger.info(f"Current start time {self.current_start_time} is past horizon {max(self.start_times)}; "
+                            "Market will not be cleared")
+                self.send_horizon_warning = False  # Only send warning once
+            return False
+        return True
 
     def clear_market(self, local_save=False):
         """
@@ -234,20 +237,17 @@ class OSWMarket():
         implement the necessary operates to clear the market in question.
 
         Args:
-            hold_time (bool, optional): if True, the market will not advance the timestep
-                                        This is intended for an initial market clearing only.
             local_save (bool, optional): if True, will save a JSON with the results at each timestep
         """
         # Don't run market if this start time exceeds the start time list
-        if self.current_start_time > max(self.start_times):
-            # TODO: Validate this and add a version to the RT market (if needed...)
-            logger.warning(f"Current start time {self.current_start_time} is past horizon {max(self.start_times)}; "
-                        "Market will not be cleared")
+        if not self.valid_time_horizon():
             return
+
         self.em.get_model(self.current_start_time)
+        self.em.update_initial_conditions(self.em.mdl_sol)
         self.em.solve_model()
         if local_save:
-            self.em.save_model(f'{self.market_name}_results_{self.timestep}.json')
+            self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
         self.market_results = self.em.mdl_sol
         self.update_commitment_hist()
         self.timestep += 1
@@ -275,23 +275,14 @@ class OSWMarket():
         self.current_state = self.state
         logger.debug(self.market_name, "Last state:", self.last_state)
         logger.debug(self.market_name, "Next state:", self.current_state)
-        # TODO Debug why logs don't make it to log but prints do
         logger.info(f"{self.market_name} moved from {self.last_state} to {self.current_state}")
         return self.current_state
         
-    def calculate_next_state_time(self,
-                            #    market_timing: dict,
-                            #    current_state: str,
-                            #    next_state_time: float,
-                               ) -> tuple[float, float]:
+    def calculate_next_state_time(self) -> tuple[float, float]:
         """
         Calculate the value of the next state in terms of simulation time
         based on the timing of the next state in the state machine.
         """
-        # Check - if we've reached the end, next time is returned as -1
-        # print("Timestep", self.timestep, " Start times:", self.start_times)
-        # if self.timestep >= len(self.start_times):
-        #     return self.current_start_time, -999
         last_state_time = self.last_state_time
         self.next_state_time = self.market_timing["states"][self.current_state]["duration"] \
                             + last_state_time \
@@ -328,5 +319,4 @@ class OSWMarket():
         # Generate hourly datetime index
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
-
     
