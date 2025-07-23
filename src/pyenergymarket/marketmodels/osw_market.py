@@ -114,7 +114,7 @@ class OSWMarket():
         implement the necessary operations to update the market in question.
         # """
 
-        print("BIDS COLLECTED", self.market_name, self.osw_bids)
+        # print("BIDS COLLECTED", self.market_name, self.osw_bids)
         for key in self.osw_bids.keys():
             self.em.mdl.data['elements']['generator'][key] = self.osw_bids[key]
 
@@ -254,8 +254,8 @@ class OSWMarket():
                     self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
         self.commitment_hist['timestamps'] = _commit_times_hist
 
-    def apply_contingencies(self, contingency_list=None, scale_branch_list=['4202_4203_1'],
-                            scale_ratio=1.2):
+    def apply_contingencies(self, contingency_list=None, scale_branch_list=['4202_4203_1', '4001_4204_1', '1002_1003_1', '1002_1003_2'],
+                            scale_ratio=2):
         """ If including contingencies, turn off unused branches """
         # Apply contingencies: mark specified branches out of service
         if contingency_list:

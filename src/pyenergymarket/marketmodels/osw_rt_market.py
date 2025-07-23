@@ -176,9 +176,6 @@ class OSWRTMarket(OSWMarket):
                         s_dict[ramp_key] = s_dict[ramp_key] * 2
             self.em.solve_model()
 
-        for g in self.em.mdl.data['elements']['generator']:
-            print(self.market_name, g)
-
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
         self.market_results = self.em.mdl_sol
