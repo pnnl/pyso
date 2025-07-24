@@ -45,6 +45,23 @@ def as_requirements(self:GVParse):
             raise ValueError(f"Unknown AS Requirement Area Type {req.Type}")
         
 
+# def get_as_requirement(self:GVParse, typ:str, req:pd.Series, name:str) -> dict:
+#     """get AS requirement
+
+#     Args:
+#         str: (str): area or system
+#         req (pd.Series): row from the mdb/AreaRegionAS key specifying the requirement 
+#         name (str): area name or "System"
+#     """
+
+#     if req.ShapeAdderFlag:
+#         requirement = self.h5(f"/{typ}/{self.astype2gvkey[req.ASType]}_REQUIREMENT").loc[self.daterange, name].values
+#     else:
+#         # Base on percentage of load and generation
+#         # we'll simplify here and simply add the BaseLoadPercent and Generation Percent
+#         requirement = self.h5(f"/{typ}/LOAD").loc[self.daterange, name].values * (req.BaseLoadPercent + req.GenerationPercent)
+#     return {"data_type": "time_series", "values": requirement}
+
 def get_as_requirement(self:GVParse, typ:str, req:pd.Series, name:str) -> dict:
     """get AS requirement
 
@@ -60,4 +77,12 @@ def get_as_requirement(self:GVParse, typ:str, req:pd.Series, name:str) -> dict:
         # Base on percentage of load and generation
         # we'll simplify here and simply add the BaseLoadPercent and Generation Percent
         requirement = self.h5(f"/{typ}/LOAD").loc[self.daterange, name].values * (req.BaseLoadPercent + req.GenerationPercent)
+    # Interpolate requirement to actual times
+    # Create dataframe with daterange as index
+    df = pd.DataFrame({'requirement': requirement})
+    df.index = self.daterange
+    # Interpolate
+    df = self.interpolate_time(df)
+    # Extract values
+    requirement = df['requirement'].values
     return {"data_type": "time_series", "values": requirement}

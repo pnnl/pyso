@@ -126,10 +126,13 @@ class EnergyMarket:
         """
         if mdl_sol is None:
             mdl_sol = self.mdl_sol
+            #this ensures that this function is skipped on the first pass when the model is None
+            if mdl_sol is None:
+                return
 
         # Loop over all branches
-        for b, b_dict in mdl_sol.elements(“branch”):
-            max_flow = np.max(np.abs(b_dict["pf"]))  # Max absolute value of the flow on the element
+        for b, b_dict in mdl_sol.elements("branch"):
+            max_flow = np.max(np.abs(b_dict["pf"]["values"]))  # Max absolute value of the flow on the element
             limit = b_dict["rating_long_term"]       # Limit on the element (NEED TO MODIFY TO EMERGENCY LIMIT IF CONTINGENCY)
             tolerance = tolerance_percentage * limit # Calculate dynamic tolerance based on percentage
 
@@ -148,14 +151,14 @@ class EnergyMarket:
                     if self.monitored_branches[b] > max_counter:
                         del self.monitored_branches[b]
                         # Reset the "lazy" constraint to not track
-                        b_dict[“lazy”] = True
+                        b_dict["lazy"] = True
             else:
                 # Constraint is not tracked; check if it is binding
                 if abs(max_flow - limit) <= tolerance:
                     # Add the constraint to the tracker with a counter value of 0
                     self.monitored_branches[b] = 0
                     # Since it is binding, set "lazy" attribute to track
-                    b_dict[“lazy”] = False
+                    b_dict["lazy"] = False
 
     def solve_model(self, mdl_sol:ModelData=None):
         """Run the egret model in self.mdl
