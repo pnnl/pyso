@@ -306,7 +306,7 @@ class OSWMarket():
                         f"Branch '{br}' not found; cannot scale parameters"
                     )
         # Egret script to add a generator at each node at load curtailment cost (ensures feasibility)
-        # add_load_curtail(self.em.mdl)
+        add_load_curtail(self.em.mdl)
 
     def add_gens(self):
         """ Adds generators, including full Egret model data information to the model.
