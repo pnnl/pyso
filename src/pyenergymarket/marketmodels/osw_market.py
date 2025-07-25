@@ -21,7 +21,7 @@ from numba.cuda.cudaimpl import ptx_max_f4
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import count_onoff, mk_daterange, get_value_at_time
-# from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
+from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
