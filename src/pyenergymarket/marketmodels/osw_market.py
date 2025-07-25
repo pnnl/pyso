@@ -184,7 +184,7 @@ class OSWMarket():
     #                                              'values': []}}
     #     return commitment_dict
 
-    def store_commitment_hist(self, keep='new', merge_dict=None):
+    def store_commitment_hist(self, keep='new', merge_dict=None, omit=[]):
         """
         Updates the commitment and initial status of generators (and storage) based on the
         model solution from a cleared market. Stored in the self.commitment_hist dictionary
@@ -196,7 +196,18 @@ class OSWMarket():
             merge_dict (dict): Option to merge a commitment history (typically merging DA into RT). Defaults to None.
                                Note, if merge_dict is specified, Egret model will be ignored. Keep='new' will use
                                the merge_dict values in case of duplicate timestamps.
+            omit (list): List of strings for generators to omit. This can be part of the name. For example:
+                             omit = ['_w_new'] will omit any generators containing '_w_new' in their name
         """
+        # Helper function to check if any omit strings are in the unit name
+        def omit_unit(unit:str, omit:list):
+            omit_status = False
+            for om in omit:
+                if om in unit:
+                    omit_status = True
+                    break
+            return omit_status
+
         assert keep in ['new', 'old'], f"keep must be either 'new' or 'old', not {keep}"
         # Create dict if needed with the timestamps as a top level key (shared by all generators/elements)
         if self.commitment_hist is None:
@@ -217,6 +228,8 @@ class OSWMarket():
             # Restrict to committable elements (optional - slight speedup but risk of missing new types)
             if etype in ['generator']:
                 for unit, u_dict in e_dict.items():
+                    if omit_unit(unit, omit):
+                        continue # Skip if unit name is in the omit list
                     # Add empty key if it doesn't already exist. Structure matches Egret (with timestamps added)
                     self.commitment_hist = self._prep_commitment_hist(self.commitment_hist, etype, unit)
                     # First time through, set the initial status (this is fixed based on the starting initial_status)
@@ -249,7 +262,7 @@ class OSWMarket():
                     sorted_inds = np.argsort(_commit_times_hist)
                     _commit_times_hist = list(np.array(_commit_times_hist)[sorted_inds])
                     commit_values_hist = list(np.array(commit_values_hist)[sorted_inds])
-                    commit_values_hist = [int(cvh) for cvh in commit_values_hist] # Change to int instead of int64
+                    commit_values_hist = [int(cvh) if isinstance(cvh, int) else cvh for cvh in commit_values_hist] # Change to int instead of int64
                     # Set commitment values
                     self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
         self.commitment_hist['timestamps'] = _commit_times_hist
@@ -408,14 +421,14 @@ class OSWMarket():
         self.add_gens()
         self.em.update_initial_conditions(self.em.mdl_sol)
         self.apply_contingencies(contingency_list=contingency_list)
-        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
+        # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
         if self.local_save:
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
         self.market_results = self.em.mdl_sol
-        self.store_commitment_hist()
+        self.store_commitment_hist(omit=['_load_curtail'])
         self.store_storage_soc() # Note this is intended for DA only right now - RT uses DA values
         self.timestep += 1
         if self.timestep >= len(self.start_times):
