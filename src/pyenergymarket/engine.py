@@ -133,13 +133,13 @@ class EnergyMarket:
         # Loop over all branches
         for b, b_dict in mdl_sol.elements("branch"):
             max_flow = np.max(np.abs(b_dict["pf"]["values"]))  # Max absolute value of the flow on the element
-            limit = b_dict["rating_long_term"]       # Limit on the element (NEED TO MODIFY TO EMERGENCY LIMIT IF CONTINGENCY)
+            limit = abs(b_dict["rating_long_term"])       # Limit on the element (NEED TO MODIFY TO EMERGENCY LIMIT IF CONTINGENCY)
             tolerance = tolerance_percentage * limit # Calculate dynamic tolerance based on percentage
 
             # Check if constraint is tracked
             if b in self.monitored_branches:
                 # Check if the constraint is binding
-                if abs(max_flow - limit) <= tolerance:
+                if (abs(max_flow - limit) <= tolerance) or (max_flow >= limit):
                     # Constraint is still binding; keep it in the tracker and reset value to 
                     # zero to show that it is still freshly violating
                     self.monitored_branches[b] = 0
@@ -154,7 +154,7 @@ class EnergyMarket:
                         b_dict["lazy"] = True
             else:
                 # Constraint is not tracked; check if it is binding
-                if abs(max_flow - limit) <= tolerance:
+                if (abs(max_flow - limit) <= tolerance) or (max_flow >= limit):
                     # Add the constraint to the tracker with a counter value of 0
                     self.monitored_branches[b] = 0
                     # Since it is binding, set "lazy" attribute to track
