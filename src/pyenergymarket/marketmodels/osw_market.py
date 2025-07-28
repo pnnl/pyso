@@ -27,6 +27,27 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.WARNING)
 
+def convert_64(json_dict):
+    """ Recursively converts np.int64/np.float64 to int/float to save in json format """
+    # Helper function to convert int/float
+    def _convert_64(number):
+        if isinstance(number, int) or isinstance(number, np.int64):
+            return int(number)
+        elif isinstance(number, float) or isinstance(number, np.float64):
+            return float(number)
+        else:
+            return number
+    # Loop through dictionary, recursing if another dict is found
+    for key, value in json_dict.items():
+        if isinstance(value, dict):
+            value = convert_64(value)
+        elif isinstance(value, list):
+            value = [_convert_64(v) for v in value]
+        elif isinstance(value, int) or isinstance(value, float): # Isinstance is also true for int64/float64
+            value = _convert_64(value)
+        json_dict[key] = value
+    return json_dict
+
 class OSWMarket():
     """
     TODO: describe this class
@@ -421,13 +442,14 @@ class OSWMarket():
         self.add_gens()
         self.em.update_initial_conditions(self.em.mdl_sol)
         self.apply_contingencies(contingency_list=contingency_list)
-        # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
+        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
         if self.local_save:
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
         self.market_results = self.em.mdl_sol
+        self.market_results.data = convert_64(self.market_results.data)
         self.store_commitment_hist(omit=['_load_curtail'])
         self.store_storage_soc() # Note this is intended for DA only right now - RT uses DA values
         self.timestep += 1

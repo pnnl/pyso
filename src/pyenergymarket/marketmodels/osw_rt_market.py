@@ -17,7 +17,7 @@ import logging
 import pandas as pd
 import numpy as np
 from transitions import Machine
-from .osw_market import OSWMarket
+from .osw_market import OSWMarket, convert_64
 from ..utils.timeutils import mk_daterange
 from ..utils.ioutils import Logger
 # from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
@@ -156,7 +156,8 @@ class OSWRTMarket(OSWMarket):
             return
         self.em.get_model(self.current_start_time)
         self.update_em_model(contingency_list=contingency_list)
-        # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
+        self.em.mdl.data = convert_64(self.em.mdl.data)
+        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
 
         # self.collect_bids()
 
@@ -179,6 +180,7 @@ class OSWRTMarket(OSWMarket):
         # Put back in_service=False branches (these are removed by default in Egret solution)
         self.restore_lines()
         self.market_results = self.em.mdl_sol
+        self.market_results.data = convert_64(self.market_results.data)
         # If using fixed commitment history we do not want to update this during real-time
         if not self.fixed_commitment:
             self.store_commitment_hist(omit=['_load_curtail'])
