@@ -115,7 +115,7 @@ class EnergyMarket:
     #                 # Set lazy attribute to True for untracked constraints
     #                 b_dict[“lazy”] = True
 
-    def update_constraints(self, mdl_sol:ModelData=None, max_counter=5, tolerance_percentage=0.2):
+    def update_constraints(self, mdl_sol:ModelData=None, max_counter=1, tolerance_percentage=0.2):
         """
         Update binding constraints violations before each model solve
 
