@@ -17,7 +17,6 @@ import pandas as pd
 import numpy as np
 import copy
 
-from numba.cuda.cudaimpl import ptx_max_f4
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import count_onoff, mk_daterange
