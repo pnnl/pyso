@@ -81,6 +81,9 @@ class OSWDAMarket(OSWMarket):
                 "market_interval": 86400
             }
 
+    # TODO: Remove all of these functions.
+    # TODO: However, first make sure that the storage portions of update_model_from_previous end up
+    # in a new location (somewhere in the engine)
     def clear_market(self, local_save:bool=True, get_mdl:bool=True):
         """
         Overloaded method of OSWMarket
