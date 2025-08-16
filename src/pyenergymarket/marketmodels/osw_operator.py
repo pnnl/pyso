@@ -204,7 +204,7 @@ if __name__ == '__main__':
     parser.add_argument("-e", "--end_time", help="End time in YYYYmmddHHMM format",
                         default='203201020000')
     parser.add_argument("-f", "--filename", help="Name (with path) to egret model_data file",
-                        default='egret/egret/models/tests/uc_test_instances/tiny_uc_1_uncert.json')
+                        default='../../../../egret/egret/models/tests/uc_test_instances/tiny_uc_1_uncert.json')
     args = parser.parse_args()
     options = args.__dict__
     options.update({'save':True})
