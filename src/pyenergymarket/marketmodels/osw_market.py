@@ -17,10 +17,9 @@ import pandas as pd
 import numpy as np
 import copy
 
-from numba.cuda.cudaimpl import ptx_max_f4
 from transitions import Machine
 from ..engine import EnergyMarket
-from ..utils.timeutils import count_onoff, mk_daterange, get_value_at_time
+from ..utils.timeutils import count_onoff, mk_daterange
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -150,27 +149,6 @@ class OSWMarket():
                                                   'values': []}}
         return commitment_dict
 
-    # @staticmethod
-    # def _prep_storage_soc(storage_dict, etype, unit):
-    #     """
-    #     Creates an empty dictionary structure for the commitment history for a given element and generator/unit
-    #
-    #     Args:
-    #         etype (str): Type of element ('generator', 'storage', etc.)
-    #         unit (str): Name of unit (typical use case is Egret generator name)
-    #     """
-    #     if etype not in commitment_dict.keys():
-    #         commitment_dict[etype] = {unit: {'initial_status': None,
-    #                                          'commitment':
-    #                                              {'data_type': 'time_series',
-    #                                               'values': []}}}
-    #     if unit not in commitment_dict[etype].keys():
-    #         commitment_dict[etype][unit] = {'initial_status': None,
-    #                                         'commitment':
-    #                                             {'data_type': 'time_series',
-    #                                              'values': []}}
-    #     return commitment_dict
-
     def store_commitment_hist(self, keep='new', merge_dict=None):
         """
         Updates the commitment and initial status of generators (and storage) based on the
@@ -260,12 +238,12 @@ class OSWMarket():
         # Create dict if needed with the timestamps as a top level key (shared by all storage units)
         use_soc_init = False
         if self.storage_soc is None:
-            self.storage_soc = {'timestamps': time_keys, 'storage': {}}
+            self.storage_soc = {'system':{'time_keys': time_keys}, 'elements': {'storage': {}}}
             # The first time through we use soc init (all other times it is same as last of previous)
             use_soc_init = True
         else:
             # Don't copy the first interval (it was added last time by the end padding)
-            self.storage_soc['timestamps'] = self.storage_soc['timestamps'].append(time_keys[1:])
+            self.storage_soc['system']['time_keys'] = self.storage_soc['system']['time_keys'].append(time_keys[1:])
         # loop through storage units
         for storage, storage_dict in self.em.mdl_sol.data['elements']['storage'].items():
             soc_values = storage_dict['state_of_charge']['values'][:max_intervals]
@@ -273,10 +251,10 @@ class OSWMarket():
                 soc_init = storage_dict['initial_state_of_charge']
                 soc_values = np.append(np.array([soc_init]), soc_values)
             # If previous values are in the storage dictionary, we will append new values to the end
-            if storage in self.storage_soc['storage'].keys():
-                prev_soc_values = self.storage_soc['storage'][storage]['state_of_charge']['values']
+            if storage in self.storage_soc['elements']['storage'].keys():
+                prev_soc_values = self.storage_soc['elements']['storage'][storage]['state_of_charge']['values']
                 soc_values = np.append(prev_soc_values, soc_values)
-            self.storage_soc['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
+            self.storage_soc['elements']['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
                                                                         'values': soc_values}}
 
     def valid_time_horizon(self):
@@ -380,61 +358,3 @@ class OSWMarket():
         # Generate hourly datetime index
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
-
-
-    def update_state_of_charge(self, storage, market_type='day_ahead'):
-        """
-        Updates the state of charge in the egret ModelData object for the given storage
-        Two situations:
-            market_type = 'day_ahead' populates init_state_of_charge from the end of the previous solution
-                           and sends end_state_of_charge = init_state_of_charge
-            market_type = 'real_time' populates initial state of charge based on self.storage_soc (saved from DA)
-                          at the current time and end_state_of_charge at the end of the window + lookahead
-        """
-        window = self.em.configuration["time"]["window"]
-        if market_type == 'day_ahead':
-            # If no solution exists (first time) just use whatever is already in the input model
-            if self.em.mdl_sol is None:
-                return
-            # Use soc and end of window (these are the values saved, excluding lookahead)
-            self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] \
-                = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window-1]
-            self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] \
-                = self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge']
-        elif market_type == 'real_time':
-            # If no saved storage, we have no reference to use
-            if self.storage_soc is None:
-                return
-            # Initial soc is the self.storage_soc at current time (which may require interpolation)
-            # We restrict to the last 48 intervals (assumes soc is stored hourly, which is true at time of creation)
-            limit = 48
-            da_soc_series = self.storage_soc['storage'][storage]['state_of_charge']['values'][-limit:]
-            da_time_keys = self.storage_soc['timestamps'][-limit:]
-            # We get initial soc from the last RT interval, when available. Otherwise we lookup from DA value
-            if self.em.mdl_sol is None:
-                lookup_init_soc = get_value_at_time(da_soc_series, da_time_keys, self.current_start_time)
-            else:
-                lookup_init_soc \
-                    = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window-1]
-            # Bound soc on interval [0, 1]
-            lookup_init_soc = min(1, max(0, lookup_init_soc))
-            self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] = lookup_init_soc
-            # For end soc we use the same da series and time keys, but find end interval time
-            periods = self.em.configuration["time"]["window"] + self.em.configuration["time"]["lookahead"]
-            min_freq = self.em.configuration["time"]["min_freq"]
-            daterange = mk_daterange(self.current_start_time, min_freq=min_freq, periods=periods)
-            # While loop ensures that we don't extend past the horizon (only affects last interval)
-            end_soc_found = False
-            lookback, limit = 1, len(daterange)
-            lookup_end_soc = None
-            while not end_soc_found and lookback < limit:
-                try:
-                    # End soc always comes from day-ahead values
-                    lookup_end_soc = get_value_at_time(da_soc_series, da_time_keys, daterange[-1])
-                    end_soc_found = True
-                except ValueError:
-                    lookback += 1
-            if lookup_end_soc is not None:
-                # Bound soc on interval [0, 1]
-                lookup_end_soc = min(1, max(0, lookup_end_soc))
-                self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] = lookup_end_soc

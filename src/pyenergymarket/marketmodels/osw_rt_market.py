@@ -125,7 +125,7 @@ class OSWRTMarket(OSWMarket):
             update_mode = 'copy'
             use_sol = self.da_mdl_sol
         # Update generator initial power and initial status
-        self.em.update_initial_conditions(use_sol, update_mode=update_mode)
+        self.em.update_initial_conditions(use_sol, update_mode=update_mode, soc_reference=self.storage_soc)
         # If using a pre-simulation, there may be infeasibilities in the first RT interval, so we require a fix
         # Check for the conditions in which this can happen
         fix_infeasible = False

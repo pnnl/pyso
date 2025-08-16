@@ -2,7 +2,7 @@
 EnergyMarket class is here.
 """
 from .utils.ioutils import merge_configs, Logger
-from .utils.timeutils import mk_daterange, count_onoff
+from .utils.timeutils import mk_daterange, count_onoff, get_value_at_time
 from .utils.egretutils import NumpyEncoder
 from .pyenergymarket_defaults import energymarket_defaults
 import abc
@@ -83,7 +83,8 @@ class EnergyMarket:
         self.logger.info(f"Forming model starting at: {daterange[0]} - {daterange[-1]}")
         self.mdl = self.data_provider.get_model(daterange)
 
-    def update_initial_conditions(self, mdl_sol:Union[ModelData, None]=None, update_mode:str='calculate'):
+    def update_initial_conditions(self, mdl_sol:Union[ModelData, None]=None, update_mode:str='calculate',
+                                  soc_reference:Union[ModelData, dict, None]=None):
         """ This function updates 'initial_p_output' and 'initial_status' for all
             generators in an Egret ModelData object. For the reference it will make a
             selection in this order:
@@ -96,6 +97,9 @@ class EnergyMarket:
             update_mode (str): Choose how to update initial conditions.
                                copy - will use the same initial conditions as those in mdl_sol
                                calculate - will use the mdl_sol state at the end of the last window as initial conditions
+            soc_reference (Union[ModelData, dict, None]): Reference state-of-charge targets.
+                               Used only in computing the end_soc for 'calculate' mode.
+                               These may be on a different time resolution than the current EnergyMarket model.
         """
         # Two different update modes (can add more as needed)
         update_options = ['calculate', 'copy']
@@ -133,6 +137,78 @@ class EnergyMarket:
                 # Update initial status for this generator, using timeutils function
                 new_initial_status = count_onoff(previous_mdl_sol.data['elements']['generator'][g], window-1, min_freq)
                 g_dict['initial_status'] = new_initial_status
+
+        # Loop through all storage units in the upcoming model (self.mdl) and update initial_state_of_charge,
+        # end_state_of_charge, initial_charge_rate and initial_discharge_rate
+        for storage, storage_dict in self.mdl.elements(element_type='storage'):
+            # List of keys to update for storage with the max values (or a string for key of max value)
+            update_maxes = {'initial_state_of_charge': 1, 'end_state_of_charge': 1}
+            # When simulating multiple market instances, we may copy information from one market to another.
+            # For example, we may want to pass day-ahead results to a real-time market.
+            if update_mode == 'copy':
+                for key, maxval in update_maxes.items():
+                    if key in previous_mdl_sol.data['elements']['storage'][storage].keys():
+                        storage_dict[key] = float(previous_mdl_sol.data['elements']['storage'][storage][key])
+                        # Enforce maximum (avoids floating point roundoff errors causing constraint violations)
+                        storage_dict[key] = min(storage_dict[key], maxval)
+            elif update_mode == 'calculate':
+                # Get the last value of the time window in the previous solution
+                previous_soc = previous_mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window - 1]
+                storage_dict['initial_state_of_charge'] = min(previous_soc, update_maxes['initial_state_of_charge'])
+                # State-of-charge is handled by its own function.
+                end_soc = self.compute_end_soc(storage, soc_reference)
+                if end_soc is not None:
+                    storage_dict['end_state_of_charge'] = end_soc
+
+    def compute_end_soc(self, storage:str, soc_reference:Union[ModelData, dict, None]=None,
+                        max_num_intervals:Union[int, None]=None):
+        """ This computes the ending state of charge at a given time
+
+        Args:
+            storage (str): The name of the storage unit to use in the calculation
+            soc_reference (Union[ModelData, dict, None]): Reference state-of-charge from a ModelData object (or dict
+                                                          with EGRET ModelData structure)
+            max_num_intervals (int): Maximum number of intervals to use for interpolation
+        """
+        # Parser to interpret soc_reference as either ModelData or dict
+        if soc_reference is None:
+            self.logger.warning("No state-of-charge reference provided to compute ending state-of-charge."
+                                "Proceeding with end state-of-charge defaulting to initial state-of-charge.")
+            return # Cannot proceed without a reference
+        if isinstance(soc_reference, ModelData):
+            reference_data = soc_reference.data
+        else:
+            reference_data = soc_reference
+
+        # Set up the reference state-of-charge and time series
+        ref_soc_series = reference_data['elements']['storage'][storage]['state_of_charge']['values']
+        ref_time_keys = reference_data['system']['time_keys']
+        # We can restrict to the last N intervals to limit interpolation over large inputs
+        if max_num_intervals is  not None:
+            ref_soc_series = ref_soc_series[-max_num_intervals:]
+            ref_time_keys = ref_time_keys[-max_num_intervals:]
+        # Set up the daterange for the current model
+        periods = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
+        min_freq = self.configuration["time"]["min_freq"]
+        model_start_time = self.mdl.data['system']['time_keys'][0]
+        daterange = mk_daterange(model_start_time, min_freq=min_freq, periods=periods)
+        # Find the state_of_charge for the time at the end of the daterange within the reference soc series
+        # While loop ensures that we don't extend past the horizon (this only affects the model if the reference has
+        # insufficient lookahead, which may happen at the end of a simulation)
+        end_soc_found = False
+        lookback, limit = 1, len(daterange)
+        lookup_end_soc = None
+        while not end_soc_found and lookback < limit:
+            try:
+                # End soc always comes from day-ahead values
+                lookup_end_soc = get_value_at_time(ref_soc_series, ref_time_keys, daterange[-1])
+                end_soc_found = True
+            except ValueError:
+                lookback += 1
+        if lookup_end_soc is not None:
+            # Bound soc on interval [0, 1]
+            lookup_end_soc = min(1, max(0, lookup_end_soc))
+        return lookup_end_soc
 
     def solve_model(self):
         """Run the egret model in self.mdl
