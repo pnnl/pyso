@@ -200,8 +200,8 @@ class EnergyMarket:
         lookup_end_soc = None
         while not end_soc_found and lookback < limit:
             try:
-                # End soc always comes from day-ahead values
-                lookup_end_soc = get_value_at_time(ref_soc_series, ref_time_keys, daterange[-1])
+                # End soc is determined based on the reference values.
+                lookup_end_soc = get_value_at_time(ref_soc_series, ref_time_keys, daterange[-lookback])
                 end_soc_found = True
             except ValueError:
                 lookback += 1

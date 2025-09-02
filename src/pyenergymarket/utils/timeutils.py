@@ -3,14 +3,14 @@
 
 import pandas as pd
 import numpy as np
-import math
 from typing import Union
 
-def get_value_at_time(time_series:Union[list, np.ndarray], time_keys:Union[list, np.ndarray, pd.DatetimeIndex],
+def get_value_at_time(values_in:Union[list, np.ndarray], times_in:Union[list, np.ndarray, pd.DatetimeIndex],
                       target_time:Union[str, pd.Timestamp],
+                      min_freq:float,
                       interp:str='linear', wrap:str='periodic',
-                      min_freq:Union[float,None]=None,
-                      reference_value:Union[float,None]=None):
+                      reference_value:Union[float,None]=None,
+                      **kwargs):
     """
     Returns the value at a given target time, based on a time series input and given times. The target time
     does not need to be one of the time keys, but must be within the range of the time keys.
@@ -18,78 +18,74 @@ def get_value_at_time(time_series:Union[list, np.ndarray], time_keys:Union[list,
     23 and 24).
 
     Args:
-          time_series (Union[list, np.ndarray]): A list or array of values
-          time_keys (Union[list, np.ndarray, pd.date_range]): A list or array of times
+          values_in (Union[list, np.ndarray]): A list or array of values
+          times_in (Union[list, np.ndarray, pd.date_range]): A list or array of times
           target_time (Union[str, pd.Timestamp]): The time at which to return a value
+          min_freq (float): The frequency in minutes used for interpolation.
           interp (str, optional): Interpolation method used for the time series Defaults to 'linear'.
                                   Choose from pd.Series.interpolate options or
                                   'beginning' -> Fills in the entire interval with the beginning value (step function)
-          wrap (Union[str,None]): If extrapolating before/after time_keys, selects how to extend time_series
-          min_freq (Union[float,None]): Option to enter the frequency in minutes used for interpolation.
-                                        If None, this will be inferred from target_time.
-          reference_value (Union[float,None]): If extrapolating before/after time_keys,
+                                  'ending' -> Fills in the entire interval with the ending value (step function)
+          wrap (Union[str,None]): If extrapolating before/after times_in, selects how to extend values_in
+          reference_value (Union[float,None]): If extrapolating before/after times_in,
                                                sets reference value (overrides 'wrap' keyword)
 
     Returns:
         value (float): The value at a given target time
     """
     # Helper function for sorting
-    def sort_time_series(time_series, time_keys):
+    def sort_values_in(values_in, times_in):
         # Ensure times and values are sorted ascending
-        sort_inds = np.argsort(time_keys)
-        time_keys = time_keys[sort_inds]
-        time_series = np.array(time_series)[sort_inds]
-        return time_series, time_keys
+        sort_inds = np.argsort(times_in)
+        times_in = times_in[sort_inds]
+        values_in = np.array(values_in)[sort_inds]
+        return values_in, times_in
 
-    assert len(time_series) == len(time_keys), (f"Time series (len={len(time_series)}) and time keys "
-                                                f"(len={len(time_keys)}) must have the same length")
+    if len(values_in) != len(times_in):
+        raise ValueError(f"Time series (len={len(values_in)}) and time keys (len={len(times_in)}) must have the same length")
     # Get times into a consistent format
-    time_keys = pd.to_datetime(time_keys)
-    target_time = pd.to_datetime(target_time)
+    times_in = pd.to_datetime(times_in, **kwargs)
+    target_time = pd.to_datetime(target_time, **kwargs)
     # If we are already at one of the times then return the value - no need to interpolate
-    if target_time in time_keys:
-        target_index = np.where(time_keys == target_time)[0][0]
-        return time_series[target_index]
+    if target_time in times_in:
+        target_index = np.where(times_in == target_time)[0][0]
+        return values_in[target_index]
 
-    time_series, time_keys = sort_time_series(time_series, time_keys)
+    values_in, times_in = sort_values_in(values_in, times_in)
 
-    # Extend the time_series and values by +/- 1 interval (cast as pd.DatetimeIndex to allow use of .append() method)
+    # Extend the values_in and values by +/- 1 interval (cast as pd.DatetimeIndex to allow use of .append() method)
     # We allow +/- 1 interval - if doing this we will extend the arrays
-    t_delta_st = time_keys[1]-time_keys[0]
-    intvl_st = pd.to_datetime([time_keys[0]-t_delta_st]) # 1 interval before start
-    t_delta_end = time_keys[-1]-time_keys[-2] # t_delta_end is equal to t_delta_st for uniform intervals
-    intvl_end = pd.to_datetime([time_keys[-1] + t_delta_end]) # 1 interval after end
+    t_delta_st = times_in[1]-times_in[0]
+    intvl_st = pd.to_datetime([times_in[0]-t_delta_st]) # 1 interval before start
+    t_delta_end = times_in[-1]-times_in[-2] # t_delta_end is equal to t_delta_st for uniform intervals
+    intvl_end = pd.to_datetime([times_in[-1] + t_delta_end]) # 1 interval after end
     if reference_value is not None:
         v1, v2 = reference_value, reference_value
     else:
         # Restrict keyword options to available choices
         wrap_choices = ['periodic', 'same']
-        assert wrap in wrap_choices, f"Keyword wrap must be one of {wrap_choices}"
+        if wrap not in wrap_choices:
+            raise ValueError(f"Keyword wrap must be one of {wrap_choices}")
         if wrap == 'periodic':
-            v1, v2 = time_series[-1], time_series[0]
+            v1, v2 = values_in[-1], values_in[0]
         elif wrap == 'same':
-            v1, v2 = time_series[0], time_series[-1]
-    time_keys_extend = intvl_st.append(time_keys.append(intvl_end))
-    time_series_extend = np.append(np.array([v1]), np.append(time_series, np.array([v2])))
-    if target_time < time_keys_extend[0] or target_time > time_keys_extend[-1]:
-        raise ValueError(f"Target time {target_time} is outside the range of time keys {time_keys}")
+            v1, v2 = values_in[0], values_in[-1]
+    times_in_extend = intvl_st.append(times_in.append(intvl_end))
+    values_in_extend = np.append(np.array([v1]), np.append(values_in, np.array([v2])))
+    if target_time < times_in_extend[0] or target_time > times_in_extend[-1]:
+        raise ValueError(f"Target time {target_time} is outside the range of time keys {times_in}")
 
-    # Infer frequency in minutes if not provided
-    if min_freq is None:
-        tprev_idx = np.where(time_keys <= target_time)[0][0] # index of time key before the target time
-        tprev = time_keys[tprev_idx]
-        if tprev == target_time:
-            min_freq = 60
-        else:
-            t_delta_min = int((target_time - tprev).total_seconds()/60.0)
-            min_freq = math.gcd(60, t_delta_min)
     # Create series, resample and get the value at the target time
-    series = pd.Series(time_series_extend, index=time_keys_extend)
+    series = pd.Series(values_in_extend, index=times_in_extend)
+    # Resamples the time series onto a finer time grid
+    series = series.resample(f'{min_freq}min')
     if interp == 'beginning':
-        interp_series = series.resample(f'{min_freq}min').ffill()
+        interp_series = series.ffill()
+    elif interp == 'ending':
+        interp_series = series.bfill()
     else:
-        interp_series = series.resample(f'{min_freq}min').interpolate(interp)
-    value = interp_series.loc[target_time]
+        interp_series = series.interpolate(interp)
+    value = float(interp_series.loc[target_time])
     return value
 
 def mk_daterange(start:Union[str, pd.Timestamp, None]=None, 
