@@ -13,7 +13,6 @@ import pyenergymarket as pyen
 import argparse, json, datetime
 from scipy.interpolate import CubicSpline
 
-# TODO: Make tiny uc dataprovider to collect tiny_uc_test case and modify (random draws)
 class UncertaintyProvider(DataProvider):
     """ Uncertainty-based data provider. Draws from tiny_uc_1_uncert.json by default  """
     def __init__(self, market_type ='da', seed=None, filename='tiny_uc_1_uncert.json'):
