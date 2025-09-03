@@ -3,13 +3,11 @@
 
 import pandas as pd
 import numpy as np
+import warnings
 from typing import Union
 
 def get_value_at_time(values_in:Union[list, np.ndarray], times_in:Union[list, np.ndarray, pd.DatetimeIndex],
-                      target_time:Union[str, pd.Timestamp],
-                      min_freq:float,
-                      interp:str='linear', wrap:str='periodic',
-                      reference_value:Union[float,None]=None,
+                      target_time:Union[str, pd.Timestamp], min_freq:float, interp:str='linear', wrap:str='periodic',
                       **kwargs):
     """
     Returns the value at a given target time, based on a time series input and given times. The target time
@@ -27,8 +25,6 @@ def get_value_at_time(values_in:Union[list, np.ndarray], times_in:Union[list, np
                                   'beginning' -> Fills in the entire interval with the beginning value (step function)
                                   'ending' -> Fills in the entire interval with the ending value (step function)
           wrap (Union[str,None]): If extrapolating before/after times_in, selects how to extend values_in
-          reference_value (Union[float,None]): If extrapolating before/after times_in,
-                                               sets reference value (overrides 'wrap' keyword)
 
     Returns:
         value (float): The value at a given target time
@@ -53,30 +49,54 @@ def get_value_at_time(values_in:Union[list, np.ndarray], times_in:Union[list, np
 
     values_in, times_in = sort_values_in(values_in, times_in)
 
-    # Extend the values_in and values by +/- 1 interval (cast as pd.DatetimeIndex to allow use of .append() method)
-    # We allow +/- 1 interval - if doing this we will extend the arrays
-    t_delta_st = times_in[1]-times_in[0]
-    intvl_st = pd.to_datetime([times_in[0]-t_delta_st]) # 1 interval before start
-    t_delta_end = times_in[-1]-times_in[-2] # t_delta_end is equal to t_delta_st for uniform intervals
-    intvl_end = pd.to_datetime([times_in[-1] + t_delta_end]) # 1 interval after end
-    if reference_value is not None:
-        v1, v2 = reference_value, reference_value
-    else:
+    # If the target time is not in the interval, we extend the values_in and times_in series
+    if target_time < times_in[0] or target_time > times_in[-1]:
         # Restrict keyword options to available choices
         wrap_choices = ['periodic', 'same']
         if wrap not in wrap_choices:
             raise ValueError(f"Keyword wrap must be one of {wrap_choices}")
-        if wrap == 'periodic':
-            v1, v2 = values_in[-1], values_in[0]
-        elif wrap == 'same':
-            v1, v2 = values_in[0], values_in[-1]
-    times_in_extend = intvl_st.append(times_in.append(intvl_end))
-    values_in_extend = np.append(np.array([v1]), np.append(values_in, np.array([v2])))
-    if target_time < times_in_extend[0] or target_time > times_in_extend[-1]:
-        raise ValueError(f"Target time {target_time} is outside the range of time keys {times_in}")
+        times_in_delta = times_in[1] - times_in[0]  # Get the time interval
+        # Separate handling for adding values to the end or beginning
+        if target_time > times_in[-1]:
+            # Extend the values_in and values by necessary number of intervals (cast as pd.DatetimeIndex to allow use of .append() method)
+            time_to_target = target_time-times_in[-1]
+            num_periods = int(np.ceil(time_to_target.total_seconds()/times_in_delta.total_seconds()))
+            # Note, we require the input times/values to be hourly here. In the future we may want to generalize this.
+            added_times = pd.date_range(times_in[-1] + times_in_delta, time_to_target.ceil('h'), num_periods=num_periods)
+            # We will duplicate the input array (either periodic or constant end) as many times as needed to reach target
+            num_duplicates = int(np.ceil(len(added_times))/len(times_in))
+            if wrap == 'periodic':
+                # Tile will duplicate the array, then restrict any extras so length matches added time array
+                added_values = np.tile(values_in, num_duplicates)[:len(added_times)]
+            elif wrap == 'same':
+                # Uses last value as a constant
+                added_values = np.ones(len(added_times))*values_in[-1]
+            times_in = times_in.append(added_times)
+            values_in = np.concatenate((values_in, added_values))
+        elif target_time < times_in[0]:
+            # Prepend the values_in and values by necessary number of intervals (cast as pd.DatetimeIndex to allow use of .append() method)
+            time_to_target = times_in[0] - target_time
+            num_periods = int(np.ceil(time_to_target.total_seconds() / times_in_delta.total_seconds()))
+            # Note, we require the input times/values to be hourly here. In the future we may want to generalize this.
+            added_times = pd.date_range(time_to_target.ceil('h'), times_in[0] - times_in_delta, num_periods=num_periods)
+            # We will duplicate the input array (either periodic or constant end) as many times as needed to reach target
+            num_duplicates = int(np.ceil(len(added_times)) / len(times_in))
+            if wrap == 'periodic':
+                # Tile will duplicate the array, then cut off unused beginning values to match lengths
+                added_values = np.tile(values_in, num_duplicates)
+                added_values = added_values[(len(added_values) - len(added_times)):]
+            elif wrap == 'same':
+                # Uses first value as a constant
+                added_values = np.ones(len(added_times)) * values_in[0]
+            times_in = added_times.append(times_in)
+            values_in = np.concatenate((added_values, values_in))
+        # Warning if the number of paddings is greater than one
+        if num_duplicates > 1:
+            warnings.warn(f"Target time of {target_time} is {num_duplicates} periods away from input time range."
+                          "This may indicate an error in the timing inputs.")
 
     # Create series, resample and get the value at the target time
-    series = pd.Series(values_in_extend, index=times_in_extend)
+    series = pd.Series(values_in, index=times_in)
     # Resamples the time series onto a finer time grid
     series = series.resample(f'{min_freq}min')
     if interp == 'beginning':
