@@ -78,14 +78,15 @@ class MarketOperator:
     """
     def __init__(self, options):
         # Loads in the options
-        self.save = options['save']
+        self.save = options.get('save', True)
         self.filename = options['filename']
+        self.seed = options.get('seed', None)
 
         # Initialize the market models
         self.start = pd.to_datetime(options['start_time'], format='%Y%m%d%H%M')
         self.end = pd.to_datetime(options['end_time'], format='%Y%m%d%H%M')
-        self.da_market = create_market(mtype='da', start=self.start, end=self.end, filename=self.filename)
-        self.rt_market = create_market(mtype='rt', start=self.start, end=self.end, filename=self.filename)
+        self.da_market = create_market(mtype='da', start=self.start, end=self.end, filename=self.filename, seed=self.seed)
+        self.rt_market = create_market(mtype='rt', start=self.start, end=self.end, filename=self.filename, seed=self.seed)
 
     def _pass_da_to_rt(self):
         # Commitment
@@ -172,9 +173,9 @@ def get_market_timing(mtype):
         }
     return market_timing
 
-def create_market(mtype='da', start=None, end=None, filename=None):
+def create_market(mtype='da', start=None, end=None, filename=None, seed=None):
     """ Builds a market instance """
-    uncertainty_data_provider = UncertaintyProvider(market_type=mtype, filename=filename)
+    uncertainty_data_provider = UncertaintyProvider(market_type=mtype, filename=filename, seed=seed)
     em = pyen.EnergyMarket(uncertainty_data_provider)
     market_timing = get_market_timing(mtype)
     # Format start/end as strings so they will work in osw_market.py
@@ -203,7 +204,8 @@ if __name__ == '__main__':
     parser.add_argument("-e", "--end_time", help="End time in YYYYmmddHHMM format",
                         default='202005020000')
     parser.add_argument("-f", "--filename", help="Name (with path) to egret model_data file",
-                        default='../../../../egret/egret/models/tests/uc_test_instances/five_bus_20200501.json')
+                        default='../../../../egret/egret/models/tests/uc_test_instances/five_bus.json')
+    parser.add_argument("-d", "--seed", help="Integer random seed", type=int, default=9425)
     args = parser.parse_args()
     options = args.__dict__
     options.update({'save':True})
