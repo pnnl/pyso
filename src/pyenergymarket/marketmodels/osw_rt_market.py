@@ -200,7 +200,7 @@ class OSWRTMarket(OSWMarket):
         self.market_results = self.em.mdl_sol
         # If using fixed commitment history we do not want to update this during real-time
         if not self.fixed_commitment:
-            self.update_commitment_hist()
+            self.store_commitment_hist()
         if local_save:
             os.makedirs('data', exist_ok=True)
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
