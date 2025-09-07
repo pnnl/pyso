@@ -62,9 +62,9 @@ def get_value_at_time(values_in:Union[list, np.ndarray], times_in:Union[list, np
             time_to_target = target_time-times_in[-1]
             num_periods = int(np.ceil(time_to_target.total_seconds()/times_in_delta.total_seconds()))
             # Note, we require the input times/values to be hourly here. In the future we may want to generalize this.
-            added_times = pd.date_range(times_in[-1] + times_in_delta, time_to_target.ceil('h'), num_periods=num_periods)
+            added_times = pd.date_range(times_in[-1] + times_in_delta, target_time.ceil('h'), periods=num_periods)
             # We will duplicate the input array (either periodic or constant end) as many times as needed to reach target
-            num_duplicates = int(np.ceil(len(added_times))/len(times_in))
+            num_duplicates = int(np.ceil(len(added_times)/len(times_in)))
             if wrap == 'periodic':
                 # Tile will duplicate the array, then restrict any extras so length matches added time array
                 added_values = np.tile(values_in, num_duplicates)[:len(added_times)]
@@ -78,9 +78,9 @@ def get_value_at_time(values_in:Union[list, np.ndarray], times_in:Union[list, np
             time_to_target = times_in[0] - target_time
             num_periods = int(np.ceil(time_to_target.total_seconds() / times_in_delta.total_seconds()))
             # Note, we require the input times/values to be hourly here. In the future we may want to generalize this.
-            added_times = pd.date_range(time_to_target.ceil('h'), times_in[0] - times_in_delta, num_periods=num_periods)
+            added_times = pd.date_range(target_time.floor('h'), times_in[0] - times_in_delta, periods=num_periods)
             # We will duplicate the input array (either periodic or constant end) as many times as needed to reach target
-            num_duplicates = int(np.ceil(len(added_times)) / len(times_in))
+            num_duplicates = int(np.ceil(len(added_times) / len(times_in)))
             if wrap == 'periodic':
                 # Tile will duplicate the array, then cut off unused beginning values to match lengths
                 added_values = np.tile(values_in, num_duplicates)
