@@ -8,7 +8,7 @@ from typing import Union
 
 def get_value_at_time(values_in:Union[list, np.ndarray], times_in:Union[list, np.ndarray, pd.DatetimeIndex],
                       target_time:Union[str, pd.Timestamp], min_freq:float, interp:str='linear', wrap:str='periodic',
-                      **kwargs):
+                      **time_parse_kwargs):
     """
     Returns the value at a given target time, based on a time series input and given times. The target time
     does not need to be one of the time keys, but must be within the range of the time keys.
@@ -24,7 +24,10 @@ def get_value_at_time(values_in:Union[list, np.ndarray], times_in:Union[list, np
                                   Choose from pd.Series.interpolate options or
                                   'beginning' -> Fills in the entire interval with the beginning value (step function)
                                   'ending' -> Fills in the entire interval with the ending value (step function)
-          wrap (Union[str,None]): If extrapolating before/after times_in, selects how to extend values_in
+          wrap (Union[str,None]): If extrapolating before/after times_in, selects how to extend values_in. Options are:
+                                  'periodic' -> Assumes a period series so beginning of series is appended to the end, etc.
+                                  'same' -> Keeps a constant beginning/ending value for all times outside of window
+          **time_parse_kwargs: Keyword arguments to pass to the pandas to_datetime method.
 
     Returns:
         value (float): The value at a given target time
@@ -40,8 +43,8 @@ def get_value_at_time(values_in:Union[list, np.ndarray], times_in:Union[list, np
     if len(values_in) != len(times_in):
         raise ValueError(f"Time series (len={len(values_in)}) and time keys (len={len(times_in)}) must have the same length")
     # Get times into a consistent format
-    times_in = pd.to_datetime(times_in, **kwargs)
-    target_time = pd.to_datetime(target_time, **kwargs)
+    times_in = pd.to_datetime(times_in, **time_parse_kwargs)
+    target_time = pd.to_datetime(target_time, **time_parse_kwargs)
     # If we are already at one of the times then return the value - no need to interpolate
     if target_time in times_in:
         target_index = np.where(times_in == target_time)[0][0]
@@ -56,43 +59,38 @@ def get_value_at_time(values_in:Union[list, np.ndarray], times_in:Union[list, np
         if wrap not in wrap_choices:
             raise ValueError(f"Keyword wrap must be one of {wrap_choices}")
         times_in_delta = times_in[1] - times_in[0]  # Get the time interval
+        # Get the total start to finish span (add delta to get full span from start to the next start time)
+        times_in_span = times_in[-1] - times_in[0] + times_in_delta
         # Separate handling for adding values to the end or beginning
         if target_time > times_in[-1]:
-            # Extend the values_in and values by necessary number of intervals (cast as pd.DatetimeIndex to allow use of .append() method)
-            time_to_target = target_time-times_in[-1]
-            num_periods = int(np.ceil(time_to_target.total_seconds()/times_in_delta.total_seconds()))
-            # Note, we require the input times/values to be hourly here. In the future we may want to generalize this.
-            added_times = pd.date_range(times_in[-1] + times_in_delta, target_time.ceil('h'), periods=num_periods)
             # We will duplicate the input array (either periodic or constant end) as many times as needed to reach target
-            num_duplicates = int(np.ceil(len(added_times)/len(times_in)))
+            ncopies = int(np.ceil((target_time - times_in[-1])/times_in_span))
+            # Set the new times_in, including copies
+            times_in = pd.date_range(times_in[0], times_in[-1] + times_in_span * ncopies,
+                                     freq=times_in_delta)
+            # Set the updated values_in, depending on wrap choice
             if wrap == 'periodic':
-                # Tile will duplicate the array, then restrict any extras so length matches added time array
-                added_values = np.tile(values_in, num_duplicates)[:len(added_times)]
+                # Tile will duplicate the array (add + 1 to ncopies to account for the original)
+                values_in = np.tile(values_in, ncopies + 1)
             elif wrap == 'same':
                 # Uses last value as a constant
-                added_values = np.ones(len(added_times))*values_in[-1]
-            times_in = times_in.append(added_times)
-            values_in = np.concatenate((values_in, added_values))
+                values_in = np.concatenate((values_in, np.ones(len(values_in*ncopies))*values_in[-1]))
         elif target_time < times_in[0]:
-            # Prepend the values_in and values by necessary number of intervals (cast as pd.DatetimeIndex to allow use of .append() method)
-            time_to_target = times_in[0] - target_time
-            num_periods = int(np.ceil(time_to_target.total_seconds() / times_in_delta.total_seconds()))
-            # Note, we require the input times/values to be hourly here. In the future we may want to generalize this.
-            added_times = pd.date_range(target_time.floor('h'), times_in[0] - times_in_delta, periods=num_periods)
             # We will duplicate the input array (either periodic or constant end) as many times as needed to reach target
-            num_duplicates = int(np.ceil(len(added_times) / len(times_in)))
+            ncopies = int(np.ceil((times_in[0] - target_time) / times_in_span))
+            # Set the new times_in, including copies
+            times_in = pd.date_range(times_in[0] - times_in_span * ncopies, times_in[-1],
+                                     freq=times_in_delta)
+            # Set the updated values_in, depending on wrap choice
             if wrap == 'periodic':
-                # Tile will duplicate the array, then cut off unused beginning values to match lengths
-                added_values = np.tile(values_in, num_duplicates)
-                added_values = added_values[(len(added_values) - len(added_times)):]
+                # Tile will duplicate the array (add + 1 to ncopies to account for the original)
+                values_in = np.tile(values_in, ncopies + 1)
             elif wrap == 'same':
-                # Uses first value as a constant
-                added_values = np.ones(len(added_times)) * values_in[0]
-            times_in = added_times.append(times_in)
-            values_in = np.concatenate((added_values, values_in))
+                # Uses last value as a constant
+                values_in = np.concatenate((values_in, np.ones(len(values_in * ncopies)) * values_in[0]))
         # Warning if the number of paddings is greater than one
-        if num_duplicates > 1:
-            warnings.warn(f"Target time of {target_time} is {num_duplicates} periods away from input time range."
+        if ncopies > 1:
+            warnings.warn(f"Target time of {target_time} is {ncopies} periods away from input time range."
                           "This may indicate an error in the timing inputs.")
 
     # Create series, resample and get the value at the target time

@@ -219,44 +219,6 @@ class OSWMarket():
                     self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
         self.commitment_hist['timestamps'] = _commit_times_hist
 
-    def store_storage_soc(self, max_intervals:int=24):
-        """
-        Saves the storage state-of-charge at the corresponding times. This could possible be merged into a
-        common function with store_commitment_hist that accepts element type and keys, but that may be hard
-        to get correct for general cases.
-
-        Args:
-            max_intervals (int): The maximum number of time intervals to save (default is 24, assuming hourly DA)
-        """
-        # If no storage units are in the model, don't continue
-        if 'storage' not in self.em.mdl_sol.data['elements'].keys():
-            return
-        # Time keys - we pad the last interval since Egret gives soc values at END of interval while keys are START
-        time_keys = pd.to_datetime(self.em.mdl_sol.data['system']['time_keys'])[:max_intervals]
-        time_delta_end_minutes = int((time_keys[-1] - time_keys[-2]).total_seconds() / 60.0)
-        time_keys = time_keys.append(pd.to_datetime([time_keys[-1] + dt.timedelta(minutes=time_delta_end_minutes)]))
-        # Create dict if needed with the timestamps as a top level key (shared by all storage units)
-        use_soc_init = False
-        if self.storage_soc is None:
-            self.storage_soc = {'system':{'time_keys': time_keys}, 'elements': {'storage': {}}}
-            # The first time through we use soc init (all other times it is same as last of previous)
-            use_soc_init = True
-        else:
-            # Don't copy the first interval (it was added last time by the end padding)
-            self.storage_soc['system']['time_keys'] = self.storage_soc['system']['time_keys'].append(time_keys[1:])
-        # loop through storage units
-        for storage, storage_dict in self.em.mdl_sol.data['elements']['storage'].items():
-            soc_values = storage_dict['state_of_charge']['values'][:max_intervals]
-            if use_soc_init:
-                soc_init = storage_dict['initial_state_of_charge']
-                soc_values = np.append(np.array([soc_init]), soc_values)
-            # If previous values are in the storage dictionary, we will append new values to the end
-            if storage in self.storage_soc['elements']['storage'].keys():
-                prev_soc_values = self.storage_soc['elements']['storage'][storage]['state_of_charge']['values']
-                soc_values = np.append(prev_soc_values, soc_values)
-            self.storage_soc['elements']['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
-                                                                        'values': soc_values}}
-
     def valid_time_horizon(self):
         """ Returns T if current start time is within the horizon, otherwise F """
         if self.current_start_time > max(self.start_times):
@@ -288,7 +250,6 @@ class OSWMarket():
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
         self.market_results = self.em.mdl_sol
         self.store_commitment_hist()
-        self.store_storage_soc() # Note this is intended for DA only right now - RT uses DA values
         self.timestep += 1
         if self.timestep >= len(self.start_times):
             # Add a day (exact value doesn't matter, just need something past the horizon)
