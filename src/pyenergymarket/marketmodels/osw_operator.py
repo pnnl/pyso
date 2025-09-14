@@ -67,6 +67,16 @@ class UncertaintyProvider(DataProvider):
                 new_gen[new_gen > np.max(orig_gen)] = np.max(orig_gen)
                 new_gen[new_gen < 0] = 0
                 gen_dict['p_max']['values'] = new_gen
+
+        # Randomize load by small amount
+        randomize_load = True
+        if randomize_load:
+            factor = 0.02
+            for load, load_dict in model_data['elements']['load'].items():
+                orig_load = load_dict['p_load']['values']
+                new_load = [ol + np.random.normal(scale=factor*ol) for ol in orig_load]
+                load_dict['p_load']['values'] = new_load
+
         return ModelData(source=model_data)
 
 class MarketOperator:
@@ -81,12 +91,14 @@ class MarketOperator:
         self.save = options.get('save', True)
         self.filename = options['filename']
         self.seed = options.get('seed', None)
+        self.da_only = options.get('da_only', False)
 
         # Initialize the market models
         self.start = pd.to_datetime(options['start_time'], format='%Y%m%d%H%M')
         self.end = pd.to_datetime(options['end_time'], format='%Y%m%d%H%M')
         self.da_market = create_market(mtype='da', start=self.start, end=self.end, filename=self.filename, seed=self.seed)
-        self.rt_market = create_market(mtype='rt', start=self.start, end=self.end, filename=self.filename, seed=self.seed)
+        if not self.da_only:
+            self.rt_market = create_market(mtype='rt', start=self.start, end=self.end, filename=self.filename, seed=self.seed)
 
     def _pass_da_to_rt(self):
         # Commitment
@@ -104,17 +116,19 @@ class MarketOperator:
         # Initialized necessary parameters
         horizon_reached = False
         time = self.start
-        rt_minutes = self.rt_market.em.configuration['time']['min_freq']
-        num_rt_intervals = int(24 * 60 / rt_minutes)
         # Run the simulation until the finish
         while not horizon_reached:
             # First clear DA
             self.da_market.clear_market(local_save=self.save)
-            self._pass_da_to_rt()
-            # Run all RT test instances for this day
-            for icnt in range(num_rt_intervals):
-                self.rt_market.clear_market(local_save=self.save)
-            # Increment time and see if the end horizon is reached
+            if not self.da_only:
+                rt_minutes = self.rt_market.em.configuration['time']['min_freq']
+                num_rt_intervals = int(24 * 60 / rt_minutes)
+                # Send commitment and storage soc to RT
+                self._pass_da_to_rt()
+                # Run all RT test instances for this day
+                for icnt in range(num_rt_intervals):
+                    self.rt_market.clear_market(local_save=self.save)
+                # Increment time and see if the end horizon is reached
             time += datetime.timedelta(days=1)
             if time >= self.end:
                 horizon_reached = True
@@ -206,6 +220,7 @@ if __name__ == '__main__':
     parser.add_argument("-f", "--filename", help="Name (with path) to egret model_data file",
                         default='../../../../egret/egret/models/tests/uc_test_instances/five_bus.json')
     parser.add_argument("-d", "--seed", help="Integer random seed", type=int, default=9425)
+    parser.add_argument("--da_only", help="If included, will only run the day-ahead market", action='store_true')
     args = parser.parse_args()
     options = args.__dict__
     options.update({'save':True})
