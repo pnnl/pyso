@@ -17,7 +17,6 @@ import pandas as pd
 import numpy as np
 import copy
 
-from numba.cuda.cudaimpl import ptx_max_f4
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import count_onoff, mk_daterange
@@ -92,6 +91,7 @@ class OSWMarket():
         self.state_machine.on_enter_clearing("clear_market")
         self.validate_market_timing(self.market_timing)
         self.commitment_hist = None
+        self.storage_soc = None
         self.pre_simulation_days = None
 
         # This translates all the kwarg key-value pairs into class attributes
@@ -149,7 +149,7 @@ class OSWMarket():
                                                   'values': []}}
         return commitment_dict
 
-    def update_commitment_hist(self, keep='new', merge_dict=None):
+    def store_commitment_hist(self, keep='new', merge_dict=None):
         """
         Updates the commitment and initial status of generators (and storage) based on the
         model solution from a cleared market. Stored in the self.commitment_hist dictionary
@@ -249,7 +249,7 @@ class OSWMarket():
         if local_save:
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
         self.market_results = self.em.mdl_sol
-        self.update_commitment_hist()
+        self.store_commitment_hist()
         self.timestep += 1
         if self.timestep >= len(self.start_times):
             # Add a day (exact value doesn't matter, just need something past the horizon)
@@ -319,4 +319,3 @@ class OSWMarket():
         # Generate hourly datetime index
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
-    
