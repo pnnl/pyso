@@ -358,8 +358,3 @@ class OSWRTMarket(OSWMarket):
                         g_dict['commitment'] = {'data_type': 'time_series', 'values': commit_hist_window}
         else:
             raise ValueError("no model currently loaded.")
-    # TODO: Merge this into pyenergymarket engine/gvparser
-    def _update_storage(self, mdl_com:ModelData):
-        """ Calls osw_market.update_state_of_charge for each storage unit """
-        for s, _ in mdl_com.elements(element_type='storage'):
-            self.update_state_of_charge(s, market_type='real_time')
