@@ -41,6 +41,8 @@ def get_bus_from_id(md:ModelData, busid:int, field="id") -> str:
         if b_dict[field] == busid:
             return bus
 
+##TODO: when there are two generators distributing to a single unit (CC 2 on 1 for example)
+## this generates multiple units, that should be combined in some manner
 def flatten_distributed_generators(md:ModelData, key="generator"):
     """Convert all distributed generators to individual generators
     There is an assumption that an id field exists that stores generator unit IDs
