@@ -2,7 +2,7 @@
 EnergyMarket class is here.
 """
 from .utils.ioutils import merge_configs, Logger
-from .utils.timeutils import mk_daterange
+from .utils.timeutils import mk_daterange, count_onoff, get_value_at_time
 from .utils.egretutils import NumpyEncoder
 from .pyenergymarket_defaults import energymarket_defaults
 import abc
@@ -67,7 +67,6 @@ class EnergyMarket:
         else:
             self.set_property(value, *args[1:], d=d[args[0]])
 
-    
     def get_model(self, start:Union[str, pd.Timestamp]):
         """form the Egret Model at start time
 
@@ -84,7 +83,74 @@ class EnergyMarket:
         self.logger.info(f"Forming model starting at: {daterange[0]} - {daterange[-1]}")
         self.mdl = self.data_provider.get_model(daterange)
 
+    def update_initial_conditions(self, mdl_sol:Union[ModelData, None]=None, update_mode:str='calculate'):
+        """ This function updates 'initial_p_output' and 'initial_status' for all
+            generators in an Egret ModelData object. For the reference it will make a
+            selection in this order:
+            1. Use the mdl_sol input variable
+            2. If mdl_sol is None, uses solution saved to EnergyMarket, self.mdl_sol
+            3. If self.mdl_sol is None, will not make any updates
 
+        Args:
+            mdl_sol (Union[ModelData, None]): Egret ModelData with solutions, defaults to None
+            update_mode (str): Choose how to update initial conditions.
+                               copy - will use the same initial conditions as those in mdl_sol
+                               calculate - will use the mdl_sol state at the end of the last window as initial conditions
+        """
+        # Two different update modes (can add more as needed)
+        update_options = ['calculate', 'copy']
+        if update_mode not in update_options:
+            raise ValueError(f"Invalid update_mode: {update_mode}, must be one of {update_options}")
+        # The number of intervals between the start of the last model solve and the upcoming model solve:
+        window = self.configuration["time"]["window"]
+        # The duration in minutes of each interval:
+        min_freq = self.configuration["time"]["min_freq"]
+
+        # Select the appropriate previous model solution
+        previous_mdl_sol = mdl_sol
+        if previous_mdl_sol is None:
+            # No need to proceed if no solutions are available
+            if self.mdl_sol is None:
+                return
+            previous_mdl_sol = self.mdl_sol
+
+        # Loop through all generators in the upcoming model (self.mdl) and update initial_p_output and initial_status
+        for g, g_dict in self.mdl.elements(element_type='generator'):
+            # When simulating multiple market instances, we may copy information from one market to another.
+            # For example, we may want to pass day-ahead results to a real-time market.
+            if update_mode == 'copy':
+                g_dict['initial_p_output'] = float(
+                    previous_mdl_sol.data['elements']['generator'][g]['initial_p_output'])
+                g_dict['initial_status'] = float(previous_mdl_sol.data['elements']['generator'][g]['initial_status'])
+            # In all other cases, we calculate initial conditions from the end of the previous cleared market.
+            elif update_mode == 'calculate':
+                # Initial power is the last power cleared in the previous window (subtract 1 to get on 0-base)
+                g_dict['initial_p_output'] = float(
+                    previous_mdl_sol.data['elements']['generator'][g]['pg']['values'][window - 1])
+                # we could also update the q/reactive power, but this first test will be dc only
+                # g_dict['initial_q_output'] = float(
+                #                 previous_mdl_sol.data['elements']['generator'][g]['qg']['values'][window - 1])
+                # Update initial status for this generator, using timeutils function
+                new_initial_status = count_onoff(previous_mdl_sol.data['elements']['generator'][g], window-1, min_freq)
+                g_dict['initial_status'] = new_initial_status
+
+        # Loop through all storage units in the upcoming model (self.mdl) and update initial_state_of_charge,
+        # end_state_of_charge, initial_charge_rate and initial_discharge_rate
+        for storage, storage_dict in self.mdl.elements(element_type='storage'):
+            # List of keys to update for storage with the max values (or a string for key of max value)
+            update_maxes = {'initial_state_of_charge': 1, 'end_state_of_charge': 1}
+            # When simulating multiple market instances, we may copy information from one market to another.
+            # For example, we may want to pass day-ahead results to a real-time market.
+            if update_mode == 'copy':
+                for key, maxval in update_maxes.items():
+                    if key in previous_mdl_sol.data['elements']['storage'][storage].keys():
+                        storage_dict[key] = float(previous_mdl_sol.data['elements']['storage'][storage][key])
+                        # Enforce maximum (avoids floating point roundoff errors causing constraint violations)
+                        storage_dict[key] = min(storage_dict[key], maxval)
+            elif update_mode == 'calculate':
+                # Get the last value of the time window in the previous solution
+                previous_soc = previous_mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window - 1]
+                storage_dict['initial_state_of_charge'] = min(previous_soc, update_maxes['initial_state_of_charge'])
 
     def solve_model(self):
         """Run the egret model in self.mdl
@@ -93,7 +159,6 @@ class EnergyMarket:
         self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
                                         **self.configuration["solve_arguments"]["kwargs"])
-        
         pricing_model = self.configuration["simulation"]["price_model"]
         if  pricing_model is not None:
             self.logger.info(f"Solving pricing model\n")
@@ -155,8 +220,6 @@ class EnergyMarket:
         for k, v in self.mdl_price.data["system"].items():
             if "_price" in k:
                 self.mdl_sol.data["system"][k] = v
-        
-
 
     def storage2load(self, mdl:ModelData):
         """Convert all storage to pairs of loads to fix it for pricing evaluation

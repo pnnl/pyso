@@ -60,4 +60,12 @@ def get_as_requirement(self:GVParse, typ:str, req:pd.Series, name:str) -> dict:
         # Base on percentage of load and generation
         # we'll simplify here and simply add the BaseLoadPercent and Generation Percent
         requirement = self.h5(f"/{typ}/LOAD").loc[self.daterange, name].values * (req.BaseLoadPercent + req.GenerationPercent)
+    # Interpolate requirement to actual times
+    # Create dataframe with daterange as index
+    df = pd.DataFrame({'requirement': requirement})
+    df.index = self.daterange
+    # Interpolate
+    df = self.interpolate_time(df)
+    # Extract values
+    requirement = df['requirement'].values
     return {"data_type": "time_series", "values": requirement}
