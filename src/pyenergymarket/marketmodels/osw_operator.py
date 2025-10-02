@@ -69,7 +69,7 @@ class UncertaintyProvider(DataProvider):
                 gen_dict['p_max']['values'] = new_gen
 
         # Randomize load by small amount
-        randomize_load = True
+        randomize_load = False
         if randomize_load:
             factor = 0.02
             for load, load_dict in model_data['elements']['load'].items():
@@ -221,6 +221,7 @@ if __name__ == '__main__':
                         default='../../../../egret/egret/models/tests/uc_test_instances/five_bus.json')
     parser.add_argument("-d", "--seed", help="Integer random seed", type=int, default=9425)
     parser.add_argument("--da_only", help="If included, will only run the day-ahead market", action='store_true')
+    parser.add_argument("-c", "--case", help="Will be appended to the save directory")
     args = parser.parse_args()
     options = args.__dict__
     options.update({'save':True})
