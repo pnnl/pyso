@@ -269,7 +269,7 @@ class OSWRTMarket(OSWMarket):
 
         g_dict = self.em.mdl.data['elements']['generator'][gen]
         # Don't change wind/solar
-        if g_dict["fuel"] in ['Solar', 'Wind']:
+        if g_dict["fuel"] in ['Solar', 'Wind'] or 'fixed_commitment' not in g_dict.keys():
             return
         # If starting with power and committed off set to p_min
         if g_dict['initial_p_output'] > 0 and g_dict['fixed_commitment']['values'][0] == 0:
@@ -353,7 +353,7 @@ class OSWRTMarket(OSWMarket):
                         # Update the commitment (fixed_commitment or commitment for fast-start units)
                         g_dict[commit_type] = {'data_type': 'time_series', 'values': commit_hist_window}
                         # Pass to check for scenarios that give infeasible results (only if taking initial DA input)
-                        if fix_infeasible:
+                        if fix_infeasible and commit_type == 'fixed_commitment':
                             self._fix_infeasible(g)
                     else:
                         g_dict['commitment'] = {'data_type': 'time_series', 'values': commit_hist_window}
