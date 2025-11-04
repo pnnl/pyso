@@ -12,6 +12,7 @@ from pyenergymarket.engine import DataProvider
 import pyenergymarket as pyen
 import argparse, json, datetime
 from scipy.interpolate import CubicSpline
+import time as pytime
 
 class UncertaintyProvider(DataProvider):
     """ Uncertainty-based data provider. Draws from tiny_uc_1_uncert.json by default  """
@@ -70,11 +71,18 @@ class UncertaintyProvider(DataProvider):
 
         # Randomize load by small amount
         randomize_load = False
-        if randomize_load:
-            factor = 0.02
+        lr_factor = 0.02
+        scale_load = True
+        ls_factor = 0.6
+        if randomize_load or scale_load:
             for load, load_dict in model_data['elements']['load'].items():
                 orig_load = load_dict['p_load']['values']
-                new_load = [ol + np.random.normal(scale=factor*ol) for ol in orig_load]
+                if scale_load:
+                    new_load = [ls_factor * ol for ol in orig_load]
+                if randomize_load:
+                    new_load = [ol + np.random.normal(scale=lr_factor*ol) for ol in orig_load]
+                    if scale_load:
+                        new_load = [ls_factor*ol for ol in new_load]
                 load_dict['p_load']['values'] = new_load
 
         return ModelData(source=model_data)
@@ -92,6 +100,7 @@ class MarketOperator:
         self.filename = options['filename']
         self.seed = options.get('seed', None)
         self.da_only = options.get('da_only', False)
+        self.simulation_time = 0
 
         # Initialize the market models
         self.start = pd.to_datetime(options['start_time'], format='%Y%m%d%H%M')
@@ -118,6 +127,7 @@ class MarketOperator:
         time = self.start
         # Run the simulation until the finish
         while not horizon_reached:
+            t0 = pytime.time()
             # First clear DA
             self.da_market.clear_market(local_save=self.save)
             if not self.da_only:
@@ -132,6 +142,13 @@ class MarketOperator:
             time += datetime.timedelta(days=1)
             if time >= self.end:
                 horizon_reached = True
+            # Add simulation time (will include more than solver time, but gets us in the ballpark)
+            t1 = pytime.time()
+            self.simulation_time += t1 - t0
+
+        print(f"Simulation complete.\nTotal computation time is {self.simulation_time:.2f}s")
+        with open('simulation_time.json', 'w') as f:
+            json.dump({'simulation_time': self.simulation_time}, f)
 
     def write_results(self):
         pass
