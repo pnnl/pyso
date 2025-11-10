@@ -58,13 +58,9 @@ class OSWRTMarket(OSWMarket):
         that gets called when the market state machine enters the "clearing"
         state.
         """
-        super().__init__(market_name, market_timing, start_date, end_date, **kwargs)
-        self.em.configuration["time"]["min_freq"] = min_freq
-        self.em.configuration["time"]["window"] = window
-        self.em.configuration["time"]["lookahead"] = lookahead
-        self.__dict__.update(kwargs)
-        if self.market_timing == None:
-            self.market_timing = {
+        # Supply a default market timing object for a 15-minute real-time
+        if market_timing == None:
+            market_timing = {
                 "states": {
                     "idle": {
                         "start_time": 0,
@@ -83,36 +79,16 @@ class OSWRTMarket(OSWMarket):
                 "initial_state": "idle",
                 "market_interval": 900
             }
+        super().__init__(market_name, market_timing, start_date, end_date, **kwargs)
+        self.em.configuration["time"]["min_freq"] = min_freq
+        self.em.configuration["time"]["window"] = window
+        self.em.configuration["time"]["lookahead"] = lookahead
+        self.__dict__.update(kwargs)
             # starts at midnight
-        self.start_times = self.interpolate_market_start_times(start_date, end_date)
-        # Space for day-ahead solution (used at initialization)
+        self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=f'{min_freq}min')
+        # Space for day-ahead solution (used in the first clear_market call)
         self.da_mdl_sol = None
         self.fixed_commitment = True # Option to use a fixed or flexible commitment
-
-    # def collect_bids(self, gen_commitment):
-    #     """
-    #     Callback method that pulls in bids to grid data and moves to the next state.
-
-    #     This method must be overloaded in an instance of this class to
-    #     implement the necessary operatations to update the market in question.
-    #     """
-    #     self.move_to_next_state()
-
-
-    def interpolate_market_start_times(self, start_date:str, end_date:str, freq:str='15min',
-                                       start_time:str=' 00:00:00'):
-        """
-        Overloaded method of OSWMarket:
-        Interpolates 15 (by default) minute data between two date strings.
-        """
-
-        # Convert strings to datetime objects
-        start_datetime = pd.to_datetime(start_date)# + start_time)
-        end_datetime = pd.to_datetime(end_date)# - pd.Timedelta(freq)# + start_time)
-
-        # Generate hourly datetime index
-        start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
-        return start_time_index
 
     def update_em_model(self):
         """ Applies updates to the Egret model before solving. Logic to use either previous RT or DA input
