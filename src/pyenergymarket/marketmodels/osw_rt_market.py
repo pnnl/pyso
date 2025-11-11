@@ -19,8 +19,9 @@ import numpy as np
 from transitions import Machine
 from .osw_market import OSWMarket
 from ..utils.ioutils import Logger
-from ..utils.timeutils import mk_daterange
+from ..utils.timeutils import mk_daterange, get_value_at_time
 import copy
+from typing import Union
 
 # from typing import TYPE_CHECKING
 # if TYPE_CHECKING:
@@ -90,6 +91,47 @@ class OSWRTMarket(OSWMarket):
         self.da_mdl_sol = None
         self.fixed_commitment = True # Option to use a fixed or flexible commitment
 
+    def compute_end_soc(self, storage:str, max_num_intervals:Union[int, None]=48):
+        """ This computes the ending state of charge at a given time
+
+        Args:
+            storage (str): The name of the storage unit to use in the calculation
+            max_num_intervals (int): Maximum number of intervals to use for interpolation
+        """
+        if self.storage_soc is None:
+            logger.warning("No storage SoC reference data found. Proceeding without fixing end-state-of-charge.")
+            return
+
+        if isinstance(self.storage_soc, ModelData):
+            reference_data = copy.deepcopy(self.storage_soc.data)
+        else:
+            reference_data = copy.deepcopy(self.storage_soc)
+
+        # Set up the reference state-of-charge and time series
+        ref_soc_series = reference_data['elements']['storage'][storage]['state_of_charge']['values']
+        ref_time_keys = reference_data['system']['time_keys']
+        # We can restrict to the last N intervals to limit interpolation over large inputs
+        if max_num_intervals is not None:
+            ref_soc_series = ref_soc_series[-max_num_intervals:]
+            ref_time_keys = ref_time_keys[-max_num_intervals:]
+        # Set up the daterange for the current model
+        periods = self.em.configuration["time"]["window"] + self.em.configuration["time"]["lookahead"]
+        min_freq = self.em.configuration["time"]["min_freq"]
+        model_start_time = self.em.mdl.data['system']['time_keys'][0]
+        daterange = mk_daterange(model_start_time, min_freq=min_freq, periods=periods)
+        end_soc = get_value_at_time(ref_soc_series, ref_time_keys, daterange[-1], min_freq)
+        # Bound soc on interval [0, 1]
+        end_soc = min(1, max(0, end_soc))
+        return end_soc
+
+    def update_end_soc(self):
+        """ Loops through all storage units and updates the ending state of charge based on the reference (day-ahead) values """
+        for storage, storage_dict in self.em.mdl.elements(element_type='storage'):
+            # State-of-charge is handled by its own function.
+            end_soc = self.compute_end_soc(storage)
+            if end_soc is not None:
+                storage_dict['end_state_of_charge'] = end_soc
+
     def update_em_model(self):
         """ Applies updates to the Egret model before solving. Logic to use either previous RT or DA input
         """
@@ -100,8 +142,9 @@ class OSWRTMarket(OSWMarket):
         if self.em.mdl_sol is None:
             update_mode = 'copy'
             use_sol = self.da_mdl_sol
-        # Update generator initial power and initial status
+        # Update generator initial power and initial status as well as storage ending state-of-charge
         self.em.update_initial_conditions(use_sol, update_mode=update_mode)
+        self.update_end_soc()
         # If using a pre-simulation, there may be infeasibilities in the first RT interval, so we require a fix
         # Check for the conditions in which this can happen
         fix_infeasible = False
@@ -129,12 +172,11 @@ class OSWRTMarket(OSWMarket):
             return
         self.em.get_model(self.current_start_time)
         self.update_em_model()
-        # self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         self.market_results = self.em.mdl_sol
         # If using fixed commitment history we do not want to update this during real-time
         if not self.fixed_commitment:
-            self.update_commitment_hist()
+            self.store_commitment_hist()
         if local_save:
             os.makedirs('data', exist_ok=True)
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
@@ -181,7 +223,7 @@ class OSWRTMarket(OSWMarket):
                     da_commitment_interp[etype][unit]['initial_status'] = u_dict['initial_status']
         # Call method from the base class. Keep old ensures RT values aren't overwritten.
         # This will just add any new da_commitment values to the existing commitment history
-        self.update_commitment_hist(keep='old', merge_dict=da_commitment_interp)
+        self.store_commitment_hist(keep='old', merge_dict=da_commitment_interp)
 
     def fill_real_time(self, da_list:list) -> list:
         """
@@ -292,4 +334,3 @@ class OSWRTMarket(OSWMarket):
                         g_dict['commitment'] = {'data_type': 'time_series', 'values': commit_hist_window}
         else:
             raise ValueError("no model currently loaded.")
-    

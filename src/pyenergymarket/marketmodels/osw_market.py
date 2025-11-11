@@ -179,7 +179,7 @@ class OSWMarket():
             self.current_start_time = self.start_times[self.timestep]
         logger.info("OSW ", self.market_name, "next start time: ", self.current_start_time)
 
-    def update_commitment_hist(self, keep='new', merge_dict=None):
+    def store_commitment_hist(self, keep='new', merge_dict=None):
         """
         Updates the commitment and initial status of generators (and storage) based on the
         model solution from a cleared market. Stored in the self.commitment_hist dictionary
