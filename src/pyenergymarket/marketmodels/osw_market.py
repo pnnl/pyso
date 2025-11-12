@@ -20,6 +20,7 @@ import copy
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import count_onoff, mk_daterange, get_value_at_time
+# from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -317,7 +318,7 @@ class OSWMarket():
                         f"Branch '{br}' not found; cannot scale parameters"
                     )
         # Egret script to add a generator at each node at load curtailment cost (ensures feasibility)
-        add_load_curtail(self.em.mdl)
+        # add_load_curtail(self.em.mdl)
 
     def add_gens(self):
         """ Adds generators, including full Egret model data information to the model.
@@ -443,13 +444,13 @@ class OSWMarket():
         """
         pass
     
-    def move_to_next_state(self, *args, **kwargs) -> str:
+    def move_to_next_state(self) -> str:
         """
         Transitions to the next state in the state machine and updates
         appropriate object parameters.
         """
         self.last_state = self.current_state
-        self.next_state(*args, **kwargs)
+        self.next_state()
         # self.current_state = self.state_machine.state
         self.current_state = self.state
         logger.debug(self.market_name, "Last state:", self.last_state)
@@ -499,58 +500,3 @@ class OSWMarket():
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
 
-    def update_state_of_charge(self, storage, market_type='day_ahead'):
-        """
-        Updates the state of charge in the egret ModelData object for the given storage
-        Two situations:
-            market_type = 'day_ahead' populates init_state_of_charge from the end of the previous solution
-                           and sends end_state_of_charge = init_state_of_charge
-            market_type = 'real_time' populates initial state of charge based on self.storage_soc (saved from DA)
-                          at the current time and end_state_of_charge at the end of the window + lookahead
-        """
-        window = self.em.configuration["time"]["window"]
-        if market_type == 'day_ahead':
-            # If no solution exists (first time) just use whatever is already in the input model
-            if self.em.mdl_sol is None:
-                return
-            # Use soc and end of window (these are the values saved, excluding lookahead)
-            self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] \
-                = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window-1]
-            self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] \
-                = self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge']
-        elif market_type == 'real_time':
-            # If no saved storage, we have no reference to use
-            if self.storage_soc is None:
-                return
-            # Initial soc is the self.storage_soc at current time (which may require interpolation)
-            # We restrict to the last 48 intervals (assumes soc is stored hourly, which is true at time of creation)
-            limit = 48
-            da_soc_series = self.storage_soc['storage'][storage]['state_of_charge']['values'][-limit:]
-            da_time_keys = self.storage_soc['timestamps'][-limit:]
-            # We get initial soc from the last RT interval, when available. Otherwise we lookup from DA value
-            if self.em.mdl_sol is None:
-                lookup_init_soc = get_value_at_time(da_soc_series, da_time_keys, self.current_start_time)
-            else:
-                lookup_init_soc \
-                    = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window - 1]
-            # Bound soc on interval [0, 1]
-            lookup_init_soc = min(1, max(0, lookup_init_soc))
-            self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] = lookup_init_soc
-            # For end soc we use the same da series and time keys, but find end interval time
-            periods = self.em.configuration["time"]["window"] + self.em.configuration["time"]["lookahead"]
-            min_freq = self.em.configuration["time"]["min_freq"]
-            daterange = mk_daterange(self.current_start_time, min_freq=min_freq, periods=periods)
-            # While loop ensures that we don't extend past the horizon (only affects last interval)
-            end_soc_found = False
-            lookback, limit = 1, len(daterange)
-            lookup_end_soc = None
-            while not end_soc_found and lookback < limit:
-                try:
-                    lookup_end_soc = get_value_at_time(da_soc_series, da_time_keys, daterange[-1])
-                    end_soc_found = True
-                except ValueError:
-                    lookback += 1
-            if lookup_end_soc is not None:
-                # Bound soc on interval [0, 1]
-                lookup_end_soc = min(1, max(0, lookup_end_soc))
-                self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] = lookup_end_soc
