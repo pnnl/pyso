@@ -87,20 +87,23 @@ class UncertaintyProvider(DataProvider):
 
         return ModelData(source=model_data)
 
-class MarketOperator:
+class TSO:
     """
-    This operator holds a DA and RT market model instance and handled the timing and data passing
-    between markets.
-
+    This provides a transmission system operator (TSO) model.
+    This class holds a DA and RT market model instance and handles
+    the timing and data passing between markets.
     It also stores the results for saving
     """
-    def __init__(self, options):
+    def __init__(self, options:dict):
         # Loads in the options
         self.save = options.get('save', True)
         self.filename = options['filename']
         self.seed = options.get('seed', None)
         self.da_only = options.get('da_only', False)
         self.simulation_time = 0
+        # Time resolution in seconds - will default to 30 seconds
+        time_resolution_sec = options.get('time_resolution_sec', None)
+        self.time_resolution_sec = 30 if time_resolution_sec is None else time_resolution_sec
 
         # Initialize the market models
         self.start = pd.to_datetime(options['start_time'], format='%Y%m%d%H%M')
@@ -117,18 +120,42 @@ class MarketOperator:
         if hasattr(self.rt_market, 'storage_soc') and hasattr(self.da_market, 'storage_soc'):
             self.rt_market.storage_soc = self.da_market.storage_soc
         # Also saving day-ahead solutions to RT for 1st RT initialization
-        if not hasattr(self.rt_market, 'da_mdl_sol'):
+        if self.rt_market.da_mdl_sol is None:
             self.rt_market.da_mdl_sol = self.da_market.em.mdl_sol
+
+    def run_market(self, mtype):
+        """ Uses the market transition methods to clear the market
+            Can specify either 'da_market' or 'rt_market' mtype
+        """
+        # Selects either self.da_market or self.rt_market
+        market = getattr(self, mtype)
+        # First check if we have hit a transition point (simulation time == next state time)
+        if self.simulation_time == market.next_state_time:
+            # Can supply kwargs to each state transition (idle, bidding, clearing are default)
+            state_kwargs = {'clearing', {'local_save': self.save}}
+            # Figure out which state is coming next
+            state_order = list(market.market_time.keys())
+            state_mapping = dict(zip(state_order, state_order[1:]+state_order[0]))
+            mkt_state = market.current_state
+            next_mkt_state = state_mapping[mkt_state]
+            # Adjust kwargs (can add arguments here also)
+            use_kwargs = {}
+            if next_mkt_state in state_kwargs.keys():
+                use_kwargs = state_kwargs[next_mkt_state]
+            # Move to next state and adjust next_state_time
+            market.move_to_next_state(**use_kwargs)
+            market.calculate_next_state_time()
 
     def simulate(self):
         """ Runs a test simulation with options specified """
         # Initialized necessary parameters
         horizon_reached = False
-        time = self.start
+        t0 = pytime.time() # For tracking simulation computational time
         # Run the simulation until the finish
         while not horizon_reached:
-            t0 = pytime.time()
             # First clear DA
+            self.run_market('da_market')
+            # TODO: RESUME here...
             self.da_market.clear_market(local_save=self.save)
             if not self.da_only:
                 rt_minutes = self.rt_market.em.configuration['time']['min_freq']
@@ -142,13 +169,13 @@ class MarketOperator:
             time += datetime.timedelta(days=1)
             if time >= self.end:
                 horizon_reached = True
-            # Add simulation time (will include more than solver time, but gets us in the ballpark)
-            t1 = pytime.time()
-            self.simulation_time += t1 - t0
+            self.simulation_time += self.time_resolution_sec
 
-        print(f"Simulation complete.\nTotal computation time is {self.simulation_time:.2f}s")
+        t1 = pytime.time()
+        simulation_wallclock = t1 - t0
+        print(f"Simulation complete.\nTotal computation time is {simulation_wallclock:.2f}s")
         with open('simulation_time.json', 'w') as f:
-            json.dump({'simulation_time': self.simulation_time}, f)
+            json.dump({'simulation_time': simulation_wallclock}, f)
 
     def write_results(self):
         pass
@@ -224,9 +251,9 @@ def create_market(mtype='da', start=None, end=None, filename=None, seed=None):
 def main(options):
     """ Runs a market instance with the given options """
     # Creates a market operator
-    operator = MarketOperator(options)
+    tso = TSO(options)
     # Runs the simulation
-    operator.simulate()
+    tso.simulate()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -235,10 +262,12 @@ if __name__ == '__main__':
     parser.add_argument("-e", "--end_time", help="End time in YYYYmmddHHMM format",
                         default='202005020000')
     parser.add_argument("-f", "--filename", help="Name (with path) to egret model_data file",
-                        default='../../../../egret/egret/models/tests/uc_test_instances/five_bus.json')
+                        default='../../../../egret/egret/models/tests/uc_test_instances/tiny_uc_1.json')
     parser.add_argument("-d", "--seed", help="Integer random seed", type=int, default=9425)
     parser.add_argument("--da_only", help="If included, will only run the day-ahead market", action='store_true')
     parser.add_argument("-c", "--case", help="Will be appended to the save directory")
+    parser.add_argument("-r", "--time_resolution_sec", type=int, help="The simulation time resolution in"
+                                                                      "units of seconds.", default=None)
     args = parser.parse_args()
     options = args.__dict__
     options.update({'save':True})

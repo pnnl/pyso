@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.WARNING)
 
-class OSWMarket():
+class Market():
     """
 
     For the off-shore-wind use case, we only need three market states so
@@ -74,10 +74,12 @@ class OSWMarket():
 
         # Adds the state machine from the transitions library to track time
         self.add_state_machine(market_timing)
-
+        # Initialize other internal variables
         self.send_horizon_message = True  # Will send a message when timestamp is past the horizon
         self.commitment_hist = None
+        self.storage_soc = None
         self.pre_simulation_days = None
+        self.market_results = None
 
         # This translates all the kwarg key-value pairs into class attributes
         self.__dict__.update(kwargs)
@@ -131,7 +133,6 @@ class OSWMarket():
         self.last_state = None
         self.last_state_time = 0
         self.next_state_time = 0
-        self.market_results = {}
         # Add the state machine
         self.state_list = list(market_timing["states"].keys())
         self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
@@ -177,7 +178,7 @@ class OSWMarket():
             self.current_start_time += dt.timedelta(days=1)
         else:
             self.current_start_time = self.start_times[self.timestep]
-        logger.info("OSW ", self.market_name, "next start time: ", self.current_start_time)
+        logger.info("Market ", self.market_name, "next start time: ", self.current_start_time)
 
     def store_commitment_hist(self, keep='new', merge_dict=None):
         """
@@ -354,15 +355,16 @@ class OSWMarket():
             for i in range(len(self.commitment_hist['timestamps'])):
                 self.commitment_hist['timestamps'][i] -= time_shift
 
-    def move_to_next_state(self) -> str:
+    def move_to_next_state(self, *args, **kwargs) -> str:
         """
         Transitions to the next state in the state machine and updates
         appropriate object parameters.
+        Input arguments and kwargs can be provided for the function call to the next state
         """
         # Store previous state, move states, then update current state
         # Note, transitions will automatically execute a method if specified in 'add_state_machine' method
         self.last_state = self.current_state
-        self.next_state()
+        self.next_state(*args, **kwargs)
         self.current_state = self.state
         logger.debug(self.market_name, "Last state:", self.last_state)
         logger.debug(self.market_name, "Next state:", self.current_state)

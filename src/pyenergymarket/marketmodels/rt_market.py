@@ -11,14 +11,11 @@ can be called as methods. (This may not be a hard assumption.)
 trevor.hardy@pnnl.gov
 """
 import datetime
-import json
 import os
 import logging
 import pandas as pd
 import numpy as np
-from transitions import Machine
-from .osw_market import OSWMarket
-from ..utils.ioutils import Logger
+from .market import Market
 from ..utils.timeutils import mk_daterange, get_value_at_time
 import copy
 from typing import Union
@@ -31,29 +28,23 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.WARNING)
 
-class OSWRTMarket(OSWMarket):
+class RTMarket(Market):
     """
-    TODO: describe this class
-
-    For the off-shore-wind use case, we only need three market states so
-    those will be hard-coded as below. The way this market works, all of 
-    the activity of the market takes place at the transitions. I'm
-    (TDH) using the "transitions" library which allows the definition
+    We only need three market states so we provide hard-coded defaults.
+    The way this market works, market activity takes place at the transitions.
+    I'm (TDH) using the "transitions" library which allows the definition
     of callback functions when entering (and exiting) any given state
     and this is the primary method by which the activity will in the
     market will take place. 
 
     Documentation on the "transitions" library can be found here:
     https://pypi.org/project/transitions/
-
-
-
     """
 
     def __init__(self, start_date, end_date, market_name:str="rt_energy_market", market_timing:dict=None, min_freq:int=15,
                  window:int=4, lookahead:int=0, **kwargs):
         """
-        Class that specifically runs the OSW RT energy market
+        Class that specifically runs the RT energy market
 
         The only specialization is the definition of the callback method
         that gets called when the market state machine enters the "clearing"
