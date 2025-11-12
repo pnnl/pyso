@@ -17,7 +17,6 @@ import pandas as pd
 import numpy as np
 import copy
 
-from numba.cuda.cudaimpl import ptx_max_f4
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import count_onoff, mk_daterange, get_value_at_time
@@ -183,27 +182,6 @@ class OSWMarket():
                                                  {'data_type': 'time_series',
                                                   'values': []}}
         return commitment_dict
-
-    # @staticmethod
-    # def _prep_storage_soc(storage_dict, etype, unit):
-    #     """
-    #     Creates an empty dictionary structure for the commitment history for a given element and generator/unit
-    #
-    #     Args:
-    #         etype (str): Type of element ('generator', 'storage', etc.)
-    #         unit (str): Name of unit (typical use case is Egret generator name)
-    #     """
-    #     if etype not in commitment_dict.keys():
-    #         commitment_dict[etype] = {unit: {'initial_status': None,
-    #                                          'commitment':
-    #                                              {'data_type': 'time_series',
-    #                                               'values': []}}}
-    #     if unit not in commitment_dict[etype].keys():
-    #         commitment_dict[etype][unit] = {'initial_status': None,
-    #                                         'commitment':
-    #                                             {'data_type': 'time_series',
-    #                                              'values': []}}
-    #     return commitment_dict
 
     def store_commitment_hist(self, keep='new', merge_dict=None, omit=[]):
         """

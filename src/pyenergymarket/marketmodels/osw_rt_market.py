@@ -18,10 +18,11 @@ import pandas as pd
 import numpy as np
 from transitions import Machine
 from .osw_market import OSWMarket, convert_64
-from ..utils.timeutils import mk_daterange
+from ..utils.timeutils import mk_daterange, get_value_at_time
 from ..utils.ioutils import Logger
 # from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
 import copy
+from typing import Union
 
 # from typing import TYPE_CHECKING
 # if TYPE_CHECKING:
@@ -60,10 +61,9 @@ class OSWRTMarket(OSWMarket):
         state.
         """
         super().__init__(market_name, market_timing, start_date, end_date, **kwargs)
-        self.em.configuration["min_freq"] = min_freq
+        self.em.configuration["time"]["min_freq"] = min_freq
         self.em.configuration["time"]["window"] = window
         self.em.configuration["time"]["lookahead"] = lookahead
-        self.em.configuration["window"] = window + lookahead
         self.__dict__.update(kwargs)
         if self.market_timing == None:
             self.market_timing = {
@@ -86,9 +86,7 @@ class OSWRTMarket(OSWMarket):
                 "market_interval": 900
             }
             # starts at midnight
-        # Start times jump ahead by the window size (in intervals)*frequency (in minutes)
-        min_window = int(min_freq*window)
-        self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=f'{min_window}min')
+        self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=f'{min_freq}min')
         # Space for day-ahead solution (used at initialization)
         self.da_mdl_sol = None
         self.fixed_commitment = fixed_commitment # Option to use a fixed or flexible commitment
@@ -119,16 +117,61 @@ class OSWRTMarket(OSWMarket):
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
 
+    def compute_end_soc(self, storage:str, max_num_intervals:Union[int, None]=48):
+        """ This computes the ending state of charge at a given time
+
+        Args:
+            storage (str): The name of the storage unit to use in the calculation
+            max_num_intervals (int): Maximum number of intervals to use for interpolation
+        """
+        if self.storage_soc is None:
+            logger.warning("No storage SoC reference data found. Proceeding without fixing end-state-of-charge.")
+            return
+
+        if isinstance(self.storage_soc, ModelData):
+            reference_data = copy.deepcopy(self.storage_soc.data)
+        else:
+            reference_data = copy.deepcopy(self.storage_soc)
+
+        # Set up the reference state-of-charge and time series
+        ref_soc_series = reference_data['elements']['storage'][storage]['state_of_charge']['values']
+        ref_time_keys = reference_data['system']['time_keys']
+        # We can restrict to the last N intervals to limit interpolation over large inputs
+        if max_num_intervals is not None:
+            ref_soc_series = ref_soc_series[-max_num_intervals:]
+            ref_time_keys = ref_time_keys[-max_num_intervals:]
+        # Set up the daterange for the current model
+        periods = self.em.configuration["time"]["window"] + self.em.configuration["time"]["lookahead"]
+        min_freq = self.em.configuration["time"]["min_freq"]
+        model_start_time = self.em.mdl.data['system']['time_keys'][0]
+        daterange = mk_daterange(model_start_time, min_freq=min_freq, periods=periods)
+        end_soc = get_value_at_time(ref_soc_series, ref_time_keys, daterange[-1], min_freq)
+        # Bound soc on interval [0, 1]
+        end_soc = min(1, max(0, end_soc))
+        return end_soc
+
+    def update_end_soc(self):
+        """ Loops through all storage units and updates the ending state of charge based on the reference (day-ahead) values """
+        for storage, storage_dict in self.em.mdl.elements(element_type='storage'):
+            # State-of-charge is handled by its own function.
+            end_soc = self.compute_end_soc(storage)
+            if end_soc is not None:
+                storage_dict['end_state_of_charge'] = end_soc
+
     def update_em_model(self, contingency_list=None):
         """ Applies updates to the Egret model before solving. Logic to use either previous RT or DA input
         """
-        # Update generator initial power and initial status
-        # For first RT market, we will copy starting values from the first DA market.
+        # Default is to calculate values based on previous solution
         update_mode = 'calculate'
+        use_sol = self.em.mdl_sol
+        # For first RT market, we will copy starting values from the first DA market.
         if self.em.mdl_sol is None:
             update_mode = 'copy'
-        self.em.update_initial_conditions(self.em.mdl_sol, update_mode=update_mode)
+            use_sol = self.da_mdl_sol
+        # Update generator initial power and initial status as well as storage ending state-of-charge
+        self.em.update_initial_conditions(use_sol, update_mode=update_mode)
         self.add_gens()
+        self.update_end_soc()
         # If using a pre-simulation, there may be infeasibilities in the first RT interval, so we require a fix
         # Check for the conditions in which this can happen
         fix_infeasible = False
@@ -140,7 +183,6 @@ class OSWRTMarket(OSWMarket):
                     fix_infeasible = True
         self.update_model_commitment(fix_infeasible=fix_infeasible)
         self.apply_contingencies(contingency_list=contingency_list)
-        self.update_storage()
 
     def clear_market(self, contingency_list:list=None):
         """
@@ -155,12 +197,9 @@ class OSWRTMarket(OSWMarket):
                            "Market will not be cleared")
             return
         self.em.get_model(self.current_start_time)
-        self.update_em_model(contingency_list=contingency_list)
+        self.update_em_model()
         self.em.mdl.data = convert_64(self.em.mdl.data)
-        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
-
-        # self.collect_bids()
-
+        # TODO: Remove try/except loop - maybe move to a different function?
         try:
             self.em.solve_model()
         except:
@@ -171,14 +210,12 @@ class OSWRTMarket(OSWMarket):
                     if ramp_key in g_dict.keys():
                         g_dict[ramp_key] = g_dict[ramp_key] * 2
             for s, s_dict in self.em.mdl.elements(element_type='storage'):
-                ramp_keys = ["ramp_up_input_60min", "ramp_down_input_60min", "ramp_up_output_60min", "ramp_down_output_60min"]
+                ramp_keys = ["ramp_up_input_60min", "ramp_down_input_60min", "ramp_up_output_60min",
+                             "ramp_down_output_60min"]
                 for ramp_key in ramp_keys:
                     if ramp_key in s_dict.keys():
                         s_dict[ramp_key] = s_dict[ramp_key] * 2
             self.em.solve_model()
-
-        # Put back in_service=False branches (these are removed by default in Egret solution)
-        self.restore_lines()
         self.market_results = self.em.mdl_sol
         self.market_results.data = convert_64(self.market_results.data)
         # If using fixed commitment history we do not want to update this during real-time
@@ -191,7 +228,7 @@ class OSWRTMarket(OSWMarket):
         self.timestep += 1
         if self.timestep >= len(self.start_times):
             # Add an interval (exact value doesn't matter, just need something past the horizon)
-            min_freq = self.em.configuration["min_freq"]
+            min_freq = self.em.configuration["time"]["min_freq"]
             self.current_start_time += datetime.timedelta(minutes=min_freq)
         else:
             self.current_start_time = self.start_times[self.timestep]
@@ -204,7 +241,7 @@ class OSWRTMarket(OSWMarket):
         day-ahead market clearing to add the coming day's commitment values
         """
         # Duplicate day-ahead values onto the (likely) more frequent real-time intervals
-        min_freq = self.em.configuration["min_freq"]
+        min_freq = self.em.configuration["time"]["min_freq"]
         # Update the da_commitment timestamps - add an hour to the last timestamp to ensure we go to the end of the day
         end = max(da_commitment["timestamps"])
         if isinstance(end, str):
@@ -243,7 +280,7 @@ class OSWRTMarket(OSWMarket):
         Returns:
             rt_list (list): list of values copied into the real-time frequency
         """
-        min_freq = self.em.configuration["min_freq"]
+        min_freq = self.em.configuration["time"]["min_freq"]
         # Determine the number of times to copy values
         remainder = 60 % min_freq
         if remainder != 0:
@@ -359,8 +396,4 @@ class OSWRTMarket(OSWMarket):
                         g_dict['commitment'] = {'data_type': 'time_series', 'values': commit_hist_window}
         else:
             raise ValueError("No Egret model currently loaded.")
-
-    def update_storage(self):
-        """ Calls osw_market.update_state_of_charge for each storage unit """
-        for s, _ in self.em.mdl.elements(element_type='storage'):
-            self.update_state_of_charge(s, market_type='real_time')
+    
