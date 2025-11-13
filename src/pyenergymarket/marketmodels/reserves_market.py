@@ -14,13 +14,13 @@ import datetime
 import json
 import logging
 from transitions import Machine
-from .osw_market import OSWMarket
+from .market import Market
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.WARNING)
 
-class OSWReservesMarket(OSWMarket):
+class ReservesMarket(Market):
     """
     TODO: describe this class
 
@@ -42,7 +42,7 @@ class OSWReservesMarket(OSWMarket):
 
     def __init__(self, market_name, market_timing, **kwargs):
         """
-        Class the specifically runs the OSW reserves market
+        Class the specifically runs the reserves market
 
         The only specialization is the definition of the callback method
         that gets called when the market state machine enters the "clearing"
@@ -54,11 +54,11 @@ class OSWReservesMarket(OSWMarket):
 
 def clear_market_market(self):
     """
-    Overloaded method of OSWMarket
+    Overloaded method of Market
     
     Grab all the bids and run the DA UC optimization and then return the results
     
-    market_results is an attribute of the OSWMarket class
+    market_results is an attribute of the Market class
     """
 
     self.market_results = {}

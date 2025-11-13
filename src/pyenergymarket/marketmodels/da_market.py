@@ -16,7 +16,7 @@ import logging
 import pandas as pd
 import numpy as np
 from transitions import Machine
-from .osw_market import OSWMarket
+from .market import Market
 
 from egret.data.model_data import ModelData
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.WARNING)
 
-class OSWDAMarket(OSWMarket):
+class DAMarket(Market):
     """
     TODO: describe this class
 
@@ -46,7 +46,7 @@ class OSWDAMarket(OSWMarket):
     def __init__(self, start_date, end_date, market_name:str="da_energy_market", market_timing:dict=None,
                  min_freq:int=60, window:int=24, lookahead:int=0, **kwargs):
         """
-        Class the specifically runs the OSW DA energy market
+        Class the specifically runs the DA energy market
 
         The only specialization is the definition of the callback method
         that gets called when the market state machine enters the "clearing"
