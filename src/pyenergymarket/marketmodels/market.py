@@ -73,7 +73,7 @@ class Market():
         logger.info("osw_market", self.market_name, "start_times: ", self.start_times)
 
         # Adds the state machine from the transitions library to track time
-        self.add_state_machine(market_timing)
+        self.add_state_machine()
         # Initialize other internal variables
         self.send_horizon_message = True  # Will send a message when timestamp is past the horizon
         self.commitment_hist = None
@@ -134,7 +134,7 @@ class Market():
         self.last_state_time = 0
         self.next_state_time = 0
         # Add the state machine
-        self.state_list = list(market_timing["states"].keys())
+        self.state_list = list(self.market_timing["states"].keys())
         self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
         self.state_machine.add_ordered_transitions()
         # Adding definitions for state transition callbacks
@@ -171,7 +171,7 @@ class Market():
         if local_save:
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
         self.market_results = self.em.mdl_sol
-        self.update_commitment_hist()
+        self.store_commitment_hist()
         self.timestep += 1
         if self.timestep >= len(self.start_times):
             # Add a day (exact value doesn't matter, just need something past the horizon)
@@ -298,21 +298,21 @@ class Market():
             raise TypeError(f"Must submit market_timing as a dictionary, not {type(market_timing)}")
         # Ensure the market_timing dict has the necessary keys (extraneous keys aren't penalized)
         required_keys = ["states", "initial_offset", "initial_state", "market_interval"]
-        if set(required_keys) <= set(market_timing.keys()):
+        if set(required_keys) < set(market_timing.keys()):
             raise KeyError(f"Market timing dict must contain keys: {required_keys}. (Passed {market_timing.keys()})")
         # Ensure all states have the necessary keys (extraneous keys aren't penalized)
         required_state_keys = ["start_time", "duration"]
         for state, state_dict in market_timing["states"].items():
-            if set(required_state_keys) <= set(state_dict.keys()):
+            if set(required_state_keys) < set(state_dict.keys()):
                 raise KeyError(f"Invalid keys for state {state}. All state dicts must contain keys: {required_state_keys}.")
         # Ensure the starting state is specified (0 start time)
-        current_state = [state for state in market_timing["states"].keys() if state["start_time"] == 0]
-        if len(start_state) != 1:
+        current_state = [st for st, val in market_timing["states"].items() if val["start_time"] == 0]
+        if len(current_state) != 1:
             raise ValueError(f"Must include one and only one state with the start time of 0")
         else:
             current_state = current_state[0] # get key/string
         # Check that start times and durations are all consistent
-        start_times = [state['start_time'] for state in market_timing["states"].keys()]
+        start_times = [val['start_time'] for val in market_timing["states"].values()]
         current_time = 0
         for change_idx in range(len(start_times)-1):
             duration = market_timing["states"][current_state]["duration"]
@@ -326,8 +326,10 @@ class Market():
                     found_next = True
             if not found_next:
                 raise ValueError(f"No state found with expected start time {next_start}")
-        # Finally, check if the total duration (which will be 'next_start' from the above loop) equals the market_interval
-        if not math.isclose(next_start, market_timing["market_interval"]):
+        # Finally, check if the total duration (which will be 'next_start' from the above loop + final duration)
+        # equals the market_interval
+        total_duration = next_start + market_timing["states"][current_state]["duration"]
+        if not math.isclose(total_duration, market_timing["market_interval"]):
             raise ValueError(f"Total state durations of {next_start} do not match market_interval of {market_timing['market_interval']}")
 
     def reset_timestep(self, timestep=0, shift_commitment=True):
@@ -343,15 +345,14 @@ class Market():
         """
         self.timestep = timestep
         self.current_start_time = self.start_times[self.timestep] # Also reset current start time
-        if shift_commitment:
+        if shift_commitment and self.pre_simulation_days is not None:
             # Compute the time to shift as the difference between the
             start_time = self.start_times[0]
             commitment_end_time = self.commitment_hist['timestamps'][-1]
-            # We also add the interval for day-ahead since the end time is not inclusive of the last time step
-            if 'day_ahead' in self.market_name.lower():
-                interval = commitment_end_time - self.commitment_hist['timestamps'][-2]
-                commitment_end_time += interval
-            time_shift = commitment_end_time - start_time
+            # We also add the last interval for since the end time is not inclusive of the last time step
+            interval = commitment_end_time - self.commitment_hist['timestamps'][-2]
+            commitment_end_time += interval
+            time_shift = (commitment_end_time - start_time)*self.pre_simulation_days
             for i in range(len(self.commitment_hist['timestamps'])):
                 self.commitment_hist['timestamps'][i] -= time_shift
 
@@ -380,7 +381,6 @@ class Market():
         self.next_state_time = self.market_timing["states"][self.current_state]["duration"] \
                             + last_state_time \
                             + self.market_timing["initial_offset"]
-       
         # Initial offset only matters on the first pass (and is included above). After, set to 0 for correct timing
         self.market_timing["initial_offset"] = 0
         logger.info(f"{self.market_name}.next_state_time: {self.next_state_time}")

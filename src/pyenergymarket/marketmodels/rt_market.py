@@ -297,7 +297,8 @@ class RTMarket(Market):
                 if self.current_start_time in self.commitment_hist['timestamps']:
                     t0idx = np.where(self.current_start_time == np.array(self.commitment_hist['timestamps']))[0][0]
                 else:
-                    raise ValueError(f"Time {self.current_start_time} is not in commitment history timestamps.")
+                    raise ValueError(f"Time {self.current_start_time} is not in commitment history timestamps:"
+                                     f"\n{self.commitment_hist['timestamps']}.")
 
                 # It is possible for t0idx in the last interval to have no commitments available (if no day-ahead
                 # lookahead) If so, there are no commitments to add. Otherwise, pass the commitments for the
