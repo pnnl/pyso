@@ -11,8 +11,6 @@ from pyenergymarket.marketmodels import rt_market as rt_market
 from pyenergymarket.engine import DataProvider
 import pyenergymarket as pyen
 import argparse, json, datetime
-
-from pygments.lexers.sql import lookahead
 from scipy.interpolate import CubicSpline
 import time as pytime
 import logging
@@ -147,7 +145,7 @@ class TSO:
         clearing_start = self.da_market.market_timing['states']['clearing']['start_time']
         # In the (likely) case that these aren't the same, we will run an initial DA market and pass results to RT
         if clearing_start != self.simulation_time:
-            logger.info("DA market initializing at simulation time", self.simulation_time)
+            logger.info(f"DA market initializing at simulation time {self.simulation_time}")
             clear_and_adjust('da_market')
             self._pass_da_to_rt()
             clear_and_adjust('rt_market')
@@ -164,13 +162,13 @@ class TSO:
             da_cleared = self.run_market('da_market')
             if not self.da_only:
                 if da_cleared:
-                    logger.info("DA market cleared at simulation time", self.simulation_time)
+                    logger.info(f"DA market cleared at simulation time {self.simulation_time}")
                     # Send commitment and storage soc to RT after the DA market runs
                     self._pass_da_to_rt()
                 # Clear RT (will only run when self.simulation_time == clearing_time
                 rt_cleared = self.run_market('rt_market')
                 if rt_cleared:
-                    logger.info("RT market cleared at simulation time", self.simulation_time)
+                    logger.info(f"RT market cleared at simulation time {self.simulation_time}")
             # Increment time and see if the end horizon is reached
             self.simulation_time += self.time_resolution_sec
             if self.start + datetime.timedelta(seconds=self.simulation_time) >= self.end:
@@ -268,7 +266,7 @@ if __name__ == '__main__':
     parser.add_argument("-e", "--end_time", help="End time in YYYYmmddHHMM format",
                         default='202005020000')
     parser.add_argument("-f", "--filename", help="Name (with path) to egret model_data file",
-                        default='../../../../egret/egret/models/tests/uc_test_instances/five_bus.json')
+                        default='../../../../egret/egret/models/tests/uc_test_instances/tiny_uc_1.json')
     parser.add_argument("-d", "--seed", help="Integer random seed", type=int, default=9425)
     parser.add_argument("--da_only", help="If included, will only run the day-ahead market", action='store_true')
     parser.add_argument("-c", "--case", help="Will be appended to the save directory")
