@@ -21,22 +21,24 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
-class UncertaintyProvider(DataProvider):
-    """ Uncertainty-based data provider. Draws from tiny_uc_1_uncert.json by default  """
-    def __init__(self, market_type ='da', seed=None, filename='tiny_uc_1_uncert.json'):
+class EgretProvider(DataProvider):
+    """ Generic Egret-based data provider. Draws from tiny_uc_1.json by default.
+        This is configured for UC models with a single, hourly timeseries as the input.
+    """
+    def __init__(self, market_type ='da', seed=None, filename='tiny_uc_1.json'):
         self.market_type = market_type
         self.filename = filename
         if seed is not None:
             np.random.seed(seed)
 
     def get_model(self, daterange:pd.DatetimeIndex) -> ModelData:
-        """ Loads the file, then randomizes all uncertain generators """
+        """ Loads the file, puts a daterange in the system and (for RT only) interpolates DA values """
         with open(self.filename, 'r') as f:
             model_data = json.load(f)
         # For DA, we are just keeping everything at 1 day, so no changes except to set time keys
         daterange_str = [f'{d.year}-{d.month}-{d.day} {d.hour}:{d.minute}:{d.second}' for d in daterange]
         model_data['system']['time_keys'] = daterange_str
-        # For RT we build the da_daterange, which we will used in the interpolate
+        # For RT we build the da_daterange, which we will used in the interpolation
         if self.market_type == 'rt':
             # Use whatever is the given starting time
             year, month, day = daterange[0].year, daterange[0].month, daterange[0].day
@@ -51,7 +53,7 @@ class UncertaintyProvider(DataProvider):
                                 orig = eentries['values']
                                 cs = CubicSpline(da_daterange, orig)
                                 new = cs(daterange)
-                                # Enforce non-negativity #TODO: check if this is okay. Maybe do linear instead of spline
+                                # Enforce non-negativity
                                 new[new < 0] = 0
                                 eentries['values'] = new
             # Interpolate for system as well
@@ -60,38 +62,9 @@ class UncertaintyProvider(DataProvider):
                     orig = sys_val['values']
                     cs = CubicSpline(da_daterange, orig)
                     new = cs(daterange)
-                    # Enforce non-negativity #TODO: check if this is okay. Maybe do linear instead of spline
+                    # Enforce non-negativity
                     new[new < 0] = 0
                     sys_val['values'] = new
-        # For real-time markets, run an interpolation
-        # Randomize uncertain generators
-        # TODO: Can make this more sophisticated later, time permitting
-        for gen, gen_dict in model_data['elements']['generator'].items():
-            if 'pg_sigma' in gen_dict.keys():
-                orig_gen = gen_dict['p_max']['values']
-                sigma = gen_dict['pg_sigma']['values']
-                new_gen = np.array(orig_gen) + np.random.normal(scale=sigma, size=len(orig_gen))
-                # Impose max/capacity cutoff and zero cutoff
-                new_gen[new_gen > np.max(orig_gen)] = np.max(orig_gen)
-                new_gen[new_gen < 0] = 0
-                gen_dict['p_max']['values'] = new_gen
-
-        # Randomize load by small amount
-        randomize_load = False
-        lr_factor = 0.02
-        scale_load = True
-        ls_factor = 0.6
-        if randomize_load or scale_load:
-            for load, load_dict in model_data['elements']['load'].items():
-                orig_load = load_dict['p_load']['values']
-                if scale_load:
-                    new_load = [ls_factor * ol for ol in orig_load]
-                if randomize_load:
-                    new_load = [ol + np.random.normal(scale=lr_factor*ol) for ol in orig_load]
-                    if scale_load:
-                        new_load = [ls_factor*ol for ol in new_load]
-                load_dict['p_load']['values'] = new_load
-
         return ModelData(source=model_data)
 
 class TSO:
@@ -264,7 +237,7 @@ def get_market_timing(mtype):
 
 def create_market(mtype='da', start=None, end=None, filename=None, seed=None):
     """ Builds a market instance """
-    uncertainty_data_provider = UncertaintyProvider(market_type=mtype, filename=filename, seed=seed)
+    uncertainty_data_provider = EgretProvider(market_type=mtype, filename=filename, seed=seed)
     em = pyen.EnergyMarket(uncertainty_data_provider)
     market_timing = get_market_timing(mtype)
     # Format start/end as strings so they will work in market.py
