@@ -16,11 +16,14 @@ import logging
 import pandas as pd
 import numpy as np
 import copy
+from typing import Union
 
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import count_onoff, mk_daterange, get_value_at_time
-from settings import model_data_options
+from .settings import model_data_options
+from egret.data.model_data import ModelData
+
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -404,7 +407,7 @@ class Market():
             return False
         return True
 
-    def clear_market(self, contingency_list=None):
+    def clear_market(self, contingency_list=None, local_save=False):
         """
         Callback method that runs EGRET and clears a market.
 
@@ -420,7 +423,8 @@ class Market():
         # Modifications to model before solve, depending on use-case
         self.add_gens()
         self.em.update_initial_conditions(self.em.mdl_sol)
-        self.apply_contingencies(contingency_list=contingency_list)
+        if contingency_list is not None:
+            self.apply_contingencies(contingency_list=contingency_list)
         self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
