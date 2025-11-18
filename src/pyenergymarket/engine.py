@@ -54,6 +54,27 @@ class EnergyMarket:
             dict: _description_
         """
         return self._monitored_branches
+    
+    @property
+    def max_nonviolation(self) -> int:
+        """number of times a constraint needs to be non-binding, before it
+        is removed from the automatic monitor branches list.
+
+        Returns:
+            int: count
+        """
+        return self.configuration["simulation"]["constraint_monitor"]["max_nonviolation"]
+    
+    @property
+    def monitor_tolerance_percentage(self) -> float:
+        """Flows within this percent of the branch limit will be considered "binding"
+        for the purposes of the monitored branches tracking.
+
+        Returns:
+            float: percent below branch limit
+        """
+        return self.configuration["simulation"]["constraint_monitor"]["tolerance_percentage"]
+
 
     def set_property(self, value, *args, d=None):
         """set a property in the configuration dictionary.
@@ -164,26 +185,27 @@ class EnergyMarket:
                 previous_soc = previous_mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window - 1]
                 storage_dict['initial_state_of_charge'] = min(previous_soc, update_maxes['initial_state_of_charge'])    # def add_constraints(self):
 
-    def update_constraints(self, mdl_sol:ModelData=None, max_counter=1, tolerance_percentage=0.2):
+    def update_constraints(self, mdl_sol:ModelData=None):
         """
         Update binding constraints violations before each model solve
+        Depends on:
+        self.max_nonviolation:  Maximum counter value allowed before removing constraint from the tracker.
+        self.monitor_tolerance_percentage: A small percentage value indicating how close to the limit a flow must be to consider a constraint binding.
 
         Parameters:
-            mdl_sol: solved model
-            max_counter (int): Maximum counter value allowed before removing constraint from the tracker.
-            tolerance_percentage (float): A small percentage value indicating how close to the limit a flow must be to consider a constraint binding.
+            mdl_sol: solved model. Defaults to None in which case self.mdl_sol will be used.
         """
         if mdl_sol is None:
             mdl_sol = self.mdl_sol
             #this ensures that this function is skipped on the first pass when the model is None
             if mdl_sol is None:
                 return
-
+        
         # Loop over all branches
         for b, b_dict in mdl_sol.elements("branch"):
             max_flow = np.max(np.abs(b_dict["pf"]["values"]))  # Max absolute value of the flow on the element
             limit = abs(b_dict["rating_long_term"])       # Limit on the element (NEED TO MODIFY TO EMERGENCY LIMIT IF CONTINGENCY)
-            tolerance = tolerance_percentage * limit # Calculate dynamic tolerance based on percentage
+            tolerance = self.monitor_tolerance_percentage * limit # Calculate dynamic tolerance based on percentage
 
             # Check if constraint is tracked
             if b in self.monitored_branches:
@@ -197,7 +219,7 @@ class EnergyMarket:
                     self.monitored_branches[b] += 1
                     
                     # Remove the constraint if the counter exceeds the threshold
-                    if self.monitored_branches[b] > max_counter:
+                    if self.monitored_branches[b] > self.max_nonviolation:
                         del self.monitored_branches[b]
                         # Reset the "lazy" constraint to not track
                         b_dict["lazy"] = True
