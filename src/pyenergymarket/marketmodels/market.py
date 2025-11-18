@@ -16,11 +16,14 @@ import logging
 import pandas as pd
 import numpy as np
 import copy
+from typing import Union
 
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import count_onoff, mk_daterange, get_value_at_time
-# from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
+from .settings import model_data_options
+from egret.data.model_data import ModelData
+
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -47,7 +50,7 @@ def convert_64(json_dict):
         json_dict[key] = value
     return json_dict
 
-class OSWMarket():
+class Market():
     """
     TODO: describe this class
 
@@ -93,7 +96,7 @@ class OSWMarket():
         self.market_name = market_name
         self.current_state = market_timing["initial_state"]
         self.start_times = self.interpolate_market_start_times(start_date, end_date)
-        logger.info("osw_market", self.market_name, "start_times: ", self.start_times)
+        logger.info("market", self.market_name, "start_times: ", self.start_times)
         self.timestep = 0
         self.current_start_time = self.start_times[self.timestep]
         self.last_state = None
@@ -104,7 +107,7 @@ class OSWMarket():
         self.market_results = {}
         self.state_list = list(market_timing["states"].keys())
 
-        self.osw_bids = {}
+        self.bids = {}
         self.extra_gens = {}
 
         self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
@@ -134,11 +137,18 @@ class OSWMarket():
         implement the necessary operations to update the market in question.
         # """
 
-        # print("BIDS COLLECTED", self.market_name, self.osw_bids)
-        for key in self.osw_bids.keys():
-            self.em.mdl.data['elements']['generator'][key] = self.osw_bids[key]
+        # print("BIDS COLLECTED", self.market_name, self.bids)
+        for key in self.bids.keys():
+            self.em.mdl.data['elements']['generator'][key] = self.bids[key]
 
         # print(market, bid['time'], key, self.markets[f"{market}_energy_market"].em.mdl.data['elements']['generator'][key])
+
+    def add_gens(self):
+        """ Adds generators, including full Egret model data information to the model.
+            This will look for any generators in the self.extra_gens dictionary.
+        """
+        for g, gdict in self.extra_gens.items():
+            self.em.mdl.data['elements']['generator'][g] = gdict
 
     def reset_timestep(self, timestep=0, shift_commitment=True):
         """ Resets the timestep to 0 (option to fix to a different value)
@@ -266,7 +276,7 @@ class OSWMarket():
                     self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
         self.commitment_hist['timestamps'] = _commit_times_hist
 
-    def apply_contingencies(self, contingency_list=None, scale_branch_list=['4202_4203_1', '4001_4204_1', '1002_1003_1', '1002_1003_2'],
+    def apply_contingencies(self, contingency_list=None, scale_branch_list=None,
                             scale_ratio=2):
         """ If including contingencies, turn off unused branches """
         # Apply contingencies: mark specified branches out of service
@@ -318,14 +328,8 @@ class OSWMarket():
                         f"Branch '{br}' not found; cannot scale parameters"
                     )
         # Egret script to add a generator at each node at load curtailment cost (ensures feasibility)
-        # add_load_curtail(self.em.mdl)
+        self.add_load_curtail(self.em.mdl)
 
-    def add_gens(self):
-        """ Adds generators, including full Egret model data information to the model.
-            This will look for any generators in the self.extra_gens dictionary.
-        """
-        for g, gdict in self.extra_gens.items():
-            self.em.mdl.data['elements']['generator'][g] = gdict
 
     def restore_lines(self):
         """ Egret removes lines with in_service set to False. We will add them back in here,
@@ -403,7 +407,7 @@ class OSWMarket():
             return False
         return True
 
-    def clear_market(self, contingency_list=None):
+    def clear_market(self, contingency_list=None, local_save=False):
         """
         Callback method that runs EGRET and clears a market.
 
@@ -419,7 +423,8 @@ class OSWMarket():
         # Modifications to model before solve, depending on use-case
         self.add_gens()
         self.em.update_initial_conditions(self.em.mdl_sol)
-        self.apply_contingencies(contingency_list=contingency_list)
+        if contingency_list is not None:
+            self.apply_contingencies(contingency_list=contingency_list)
         self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
         # Put back in_service=False branches (these are removed by default in Egret solution)
@@ -436,7 +441,7 @@ class OSWMarket():
             self.current_start_time += dt.timedelta(days=1)
         else:
             self.current_start_time = self.start_times[self.timestep]
-        logger.info("OSW ", self.market_name, "next start time: ", self.current_start_time)
+        logger.info("Market", self.market_name, "next start time: ", self.current_start_time)
 
     def validate_market_timing(self, market_timing) -> None:
         """
@@ -444,13 +449,13 @@ class OSWMarket():
         """
         pass
     
-    def move_to_next_state(self) -> str:
+    def move_to_next_state(self, *args, **kwargs) -> str:
         """
         Transitions to the next state in the state machine and updates
         appropriate object parameters.
         """
         self.last_state = self.current_state
-        self.next_state()
+        self.next_state(*args, **kwargs)
         # self.current_state = self.state_machine.state
         self.current_state = self.state
         logger.debug(self.market_name, "Last state:", self.last_state)
@@ -500,3 +505,215 @@ class OSWMarket():
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
 
+    def update_state_of_charge(self, storage, market_type='day_ahead'):
+        """
+        Updates the state of charge in the egret ModelData object for the given storage
+        Two situations:
+            market_type = 'day_ahead' populates init_state_of_charge from the end of the previous solution
+                           and sends end_state_of_charge = init_state_of_charge
+            market_type = 'real_time' populates initial state of charge based on self.storage_soc (saved from DA)
+                          at the current time and end_state_of_charge at the end of the window + lookahead
+        """
+        window = self.em.configuration["time"]["window"]
+        if market_type == 'day_ahead':
+            # If no solution exists (first time) just use whatever is already in the input model
+            if self.em.mdl_sol is None:
+                return
+            # Use soc and end of window (these are the values saved, excluding lookahead)
+            self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] \
+                = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window-1]
+            self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] \
+                = self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge']
+        elif market_type == 'real_time':
+            # If no saved storage, we have no reference to use
+            if self.storage_soc is None:
+                return
+            # Initial soc is the self.storage_soc at current time (which may require interpolation)
+            # We restrict to the last 48 intervals (assumes soc is stored hourly, which is true at time of creation)
+            limit = 48
+            da_soc_series = self.storage_soc['storage'][storage]['state_of_charge']['values'][-limit:]
+            da_time_keys = self.storage_soc['timestamps'][-limit:]
+            # We get initial soc from the last RT interval, when available. Otherwise we lookup from DA value
+            if self.em.mdl_sol is None:
+                lookup_init_soc = get_value_at_time(da_soc_series, da_time_keys, self.current_start_time)
+            else:
+                lookup_init_soc \
+                    = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window - 1]
+            # Bound soc on interval [0, 1]
+            lookup_init_soc = min(1, max(0, lookup_init_soc))
+            self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] = lookup_init_soc
+            # For end soc we use the same da series and time keys, but find end interval time
+            periods = self.em.configuration["time"]["window"] + self.em.configuration["time"]["lookahead"]
+            min_freq = self.em.configuration["time"]["min_freq"]
+            daterange = mk_daterange(self.current_start_time, min_freq=min_freq, periods=periods)
+            # While loop ensures that we don't extend past the horizon (only affects last interval)
+            end_soc_found = False
+            lookback, limit = 1, len(daterange)
+            lookup_end_soc = None
+            while not end_soc_found and lookback < limit:
+                try:
+                    lookup_end_soc = get_value_at_time(da_soc_series, da_time_keys, daterange[-1])
+                    end_soc_found = True
+                except ValueError:
+                    lookback += 1
+            if lookup_end_soc is not None:
+                # Bound soc on interval [0, 1]
+                lookup_end_soc = min(1, max(0, lookup_end_soc))
+                self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] = lookup_end_soc
+
+    def add_load_curtail(md: ModelData, load_curtail_cost: Union[int, float, None] = None):
+        '''Adds a generator at each load bus with capacity equal to load and cost equal to load_curtail_cost.'''
+        logger = logging.getLogger()
+        bus_attrs = md.attributes(element_type='bus')
+        load_attrs = md.attributes(element_type='load')
+        with open('config.json', 'r') as f:
+            json_data = json.load(f)
+        p_cost = json_data['load_curtail_cost'] if load_curtail_cost is None else load_curtail_cost
+
+        logger.info('--- LOAD CURTAIL ---')
+        logger.info('identifying loads')
+
+        load_slack = {}
+        total = 0.0
+
+        for b in bus_attrs['names']:
+            # pick loads at this bus, optionally filtering by 'ncl' flag
+            if 'ncl' in load_attrs:
+                loads = [l for l, bus in load_attrs['bus'].items()
+                         if (bus == b) and (load_attrs['ncl'].get(l, True) is False)]
+            else:
+                loads = [l for l, bus in load_attrs['bus'].items() if bus == b]
+
+            # returns float or dict
+            p_load = sum_loads(loads, load_attrs)
+
+            if isinstance(p_load, dict):
+                ts_values = p_load['values']
+                scalar_for_total = sum(ts_values) / len(ts_values)
+                total += scalar_for_total
+            else:
+                total += p_load
+
+            if (isinstance(p_load, dict) and any(v > 0 for v in p_load['values'])) or (
+                    isinstance(p_load, (int, float)) and p_load > 0):
+                load_slack[f'{b}_load_curtail'] = {
+                    "bus": b,
+                    "p_max": p_load,
+                    "p_cost": 1000,  ### Load curtailment cost
+                    "unit_type": "load_curtail"
+                }
+            elif isinstance(p_load, (int, float)) and p_load < 0:
+                raise ValueError(f'Warning: Negative load at bus {b}')
+
+        logger.info(f"\t{len(bus_attrs['names'])} buses processed")
+        logger.info(f'\tp_cost={p_cost} ({len(load_slack)} slack units, total scalar equivalent {total:.2f} MW)')
+
+        add_generators(md, new_gens=load_slack)
+        return list(load_slack.keys())
+
+    def add_generators(md: ModelData, new_gens: dict, update_duplicates=False):
+        '''Adds new generators to ModelData by merging new_gens with default generator data.'''
+        logger = logging.getLogger()
+        logger.info('adding generators')
+        duplicates = []
+        md_gens = md.data['elements']['generator']
+        default_gen = {
+            "bus": None,
+            "in_service": True,
+            # "mbase": 100,
+            # "pg": 0,
+            # "qg": 0,
+            "p_min": 0,
+            "p_max": 0,
+            # "q_min": 0,
+            # "q_max": 0,
+            # "ramp_q": 99,
+            "fuel": "other",
+            "unit_type": "other",
+            "area": None,
+            "zone": None,
+            "generator_type": "renewable",
+            # "fixed_commitment": 1,  #
+            # "fixed_regulation": 0,  #
+            "initial_status": 1,  #
+            "initial_p_output": 0,  #
+            "initial_q_output": 0,  #
+            "ramp_p": 99999,
+            # "ramp_up_60min": 99999,
+            # "ramp_down_60min": 99999,
+            "p_cost": 2000
+            # "p_cost": {
+            #    "data_type": "cost_curve",
+            #    "cost_curve_type": "polynomial",
+            #    "values": {0: 0, 1: 0}
+            # }
+            # "q_cost": {
+            #    "data_type": "cost_curve",
+            #    "cost_curve_type": "polynomial",
+            #    "values": {0: 0, 1: 0}
+            # }
+        }
+        # adding bus_attrs so that we can append bus area and zone to generator
+        bus_attrs = md.attributes("bus")
+        for gn, gen in new_gens.items():
+            if gn in md_gens:
+                if update_duplicates:
+                    assert gen['bus'] == md_gens['bus']
+                    # if gen already exists, we reuse existing values and update new ones (e.g., assume area
+                    #   and zone have already been added). it would be wise to check that the updated gen exists
+                    #   at the same bus as before.
+                    md_gens[gn].update(gen)
+                else:
+                    duplicates.append(gn)
+                    continue
+            assert 'bus' in gen, "attempting to add a generator without a bus location"
+            gen['area'] = bus_attrs['area'][gen['bus']]
+            gen['zone'] = bus_attrs['zone'][gen['bus']]
+            md_gens[gn] = {**default_gen, **gen}
+
+        total_added = len(new_gens) - len(duplicates)
+        logger.info(f'\t{total_added} added')
+
+        if duplicates:
+            logger.info(f'\t{len(duplicates)} duplicates were skipped')
+
+def sum_loads(loads: list, load_attrs: dict):
+    # Initialize scalar sum accumulator
+    scalar_sum = 0.0
+    # Initialize time series sum accumulator
+    ts_sum = None
+
+    for l in loads:
+        load = load_attrs['p_load'][l]
+
+        # Case 1: scalar load (int or float)
+        if isinstance(load, (int, float)):
+            scalar_sum += load
+
+        # Case 2: time series load
+        elif isinstance(load, dict) and load.get('data_type') == 'time_series':
+            values = load.get('values', [])
+            if ts_sum is None:
+                # First time series: copy initial values
+                ts_sum = list(values)
+            else:
+                # Check matching lengths
+                if len(values) != len(ts_sum):
+                    raise ValueError(f"Time series length mismatch: {len(values)} vs {len(ts_sum)}")
+                # Element-wise addition
+                ts_sum = [a + b for a, b in zip(ts_sum, values)]
+
+        else:
+            # Unknown load type
+            raise TypeError(f"Unsupported load type: {load!r}")
+
+    # Finalize result
+    if ts_sum is not None:
+        # Add scalar sum to each time series element
+        return {
+            'data_type': 'time_series',
+            'values': [v + scalar_sum for v in ts_sum]
+        }
+    else:
+        # Only scalar loads
+        return scalar_sum

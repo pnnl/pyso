@@ -17,7 +17,7 @@ import logging
 import pandas as pd
 import numpy as np
 from transitions import Machine
-from .osw_market import OSWMarket, convert_64
+from .market import Market, convert_64
 from ..utils.timeutils import mk_daterange, get_value_at_time
 from ..utils.ioutils import Logger
 # from egret.model_library.extensions.pcm_acopf.tools.model_data_manipulation import add_load_curtail
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.WARNING)
 
-class OSWRTMarket(OSWMarket):
+class RTMarket(Market):
     """
     TODO: describe this class
 
@@ -54,7 +54,7 @@ class OSWRTMarket(OSWMarket):
     def __init__(self, start_date, end_date, market_name:str="rt_energy_market", market_timing:dict=None, min_freq:int=15,
                  window:int=4, lookahead:int=0, fixed_commitment=True, unfix_fast_start=False, **kwargs):
         """
-        Class that specifically runs the OSW RT energy market
+        Class that specifically runs the RT energy market
 
         The only specialization is the definition of the callback method
         that gets called when the market state machine enters the "clearing"
@@ -105,7 +105,7 @@ class OSWRTMarket(OSWMarket):
     def interpolate_market_start_times(self, start_date:str, end_date:str, freq:str='15min',
                                        start_time:str=' 00:00:00'):
         """
-        Overloaded method of OSWMarket:
+        Overloaded method of Market:
         Interpolates 15 (by default) minute data between two date strings.
         """
 
@@ -199,23 +199,8 @@ class OSWRTMarket(OSWMarket):
         self.em.get_model(self.current_start_time)
         self.update_em_model()
         self.em.mdl.data = convert_64(self.em.mdl.data)
-        # TODO: Remove try/except loop - maybe move to a different function?
-        try:
-            self.em.solve_model()
-        except:
-            logger.error("\nException found - error solving model. Retrying with doubled ramp rates.\n")
-            for g, g_dict in self.em.mdl.elements(element_type='generator'):
-                ramp_keys = ["ramp_up_60min", "ramp_down_60min"]
-                for ramp_key in ramp_keys:
-                    if ramp_key in g_dict.keys():
-                        g_dict[ramp_key] = g_dict[ramp_key] * 2
-            for s, s_dict in self.em.mdl.elements(element_type='storage'):
-                ramp_keys = ["ramp_up_input_60min", "ramp_down_input_60min", "ramp_up_output_60min",
-                             "ramp_down_output_60min"]
-                for ramp_key in ramp_keys:
-                    if ramp_key in s_dict.keys():
-                        s_dict[ramp_key] = s_dict[ramp_key] * 2
-            self.em.solve_model()
+        self.em.solve_model()
+
         self.market_results = self.em.mdl_sol
         self.market_results.data = convert_64(self.market_results.data)
         # If using fixed commitment history we do not want to update this during real-time
