@@ -15,6 +15,7 @@ import os
 import logging
 import pandas as pd
 import numpy as np
+from egret.model_library.transmission.tx_utils import element_types
 
 from .market import Market, convert_64
 from ..utils.timeutils import mk_daterange, get_value_at_time
@@ -121,6 +122,7 @@ class RTMarket(Market):
         ref_soc_series = reference_data['elements']['storage'][storage]['state_of_charge']['values']
         ref_time_keys = reference_data['system']['time_keys']
         # We can restrict to the last N intervals to limit interpolation over large inputs
+        print("STORAGE SOC:", self.storage_soc, "\n\n")
         print("MAX_NUM_INTERVALS: ", max_num_intervals)
         if max_num_intervals is not None:
             ref_soc_series = ref_soc_series[-max_num_intervals:]
@@ -170,6 +172,17 @@ class RTMarket(Market):
                     fix_infeasible = True
         self.update_model_commitment(fix_infeasible=fix_infeasible)
         self.apply_contingencies(contingency_list=contingency_list)
+
+    def collect_bids(self):
+        """ Overloaded method of Market: adding bids from generators and storage """
+        elements = self.em.mdl.data['elements']
+        for key in self.bids.keys():
+            element_types = ['generator', 'storage']
+            for element_type in element_types:
+                if element_type not in elements.keys():
+                    continue
+                if key in elements[element_type].keys():
+                    element[key] = self.bids[key]
 
     def clear_market(self, contingency_list:list=None):
         """

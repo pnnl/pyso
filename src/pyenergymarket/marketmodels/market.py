@@ -22,7 +22,6 @@ from typing import Union
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import mk_daterange, get_value_at_time
-from .settings import model_data_options
 from egret.data.model_data import ModelData
 
 
@@ -124,14 +123,19 @@ class Market():
         Callback method that pulls in T2 bids to grid data.
 
         This method must be overloaded in an instance of this class to
-        implement the necessary operations to update the market in question.
+        implement the necessary operations to collect the bids in question.
         # """
+        pass
 
-        # print("BIDS COLLECTED", self.market_name, self.bids)
-        for key in self.bids.keys():
-            self.em.mdl.data['elements']['generator'][key] = self.bids[key]
 
-        # print(market, bid['time'], key, self.markets[f"{market}_energy_market"].em.mdl.data['elements']['generator'][key])
+    def publish_results(selfs):
+        """
+        Callback method that publishes the results of the market clearing.
+
+        This method must be overloaded in an instance of this class to
+        implement the necessary operations to publish the results in question.
+        """
+        pass
 
     def add_gens(self):
         """ Adds generators, including full Egret model data information to the model.
@@ -207,6 +211,7 @@ class Market():
         # These are automatically executed on state transitions
         self.state_machine.on_enter_bidding("collect_bids")
         self.state_machine.on_enter_clearing("clear_market")
+        self.state_machine.on_exit_clearing("publish_results")
 
     def clear_market(self, local_save=False, contingency_list=None):
         """
@@ -438,11 +443,15 @@ class Market():
         use_soc_init = False
         if self.storage_soc is None:
             self.storage_soc = {'timestamps': time_keys, 'storage': {}}
+            at_mask = [1] * len(time_keys) # mask for which times/values to keep (initial pass, keep all)
             # The first time through we use soc init (all other times it is same as last of previous)
             use_soc_init = True
         else:
             # Don't copy the first interval (it was added last time by the end padding)
-            self.storage_soc['timestamps'] = self.storage_soc['timestamps'].append(time_keys[1:])
+            adding_times = time_keys[1:]
+            # Check if any time keys are already in storage_soc. If so, don't add these
+
+            self.storage_soc['timestamps'] = self.storage_soc['timestamps'].append()
         # loop through storage units
         for storage, storage_dict in self.em.mdl_sol.data['elements']['storage'].items():
             soc_values = storage_dict['state_of_charge']['values'][:max_intervals]
@@ -455,6 +464,7 @@ class Market():
                 soc_values = np.append(prev_soc_values, soc_values)
             self.storage_soc['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
                                                                         'values': soc_values}}
+        print(f"Added SoC for {self.market_name} at timestep {self.timestep} with\ntimes: {time_keys}\nvalues: {soc_values}")
 
     def valid_time_horizon(self):
         """ Returns T if current start time is within the horizon, otherwise F """
@@ -534,6 +544,9 @@ class Market():
             time_shift = (commitment_end_time - start_time)*self.pre_simulation_days
             for i in range(len(self.commitment_hist['timestamps'])):
                 self.commitment_hist['timestamps'][i] -= time_shift
+                # We also shift the state_of_charge
+                self.storage_soc['timestamps'][i] -= time_shift
+
 
     def move_to_next_state(self, *args, **kwargs) -> str:
         """
@@ -654,8 +667,23 @@ def add_load_curtail(md: ModelData, load_curtail_cost: Union[int, float, None] =
     logger = logging.getLogger()
     bus_attrs = md.attributes(element_type='bus')
     load_attrs = md.attributes(element_type='load')
-    with open('settings.json', 'r') as f:
-        json_data = json.load(f)
+    # with open('settings.json', 'r') as f:
+    #     json_data = json.load(f)
+    json_data = {
+        "v_min": 0.9,
+        "v_max": 1.1,
+        "v_min_relaxed": 0.8,
+        "v_max_relaxed": 1.2,
+        "branch_limit": None,
+        "p_cost": 0,
+        "q_cost": 500,
+        "load_curtail_cost": 2000,
+        "load_curtail_q_cost": 0,
+        "gen_limit_eps": 0,
+        "use_reserves": False,
+        "allow_demand_adjustment": True,
+        "exclude_slack_shunt_proxy": []
+    }
 
     p_cost = json_data['load_curtail_cost'] if load_curtail_cost is None else load_curtail_cost
 
