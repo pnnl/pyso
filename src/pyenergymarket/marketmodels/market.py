@@ -16,11 +16,13 @@ import logging
 import pandas as pd
 import numpy as np
 import copy
-from typing import Union
+import math
 
+from typing import Union
 from transitions import Machine
 from ..engine import EnergyMarket
 from ..utils.timeutils import mk_daterange, get_value_at_time
+from .settings import model_data_options
 from egret.data.model_data import ModelData
 
 
@@ -101,24 +103,13 @@ class Market():
         self.last_state = None
         self.send_horizon_message = True # Will send a message when timestamp is past the horizon
         self.market_timing  = market_timing
-        self.last_state_time = 0
-        self.next_state_time = 0
-        self.market_results = {}
-        self.state_list = list(market_timing["states"].keys())
+        self.market_results = {} #TO DO: Check if this needs to be {} instead
 
         self.bids = {}
         self.extra_gens = {}
 
-        self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
-        self.state_machine.add_ordered_transitions()
-        self.new_data = False # Whethere there is new data to be published to the federation
-        # Adding definitions for state transition callbacks
-        # "self.clear_market" is the name of the method called when entering
-        # the "clearing" state
-        # _e.g.:_ self.state_machine.on_enter_clearing("self.clear_market")
-        self.state_machine.on_enter_bidding("collect_bids")
-        self.state_machine.on_enter_clearing("clear_market")
-        self.validate_market_timing(self.market_timing)
+        self.add_state_machine()
+
         # Default settings for various user inputs
         self.commitment_hist = None
         self.storage_soc = None
@@ -149,28 +140,6 @@ class Market():
         for g, gdict in self.extra_gens.items():
             self.em.mdl.data['elements']['generator'][g] = gdict
 
-    def reset_timestep(self, timestep=0, shift_commitment=True):
-        """ Resets the timestep to 0 (option to fix to a different value)
-            This also sends the commitment history backward by the number
-            of timesteps.
-        """
-        self.timestep = timestep
-        self.current_start_time = self.start_times[self.timestep] # Also reset current start time
-        # Option to also shift the commitment history times back by the
-        # start/stop time difference. This behavior is intended to support
-        # pre-simulation runs in which the commitments happened in the past
-        if shift_commitment:
-            # Compute the time to shift as the difference between the
-            start_time = self.start_times[0]
-            commitment_end_time = self.commitment_hist['timestamps'][-1]
-            # We also add the interval for day-ahead since the end time is not inclusive of the last time step
-            if 'day_ahead' in self.market_name.lower():
-                interval = commitment_end_time - self.commitment_hist['timestamps'][-2]
-                commitment_end_time += interval
-            time_shift = commitment_end_time - start_time
-            for i in range(len(self.commitment_hist['timestamps'])):
-                self.commitment_hist['timestamps'][i] -= time_shift
-
     @staticmethod
     def _prep_commitment_hist(commitment_dict, etype, unit):
         """
@@ -192,12 +161,103 @@ class Market():
                                                   'values': []}}
         return commitment_dict
 
+    def add_state_machine(self):
+        """
+        This creates and adds a transitions state machine object to the market.
+        The state machine handles timing checks and transitions.
+
+        Relies on the self.market_timing dict (an input argument for __init__)
+        This dictionary provides the different state information, including start times and
+        durations (in seconds). Format example is given below:
+
+            {
+            "states": {
+                "idle": {
+                    "start_time": 0,
+                    "duration": 42660
+                },
+                "bidding": {
+                    "start_time": 42660,
+                    "duration": 540
+                },
+                "clearing": {
+                    "start_time": 43200,
+                    "duration": 43200
+                },
+            },
+            "initial_offset": 0, <- how many seconds into the interval to start (0=start of interval)
+            "initial_state": "idle", <- initial state (should match initial offset)
+            "market_interval": 86400 <- total length of interval (must equal sum of all durations)
+        }
+        """
+        # Check that market timing dictionary fits expected format
+        self.validate_market_timing(self.market_timing)
+        # Set up all of the time tracking object
+        self.timestep = 0
+        self.current_start_time = self.start_times[self.timestep]
+        self.current_state = self.market_timing["initial_state"]
+        self.last_state = None
+        self.last_state_time = 0
+        self.next_state_time = 0
+        # Add the state machine
+        self.state_list = list(self.market_timing["states"].keys())
+        self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
+        self.state_machine.add_ordered_transitions()
+        # Adding definitions for state transition callbacks
+        # These are automatically executed on state transitions
+        self.state_machine.on_enter_bidding("collect_bids")
+        self.state_machine.on_enter_clearing("clear_market")
+
+    def clear_market(self, local_save=False, contingency_list=None):
+        """
+        Callback method that runs EGRET and clears a market.
+
+        This method must be overloaded in an instance of this class to
+        implement the necessary operates to clear the market in question.
+
+        Args:
+            local_save (bool, optional): if True, will save a JSON with the results at each timestep
+        """
+        # Don't run market if this start time exceeds the start time list
+        if not self.valid_time_horizon():
+            return
+
+        self.em.get_model(self.current_start_time)
+        # Modifications to model before solve, depending on use-case
+        self.add_gens()
+        self.em.update_initial_conditions(self.em.mdl_sol)
+        if contingency_list is not None:
+            self.apply_contingencies(contingency_list=contingency_list)
+        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
+        self.em.solve_model()
+        # Put back in_service=False branches (these are removed by default in Egret solution)
+        self.restore_lines()
+        if local_save:
+            self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
+        self.market_results = self.em.mdl_sol
+        self.market_results.data = convert_64(self.market_results.data)
+        self.store_commitment_hist(omit=['_load_curtail'])
+        self.store_storage_soc() # Note this is intended for DA only right now - RT uses DA values
+        self.timestep += 1
+        if self.timestep >= len(self.start_times):
+            # Add a day (exact value doesn't matter, just need something past the horizon)
+            self.current_start_time += dt.timedelta(days=1)
+        else:
+            self.current_start_time = self.start_times[self.timestep]
+        logger.info("Market ", self.market_name, "next start time: ", self.current_start_time)
+
     def store_commitment_hist(self, keep='new', merge_dict=None, omit=[]):
         """
         Updates the commitment and initial status of generators (and storage) based on the
         model solution from a cleared market. Stored in the self.commitment_hist dictionary
         This is a partial copy of the Egret generator element dictionary, specifically designed
         to hold and update commitment history (and initial status) as markets pass
+
+        Note - there is a case for merging entire egret models (rather than just commitment history),
+        although there is the chance for conflicts if settings change and the overall size is larger (though
+        probably not large enough to cause RAM issues, so maybe that doesn't matter)
+        Option - this type of method could also be generalized to merge particular time series, although
+        some special handling may still be needed.
 
         Args:
             keep (string): In the case of duplicate timestamps whether to keep 'new' or 'old' values. Defaults to new.
@@ -406,63 +466,92 @@ class Market():
             return False
         return True
 
-    def clear_market(self, contingency_list=None, local_save=False):
-        """
-        Callback method that runs EGRET and clears a market.
-
-        This method must be overloaded in an instance of this class to
-        implement the necessary operates to clear the market in question.
-
-        """
-        # Don't run market if this start time exceeds the start time list
-        if not self.valid_time_horizon():
-            return
-
-        self.em.get_model(self.current_start_time)
-        # Modifications to model before solve, depending on use-case
-        self.add_gens()
-        self.em.update_initial_conditions(self.em.mdl_sol)
-        if contingency_list is not None:
-            self.apply_contingencies(contingency_list=contingency_list)
-        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
-        self.em.solve_model()
-        # Put back in_service=False branches (these are removed by default in Egret solution)
-        self.restore_lines()
-        if self.local_save:
-            self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
-        self.market_results = self.em.mdl_sol
-        self.market_results.data = convert_64(self.market_results.data)
-        self.store_commitment_hist(omit=['_load_curtail'])
-        self.store_storage_soc() # Note this is intended for DA only right now - RT uses DA values
-        self.timestep += 1
-        if self.timestep >= len(self.start_times):
-            # Add a day (exact value doesn't matter, just need something past the horizon)
-            self.current_start_time += dt.timedelta(days=1)
-        else:
-            self.current_start_time = self.start_times[self.timestep]
-        logger.info("Market", self.market_name, "next start time: ", self.current_start_time)
-
     def validate_market_timing(self, market_timing) -> None:
         """
-        Validate that the provided market timing is self-consistent.
+        Validate that the provided market timing. Specifically check:
+         - "states" keyword is present all states have the "start_time" and "duration" keys
+         - initial offset and initial state match
+         - total durations from all states are equal to the market_interval keyword
         """
-        pass
-    
+        if not isinstance(market_timing, dict):
+            raise TypeError(f"Must submit market_timing as a dictionary, not {type(market_timing)}")
+        # Ensure the market_timing dict has the necessary keys (extraneous keys aren't penalized)
+        required_keys = ["states", "initial_offset", "initial_state", "market_interval"]
+        if set(required_keys) < set(market_timing.keys()):
+            raise KeyError(f"Market timing dict must contain keys: {required_keys}. (Passed {market_timing.keys()})")
+        # Ensure all states have the necessary keys (extraneous keys aren't penalized)
+        required_state_keys = ["start_time", "duration"]
+        for state, state_dict in market_timing["states"].items():
+            if set(required_state_keys) < set(state_dict.keys()):
+                raise KeyError(f"Invalid keys for state {state}. All state dicts must contain keys: {required_state_keys}.")
+        # Ensure the starting state is specified (0 start time)
+        current_state = [st for st, val in market_timing["states"].items() if val["start_time"] == 0]
+        if len(current_state) != 1:
+            raise ValueError(f"Must include one and only one state with the start time of 0")
+        else:
+            current_state = current_state[0] # get key/string
+        # Check that start times and durations are all consistent
+        start_times = [val['start_time'] for val in market_timing["states"].values()]
+        current_time = 0
+        for change_idx in range(len(start_times)-1):
+            duration = market_timing["states"][current_state]["duration"]
+            next_start = current_time + duration
+            # Search to see if any states have the next start time listed
+            found_next = False
+            for state, state_dict in market_timing["states"].items():
+                if math.isclose(state_dict["start_time"], next_start):
+                    current_state = state
+                    current_time = state_dict["start_time"]
+                    found_next = True
+            if not found_next:
+                raise ValueError(f"No state found with expected start time {next_start}")
+        # Finally, check if the total duration (which will be 'next_start' from the above loop + final duration)
+        # equals the market_interval
+        total_duration = next_start + market_timing["states"][current_state]["duration"]
+        if not math.isclose(total_duration, market_timing["market_interval"]):
+            raise ValueError(f"Total state durations of {next_start} do not match market_interval of {market_timing['market_interval']}")
+
+    def reset_timestep(self, timestep=0, shift_commitment=True):
+        """ Resets the timestep to 0 (option to fix to a different value)
+            This also sends the commitment history backward by the number
+            of timesteps.
+
+        Args:
+            timestep (int): Specifies the timestep after the reset
+            shift_commitment (bool): Option to also shift the commitment history times back by the
+                                     start/stop time difference. This behavior is intended to support
+                                     pre-simulation runs in which the commitments happened in the past
+        """
+        self.timestep = timestep
+        self.current_start_time = self.start_times[self.timestep] # Also reset current start time
+        if shift_commitment and self.pre_simulation_days is not None:
+            # Compute the time to shift as the difference between the
+            start_time = self.start_times[0]
+            commitment_end_time = self.commitment_hist['timestamps'][-1]
+            # We also add the last interval for since the end time is not inclusive of the last time step
+            interval = commitment_end_time - self.commitment_hist['timestamps'][-2]
+            commitment_end_time += interval
+            time_shift = (commitment_end_time - start_time)*self.pre_simulation_days
+            for i in range(len(self.commitment_hist['timestamps'])):
+                self.commitment_hist['timestamps'][i] -= time_shift
+
     def move_to_next_state(self, *args, **kwargs) -> str:
         """
         Transitions to the next state in the state machine and updates
         appropriate object parameters.
+        Input arguments and kwargs can be provided for the function call to the next state
         """
+        # Store previous state, move states, then update current state
+        # Note, transitions will automatically execute a method if specified in 'add_state_machine' method
         self.last_state = self.current_state
         self.next_state(*args, **kwargs)
-        # self.current_state = self.state_machine.state
         self.current_state = self.state
         logger.debug(self.market_name, "Last state:", self.last_state)
         logger.debug(self.market_name, "Next state:", self.current_state)
         logger.info(f"{self.market_name} moved from {self.last_state} to {self.current_state}")
         return self.current_state
         
-    def calculate_next_state_time(self) -> tuple[float, float]:
+    def calculate_next_state_time(self, return_last=True) -> tuple[float, float]:
         """
         Calculate the value of the next state in terms of simulation time
         based on the timing of the next state in the state machine.
@@ -471,14 +560,13 @@ class Market():
         self.next_state_time = self.market_timing["states"][self.current_state]["duration"] \
                             + last_state_time \
                             + self.market_timing["initial_offset"]
-       
-        # Rather than checking to see if its zero before setting it to zero,
-        # just set it to zero (even if it already was.) The only time this
-        # needs to be non-zero is the first time we do the first transition
+        # Initial offset only matters on the first pass (and is included above). After, set to 0 for correct timing
         self.market_timing["initial_offset"] = 0
         logger.info(f"{self.market_name}.next_state_time: {self.next_state_time}")
-        return last_state_time, self.next_state_time
- 
+        if return_last:
+            return last_state_time, self.next_state_time
+        else:
+            return self.next_state_time
 
     def update_market(self):
         """
@@ -490,8 +578,9 @@ class Market():
         that check is done by the instantiating object and it is assumed
         when this method is called, it's time to move to the next state
         """
-        _, self.last_state_time = self.calculate_next_state_time()
-        return self.last_state_time # current time
+        _, next_state_time = self.calculate_next_state_time()
+        self.last_state_time = next_state_time
+        return next_state_time # current time
 
     def interpolate_market_start_times(self, start_date, end_date, freq='24h', start_time=' 00:00:00'):
         """Interpolates 24 (by default) hourly data between two date strings."""

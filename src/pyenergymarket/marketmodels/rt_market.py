@@ -11,12 +11,11 @@ can be called as methods. (This may not be a hard assumption.)
 trevor.hardy@pnnl.gov
 """
 import datetime
-import json
 import os
 import logging
 import pandas as pd
 import numpy as np
-from transitions import Machine
+
 from .market import Market, convert_64
 from ..utils.timeutils import mk_daterange, get_value_at_time
 from ..utils.ioutils import Logger
@@ -34,21 +33,15 @@ logger.setLevel(logging.WARNING)
 
 class RTMarket(Market):
     """
-    TODO: describe this class
-
-    For the off-shore-wind use case, we only need three market states so
-    those will be hard-coded as below. The way this market works, all of 
-    the activity of the market takes place at the transitions. I'm
-    (TDH) using the "transitions" library which allows the definition
+    We only need three market states so we provide hard-coded defaults.
+    The way this market works, market activity takes place at the transitions.
+    I'm (TDH) using the "transitions" library which allows the definition
     of callback functions when entering (and exiting) any given state
     and this is the primary method by which the activity will in the
     market will take place. 
 
     Documentation on the "transitions" library can be found here:
     https://pypi.org/project/transitions/
-
-
-
     """
 
     def __init__(self, start_date, end_date, market_name:str="rt_energy_market", market_timing:dict=None, min_freq:int=15,
@@ -60,13 +53,9 @@ class RTMarket(Market):
         that gets called when the market state machine enters the "clearing"
         state.
         """
-        super().__init__(market_name, market_timing, start_date, end_date, **kwargs)
-        self.em.configuration["time"]["min_freq"] = min_freq
-        self.em.configuration["time"]["window"] = window
-        self.em.configuration["time"]["lookahead"] = lookahead
-        self.__dict__.update(kwargs)
-        if self.market_timing == None:
-            self.market_timing = {
+        # Supply a default market timing object for a 15-minute real-time
+        if market_timing == None:
+            market_timing = {
                 "states": {
                     "idle": {
                         "start_time": 0,
@@ -85,22 +74,17 @@ class RTMarket(Market):
                 "initial_state": "idle",
                 "market_interval": 900
             }
+        super().__init__(market_name, market_timing, start_date, end_date, **kwargs)
+        self.em.configuration["time"]["min_freq"] = min_freq
+        self.em.configuration["time"]["window"] = window
+        self.em.configuration["time"]["lookahead"] = lookahead
+        self.__dict__.update(kwargs)
             # starts at midnight
         self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=f'{min_freq}min')
-        # Space for day-ahead solution (used at initialization)
+        # Space for day-ahead solution (used in the first clear_market call)
         self.da_mdl_sol = None
         self.fixed_commitment = fixed_commitment # Option to use a fixed or flexible commitment
         self.unfix_fast_start = unfix_fast_start # Fast start units can remain flexible in RT
-
-    # def collect_bids(self, gen_commitment):
-    #     """
-    #     Callback method that pulls in bids to grid data and moves to the next state.
-
-    #     This method must be overloaded in an instance of this class to
-    #     implement the necessary operatations to update the market in question.
-    #     """
-    #     self.move_to_next_state()
-
 
     def interpolate_market_start_times(self, start_date:str, end_date:str, freq:str='15min',
                                        start_time:str=' 00:00:00'):
@@ -137,6 +121,7 @@ class RTMarket(Market):
         ref_soc_series = reference_data['elements']['storage'][storage]['state_of_charge']['values']
         ref_time_keys = reference_data['system']['time_keys']
         # We can restrict to the last N intervals to limit interpolation over large inputs
+        print("MAX_NUM_INTERVALS: ", max_num_intervals)
         if max_num_intervals is not None:
             ref_soc_series = ref_soc_series[-max_num_intervals:]
             ref_time_keys = ref_time_keys[-max_num_intervals:]
@@ -145,6 +130,8 @@ class RTMarket(Market):
         min_freq = self.em.configuration["time"]["min_freq"]
         model_start_time = self.em.mdl.data['system']['time_keys'][0]
         daterange = mk_daterange(model_start_time, min_freq=min_freq, periods=periods)
+        # ref_time_keys = ref_time_keys.drop_duplicates()
+        print("REF_TIME_KEYS: ", ref_time_keys)
         end_soc = get_value_at_time(ref_soc_series, ref_time_keys, daterange[-1], min_freq)
         # Bound soc on interval [0, 1]
         end_soc = min(1, max(0, end_soc))
@@ -335,7 +322,8 @@ class RTMarket(Market):
                 if self.current_start_time in self.commitment_hist['timestamps']:
                     t0idx = np.where(self.current_start_time == np.array(self.commitment_hist['timestamps']))[0][0]
                 else:
-                    raise ValueError(f"Time {self.current_start_time} is not in commitment history timestamps.")
+                    raise ValueError(f"Time {self.current_start_time} is not in commitment history timestamps:"
+                                     f"\n{self.commitment_hist['timestamps']}.")
 
                 # It is possible for t0idx in the last interval to have no commitments available (if no day-ahead
                 # lookahead) If so, there are no commitments to add. Otherwise, pass the commitments for the

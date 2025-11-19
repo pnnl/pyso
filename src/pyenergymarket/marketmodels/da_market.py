@@ -15,10 +15,7 @@ import json
 import logging
 import pandas as pd
 import numpy as np
-from transitions import Machine
 from .market import Market
-
-from egret.data.model_data import ModelData
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -26,21 +23,15 @@ logger.setLevel(logging.WARNING)
 
 class DAMarket(Market):
     """
-    TODO: describe this class
-
-    For the off-shore-wind use case, we only need three market states so
-    those will be hard-coded as below. The way this market works, all of 
-    the activity of the market takes place at the transitions. I'm
-    (TDH) using the "transitions" library which allows the definition
+    We only need three market states so we provide hard-coded defaults.
+    The way this market works, market activity takes place at the transitions.
+    I'm (TDH) using the "transitions" library which allows the definition
     of callback functions when entering (and exiting) any given state
     and this is the primary method by which the activity will in the
-    market will take place. 
+    market will take place.
 
     Documentation on the "transitions" library can be found here:
     https://pypi.org/project/transitions/
-
-
-
     """
 
     def __init__(self, start_date, end_date, market_name:str="da_energy_market", market_timing:dict=None,
@@ -52,16 +43,9 @@ class DAMarket(Market):
         that gets called when the market state machine enters the "clearing"
         state.
         """
-        super().__init__(market_name, market_timing, start_date, end_date, **kwargs)
-        # Do we need to be setting these here or are they passed as part of the EnergyMarket object?
-        self.em.configuration["time"]["min_freq"] = min_freq
-        self.em.configuration["time"]["window"] = window
-        self.em.configuration["time"]["lookahead"] = lookahead
-        # This translates all the kwarg key-value pairs into class attributes
-        self.__dict__.update(kwargs)
         # if market_timing isn't specified input default vaules.
-        if self.market_timing == None:
-            self.market_timing = {
+        if market_timing == None:
+            market_timing = {
                 "states": {
                     "idle": {
                         "start_time": 0,
@@ -80,6 +64,13 @@ class DAMarket(Market):
                 "initial_state": "idle",
                 "market_interval": 86400
             }
+        super().__init__(market_name, market_timing, start_date, end_date, **kwargs)
+        # These update the EnergyMarket defaults with specified arguments
+        self.em.configuration["time"]["min_freq"] = min_freq
+        self.em.configuration["time"]["window"] = window
+        self.em.configuration["time"]["lookahead"] = lookahead
+        # This translates all the kwarg key-value pairs into class attributes
+        self.__dict__.update(kwargs)
 
     def clear_market(self, local_save=False):
         """ Calls the base class clear_market method, then also does DA specific functions """
@@ -90,7 +81,7 @@ class DAMarket(Market):
 
     def store_storage_soc(self, max_intervals:int=24):
         """
-        Saves the storage state-of-charge at the corresponding times. This could possible be merged into a
+        Saves the storage state-of-charge at the corresponding times. This could possibly be merged into a
         common function with store_commitment_hist that accepts element type and keys, but that may be hard
         to get correct for general cases.
 
