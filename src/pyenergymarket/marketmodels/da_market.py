@@ -10,7 +10,7 @@ can be called as methods. (This may not be a hard assumption.)
 @author: Trevor Hardy
 trevor.hardy@pnnl.gov
 """
-import datetime as dt
+import datetime
 import logging
 from .market import Market
 from .marketutils import convert_64, add_load_curtail
@@ -127,7 +127,7 @@ class DAMarket(Market):
         self.timestep += 1
         if self.timestep >= len(self.start_times):
             # Add a day (exact value doesn't matter, just need something past the horizon)
-            self.current_start_time += dt.timedelta(days=1)
+            self.current_start_time += datetime.timedelta(days=1)
         else:
             self.current_start_time = self.start_times[self.timestep]
         logger.info("Market ", self.market_name, "next start time: ", self.current_start_time)
@@ -285,11 +285,12 @@ class DAMarket(Market):
         # Time keys - we pad the last interval since Egret gives soc values at END of interval while keys are START
         time_keys = pd.to_datetime(self.em.mdl_sol.data['system']['time_keys'])[:max_intervals]
         time_delta_end_minutes = int((time_keys[-1] - time_keys[-2]).total_seconds() / 60.0)
-        time_keys = time_keys.append(pd.to_datetime([time_keys[-1] + dt.timedelta(minutes=time_delta_end_minutes)]))
+        time_keys = time_keys.append(
+            pd.to_datetime([time_keys[-1] + datetime.timedelta(minutes=time_delta_end_minutes)]))
         # Create dict if needed with the timestamps as a top level key (shared by all storage units)
         use_soc_init = False
         if self.storage_soc is None:
-            self.storage_soc = {'timestamps': time_keys, 'storage': {}}
+            self.storage_soc = {'timestamps': time_keys, 'elements': {'storage': {}}}
             # The first time through we use soc init (all other times it is same as last of previous)
             use_soc_init = True
         else:
@@ -302,11 +303,11 @@ class DAMarket(Market):
                 soc_init = storage_dict['initial_state_of_charge']
                 soc_values = np.append(np.array([soc_init]), soc_values)
             # If previous values are in the storage dictionary, we will append new values to the end
-            if storage in self.storage_soc['storage'].keys():
-                prev_soc_values = self.storage_soc['storage'][storage]['state_of_charge']['values']
+            if storage in self.storage_soc['elements']['storage'].keys():
+                prev_soc_values = self.storage_soc['elements']['storage'][storage]['state_of_charge']['values']
                 soc_values = np.append(prev_soc_values, soc_values)
-            self.storage_soc['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
-                                                                        'values': soc_values}}
+            self.storage_soc['elements']['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
+                                                                                    'values': soc_values}}
 
     def update_state_of_charge(self, storage, market_type='day_ahead'):
         """
@@ -334,7 +335,7 @@ class DAMarket(Market):
             # Initial soc is the self.storage_soc at current time (which may require interpolation)
             # We restrict to the last 48 intervals (assumes soc is stored hourly, which is true at time of creation)
             limit = 48
-            da_soc_series = self.storage_soc['storage'][storage]['state_of_charge']['values'][-limit:]
+            da_soc_series = self.storage_soc['elements']['storage'][storage]['state_of_charge']['values'][-limit:]
             da_time_keys = self.storage_soc['timestamps'][-limit:]
             # We get initial soc from the last RT interval, when available. Otherwise we lookup from DA value
             if self.em.mdl_sol is None:

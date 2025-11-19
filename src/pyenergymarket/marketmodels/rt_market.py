@@ -142,8 +142,6 @@ class RTMarket(Market):
         ref_soc_series = reference_data['elements']['storage'][storage]['state_of_charge']['values']
         ref_time_keys = reference_data['system']['time_keys']
         # We can restrict to the last N intervals to limit interpolation over large inputs
-        print("STORAGE SOC:", self.storage_soc, "\n\n")
-        print("MAX_NUM_INTERVALS: ", max_num_intervals)
         if max_num_intervals is not None:
             ref_soc_series = ref_soc_series[-max_num_intervals:]
             ref_time_keys = ref_time_keys[-max_num_intervals:]
@@ -153,7 +151,6 @@ class RTMarket(Market):
         model_start_time = self.em.mdl.data['system']['time_keys'][0]
         daterange = mk_daterange(model_start_time, min_freq=min_freq, periods=periods)
         # ref_time_keys = ref_time_keys.drop_duplicates()
-        print("REF_TIME_KEYS: ", ref_time_keys)
         end_soc = get_value_at_time(ref_soc_series, ref_time_keys, daterange[-1], min_freq)
         # Bound soc on interval [0, 1]
         end_soc = min(1, max(0, end_soc))
@@ -264,7 +261,7 @@ class RTMarket(Market):
             if etype != 'timestamps':
                 for unit, u_dict in edict.items():
                     # Create dictionary structure the first time through
-                    da_commitment_interp = self._prep_commitment_hist(da_commitment_interp, etype, unit)
+                    da_commitment_interp = self.prep_commitment_hist(da_commitment_interp, etype, unit)
                     # Call the fill_real_time function on this set of values
                     da_commitment_interp[etype][unit]['commitment']['values'] = (
                         self.fill_real_time(u_dict['commitment']['values']))
@@ -534,7 +531,7 @@ class RTMarket(Market):
         # Create dict if needed with the timestamps as a top level key (shared by all storage units)
         use_soc_init = False
         if self.storage_soc is None:
-            self.storage_soc = {'timestamps': time_keys, 'storage': {}}
+            self.storage_soc = {'timestamps': time_keys, 'elements': {'storage': {}}}
             # The first time through we use soc init (all other times it is same as last of previous)
             use_soc_init = True
         else:
@@ -547,10 +544,10 @@ class RTMarket(Market):
                 soc_init = storage_dict['initial_state_of_charge']
                 soc_values = np.append(np.array([soc_init]), soc_values)
             # If previous values are in the storage dictionary, we will append new values to the end
-            if storage in self.storage_soc['storage'].keys():
-                prev_soc_values = self.storage_soc['storage'][storage]['state_of_charge']['values']
+            if storage in self.storage_soc['elements']['storage'].keys():
+                prev_soc_values = self.storage_soc['elements']['storage'][storage]['state_of_charge']['values']
                 soc_values = np.append(prev_soc_values, soc_values)
-            self.storage_soc['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
+            self.storage_soc['elements']['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
                                                                         'values': soc_values}}
 
     def update_state_of_charge(self, storage, market_type='day_ahead'):
@@ -579,7 +576,7 @@ class RTMarket(Market):
             # Initial soc is the self.storage_soc at current time (which may require interpolation)
             # We restrict to the last 48 intervals (assumes soc is stored hourly, which is true at time of creation)
             limit = 48
-            da_soc_series = self.storage_soc['storage'][storage]['state_of_charge']['values'][-limit:]
+            da_soc_series = self.storage_soc['elements']['storage'][storage]['state_of_charge']['values'][-limit:]
             da_time_keys = self.storage_soc['timestamps'][-limit:]
             # We get initial soc from the last RT interval, when available. Otherwise we lookup from DA value
             if self.em.mdl_sol is None:
