@@ -121,17 +121,21 @@ class Market():
 
     def collect_bids(self):
         """
-        Callback method that pulls in T2 bids to grid data.
+        Callback method to pull in data.
 
         This method must be overloaded in an instance of this class to
         implement the necessary operations to update the market in question.
-        # """
+        """
+        pass
 
-        # print("BIDS COLLECTED", self.market_name, self.bids)
-        for key in self.bids.keys():
-            self.em.mdl.data['elements']['generator'][key] = self.bids[key]
+    def publish_results(self):
+        """
+        Method to publish results from clear_market method.
 
-        # print(market, bid['time'], key, self.markets[f"{market}_energy_market"].em.mdl.data['elements']['generator'][key])
+        This method must be overloaded in an instance of this class to
+        implement the necessary operations to update the market in question.
+        """
+        pass
 
     def add_gens(self):
         """ Adds generators, including full Egret model data information to the model.
@@ -207,6 +211,7 @@ class Market():
         # These are automatically executed on state transitions
         self.state_machine.on_enter_bidding("collect_bids")
         self.state_machine.on_enter_clearing("clear_market")
+        self.state_machine.on_exit_clearing("publish_results")
 
     def clear_market(self, local_save=False, contingency_list=None):
         """

@@ -79,6 +79,20 @@ class DAMarket(Market):
         # Right now, all we do in DA only is save the storage state-of-charge
         self.store_storage_soc()
 
+    def collect_bids(self):
+        """
+        Callback method that pulls in T2 bids to grid data.
+
+        This method must be overloaded in an instance of this class to
+        implement the necessary operations to update the market in question.
+        # """
+
+        # print("BIDS COLLECTED", self.market_name, self.bids)
+        for key in self.bids.keys():
+            self.em.mdl.data['elements']['generator'][key] = self.bids[key]
+
+        # print(market, bid['time'], key, self.markets[f"{market}_energy_market"].em.mdl.data['elements']['generator'][key])
+
     def store_storage_soc(self, max_intervals:int=24):
         """
         Saves the storage state-of-charge at the corresponding times. This could possibly be merged into a

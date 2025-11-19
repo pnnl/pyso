@@ -100,6 +100,20 @@ class RTMarket(Market):
         # Generate hourly datetime index
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
+    
+    def collect_bids(self):
+        """
+        Callback method that pulls in T2 bids to grid data.
+
+        This method must be overloaded in an instance of this class to
+        implement the necessary operations to update the market in question.
+        # """
+
+        # print("BIDS COLLECTED", self.market_name, self.bids)
+        for key in self.bids.keys():
+            self.em.mdl.data['elements']['generator'][key] = self.bids[key]
+
+        # print(market, bid['time'], key, self.markets[f"{market}_energy_market"].em.mdl.data['elements']['generator'][key])
 
     def compute_end_soc(self, storage:str, max_num_intervals:Union[int, None]=48):
         """ This computes the ending state of charge at a given time
