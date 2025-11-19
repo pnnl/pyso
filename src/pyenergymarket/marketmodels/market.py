@@ -565,23 +565,8 @@ def add_load_curtail(md: ModelData, load_curtail_cost: Union[int, float, None] =
     logger = logging.getLogger()
     bus_attrs = md.attributes(element_type='bus')
     load_attrs = md.attributes(element_type='load')
-    # with open('settings.json', 'r') as f:
-    #     json_data = json.load(f)
-    json_data = {
-    "v_min": 0.9,
-    "v_max": 1.1,
-    "v_min_relaxed": 0.8,
-    "v_max_relaxed": 1.2,
-    "branch_limit": None,
-    "p_cost": 0,
-    "q_cost": 500,
-    "load_curtail_cost": 2000,
-    "load_curtail_q_cost": 0,
-    "gen_limit_eps": 0,
-    "use_reserves": False,
-    "allow_demand_adjustment": True,
-    "exclude_slack_shunt_proxy": []
-    }
+    with open('settings.json', 'r') as f:
+        json_data = json.load(f)
 
     p_cost = json_data['load_curtail_cost'] if load_curtail_cost is None else load_curtail_cost
 
