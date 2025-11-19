@@ -11,20 +11,12 @@ can be called as methods. (This may not be a hard assumption.)
 trevor.hardy@pnnl.gov
 """
 import datetime as dt
-import json
 import logging
 import pandas as pd
-import numpy as np
-import copy
 import math
 
-from typing import Union
 from transitions import Machine
 from ..engine import EnergyMarket
-from ..utils.timeutils import mk_daterange, get_value_at_time
-from egret.data.model_data import ModelData
-
-from marketutils import convert_64
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -283,20 +275,11 @@ class Market():
 
         self.em.get_model(self.current_start_time)
         # Modifications to model before solve, depending on use-case
-        self.add_gens()
         self.em.update_initial_conditions(self.em.mdl_sol)
-        if contingency_list is not None:
-            self.apply_contingencies(contingency_list=contingency_list)
-        self.em.mdl.write(f'data/{self.market_name}_model_{self.timestep}.json')
         self.em.solve_model()
-        # Put back in_service=False branches (these are removed by default in Egret solution)
-        self.restore_lines()
         if local_save:
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
         self.market_results = self.em.mdl_sol
-        self.market_results.data = convert_64(self.market_results.data)
-        self.store_commitment_hist(omit=['_load_curtail'])
-        self.store_storage_soc() # Note this is intended for DA only right now - RT uses DA values
         self.timestep += 1
         if self.timestep >= len(self.start_times):
             # Add a day (exact value doesn't matter, just need something past the horizon)
@@ -304,210 +287,6 @@ class Market():
         else:
             self.current_start_time = self.start_times[self.timestep]
         logger.info("Market ", self.market_name, "next start time: ", self.current_start_time)
-
-    @staticmethod
-    def prep_commitment_hist(commitment_dict, etype, unit):
-        """
-        Creates an empty dictionary structure for the commitment history for a given element and generator/unit
-
-        Args:
-            etype (str): Type of element ('generator', 'storage', etc.)
-            unit (str): Name of unit (typical use case is Egret generator name)
-        """
-        if etype not in commitment_dict.keys():
-            commitment_dict[etype] = {unit: {'initial_status': None,
-                                             'commitment':
-                                                 {'data_type': 'time_series',
-                                                  'values': []}}}
-        if unit not in commitment_dict[etype].keys():
-            commitment_dict[etype][unit] = {'initial_status': None,
-                                            'commitment':
-                                                {'data_type': 'time_series',
-                                                 'values': []}}
-        return commitment_dict
-
-    def store_commitment_hist(self, keep='new', merge_dict=None, omit=[]):
-        """
-        Updates the commitment and initial status of generators (and storage) based on the
-        model solution from a cleared market. Stored in the self.commitment_hist dictionary
-        This is a partial copy of the Egret generator element dictionary, specifically designed
-        to hold and update commitment history (and initial status) as markets pass
-
-        Note - there is a case for merging entire egret models (rather than just commitment history),
-        although there is the chance for conflicts if settings change and the overall size is larger (though
-        probably not large enough to cause RAM issues, so maybe that doesn't matter)
-        Option - this type of method could also be generalized to merge particular time series, although
-        some special handling may still be needed.
-
-        Args:
-            keep (string): In the case of duplicate timestamps whether to keep 'new' or 'old' values. Defaults to new.
-            merge_dict (dict): Option to merge a commitment history (typically merging DA into RT). Defaults to None.
-                               Note, if merge_dict is specified, Egret model will be ignored. Keep='new' will use
-                               the merge_dict values in case of duplicate timestamps.
-            omit (list): List of strings for generators to omit. This can be part of the name. For example:
-                             omit = ['_w_new'] will omit any generators containing '_w_new' in their name
-        """
-        # Helper function to check if any omit strings are in the unit name
-        def omit_unit(unit:str, omit:list):
-            omit_status = False
-            for om in omit:
-                if om in unit:
-                    omit_status = True
-                    break
-            return omit_status
-
-        assert keep in ['new', 'old'], f"keep must be either 'new' or 'old', not {keep}"
-        # Create dict if needed with the timestamps as a top level key (shared by all generators/elements)
-        if self.commitment_hist is None:
-            self.commitment_hist = {'timestamps':[]}
-        # Keep a copy of the old and the new timestamps
-        commit_times_hist = self.commitment_hist['timestamps']
-        if merge_dict is None:
-            commit_times_new = pd.to_datetime(self.em.mdl_sol.data['system']['time_keys'])
-        else:
-            commit_times_new = merge_dict['timestamps']
-        # Check whether to loop over stored PyEnergyMarket Model or an input model dictionary
-        if merge_dict is None:
-            loop_dict = self.em.mdl_sol.data['elements']
-        else:
-            loop_dict = merge_dict
-        for etype, e_dict in loop_dict.items():
-            # etype is 'generator', 'renewable', 'load', etc. - Egret types. e_dict holds each unit's info
-            # Restrict to committable elements (optional - slight speedup but risk of missing new types)
-            if etype in ['generator']:
-                for unit, u_dict in e_dict.items():
-                    if omit_unit(unit, omit):
-                        continue # Skip if unit name is in the omit list
-                    # Add empty key if it doesn't already exist. Structure matches Egret (with timestamps added)
-                    self.commitment_hist = self.prep_commitment_hist(self.commitment_hist, etype, unit)
-                    # First time through, set the initial status (this is fixed based on the starting initial_status)
-                    if self.commitment_hist[etype][unit]['initial_status'] is None:
-                        self.commitment_hist[etype][unit]['initial_status'] = u_dict['initial_status']
-                    # Get current commitment_hist, then check for duplicate timestamps in the incoming solution
-                    # This is expected for RT and for DA if using a lookahead window.
-                    # We will use the new value (from the model) as the latest
-                    # [Optional] Could clean this up with np.intersect1d or something
-                    commit_values_hist = self.commitment_hist[etype][unit]['commitment']['values']
-                    _commit_vals_hist = copy.copy(commit_values_hist)
-                    if merge_dict is None:
-                        if 'commitment' in u_dict.keys():
-                            commit_values_new = u_dict['commitment']['values']
-                        else: # If missing, Egret accepts the None input for unfixed
-                            commit_values_new = [None] * len(commit_times_new)
-                    else:
-                        commit_values_new = merge_dict[etype][unit]['commitment']['values']
-                    _commit_times_hist = copy.copy(commit_times_hist)
-                    for i, timestamp in enumerate(commit_times_new):
-                        if timestamp in _commit_times_hist:
-                            if keep == 'new':
-                                # Find the index of the previous value and overwrite it with the new value
-                                hidx = _commit_times_hist.index(timestamp)
-                                commit_values_hist[hidx] = commit_values_new[i]
-                        else:
-                            _commit_times_hist.append(timestamp)
-                            commit_values_hist.append(commit_values_new[i])
-                    # May be unnecessary, but ensuring that times are strictly ascending
-                    sorted_inds = np.argsort(_commit_times_hist)
-                    _commit_times_hist = list(np.array(_commit_times_hist)[sorted_inds])
-                    commit_values_hist = list(np.array(commit_values_hist)[sorted_inds])
-                    commit_values_hist = [int(cvh) if isinstance(cvh, int) else cvh for cvh in commit_values_hist] # Change to int instead of int64
-                    # Set commitment values
-                    self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
-        self.commitment_hist['timestamps'] = _commit_times_hist
-
-    def store_storage_soc(self, max_intervals:int=24):
-        """
-        Saves the storage state-of-charge at the corresponding times. This could possibly be merged into a
-        common function with store_commitment_hist that accepts element type and keys, but that may be hard
-        to get correct for general cases.
-
-        Args:
-            max_intervals (int): The maximum number of time intervals to save (default is 24, assuming hourly DA)
-        """
-        # If no storage units are in the model, don't continue
-        if 'storage' not in self.em.mdl_sol.data['elements'].keys():
-            return
-        # Time keys - we pad the last interval since Egret gives soc values at END of interval while keys are START
-        time_keys = pd.to_datetime(self.em.mdl_sol.data['system']['time_keys'])[:max_intervals]
-        time_delta_end_minutes = int((time_keys[-1] - time_keys[-2]).total_seconds() / 60.0)
-        time_keys = time_keys.append(pd.to_datetime([time_keys[-1] + dt.timedelta(minutes=time_delta_end_minutes)]))
-        # Create dict if needed with the timestamps as a top level key (shared by all storage units)
-        use_soc_init = False
-        if self.storage_soc is None:
-            self.storage_soc = {'timestamps': time_keys, 'storage': {}}
-            # The first time through we use soc init (all other times it is same as last of previous)
-            use_soc_init = True
-        else:
-            # Don't copy the first interval (it was added last time by the end padding)
-            self.storage_soc['timestamps'] = self.storage_soc['timestamps'].append(time_keys[1:])
-        # loop through storage units
-        for storage, storage_dict in self.em.mdl_sol.data['elements']['storage'].items():
-            soc_values = storage_dict['state_of_charge']['values'][:max_intervals]
-            if use_soc_init:
-                soc_init = storage_dict['initial_state_of_charge']
-                soc_values = np.append(np.array([soc_init]), soc_values)
-            # If previous values are in the storage dictionary, we will append new values to the end
-            if storage in self.storage_soc['storage'].keys():
-                prev_soc_values = self.storage_soc['storage'][storage]['state_of_charge']['values']
-                soc_values = np.append(prev_soc_values, soc_values)
-            self.storage_soc['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
-                                                                        'values': soc_values}}
-
-    def update_state_of_charge(self, storage, market_type='day_ahead'):
-        """
-        Updates the state of charge in the egret ModelData object for the given storage
-        Two situations:
-            market_type = 'day_ahead' populates init_state_of_charge from the end of the previous solution
-                           and sends end_state_of_charge = init_state_of_charge
-            market_type = 'real_time' populates initial state of charge based on self.storage_soc (saved from DA)
-                          at the current time and end_state_of_charge at the end of the window + lookahead
-        """
-        window = self.em.configuration["time"]["window"]
-        if market_type == 'day_ahead':
-            # If no solution exists (first time) just use whatever is already in the input model
-            if self.em.mdl_sol is None:
-                return
-            # Use soc and end of window (these are the values saved, excluding lookahead)
-            self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] \
-                = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window-1]
-            self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] \
-                = self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge']
-        elif market_type == 'real_time':
-            # If no saved storage, we have no reference to use
-            if self.storage_soc is None:
-                return
-            # Initial soc is the self.storage_soc at current time (which may require interpolation)
-            # We restrict to the last 48 intervals (assumes soc is stored hourly, which is true at time of creation)
-            limit = 48
-            da_soc_series = self.storage_soc['storage'][storage]['state_of_charge']['values'][-limit:]
-            da_time_keys = self.storage_soc['timestamps'][-limit:]
-            # We get initial soc from the last RT interval, when available. Otherwise we lookup from DA value
-            if self.em.mdl_sol is None:
-                lookup_init_soc = get_value_at_time(da_soc_series, da_time_keys, self.current_start_time)
-            else:
-                lookup_init_soc \
-                    = self.em.mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window - 1]
-            # Bound soc on interval [0, 1]
-            lookup_init_soc = min(1, max(0, lookup_init_soc))
-            self.em.mdl.data['elements']['storage'][storage]['initial_state_of_charge'] = lookup_init_soc
-            # For end soc we use the same da series and time keys, but find end interval time
-            periods = self.em.configuration["time"]["window"] + self.em.configuration["time"]["lookahead"]
-            min_freq = self.em.configuration["time"]["min_freq"]
-            daterange = mk_daterange(self.current_start_time, min_freq=min_freq, periods=periods)
-            # While loop ensures that we don't extend past the horizon (only affects last interval)
-            end_soc_found = False
-            lookback, limit = 1, len(daterange)
-            lookup_end_soc = None
-            while not end_soc_found and lookback < limit:
-                try:
-                    lookup_end_soc = get_value_at_time(da_soc_series, da_time_keys, daterange[-1])
-                    end_soc_found = True
-                except ValueError:
-                    lookback += 1
-            if lookup_end_soc is not None:
-                # Bound soc on interval [0, 1]
-                lookup_end_soc = min(1, max(0, lookup_end_soc))
-                self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] = lookup_end_soc
 
     def valid_time_horizon(self):
         """ Returns T if current start time is within the horizon, otherwise F """

@@ -1,6 +1,8 @@
 import logging
-from settings import model_data_options
+from .settings import model_data_options
 from egret.data.model_data import ModelData
+from typing import Union
+import numpy as np
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
