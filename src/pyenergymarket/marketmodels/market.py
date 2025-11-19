@@ -24,7 +24,7 @@ from ..engine import EnergyMarket
 from ..utils.timeutils import mk_daterange, get_value_at_time
 from .settings import model_data_options
 from egret.data.model_data import ModelData
-
+from settings import model_data_options
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -659,10 +659,7 @@ def add_load_curtail(md: ModelData, load_curtail_cost: Union[int, float, None] =
     logger = logging.getLogger()
     bus_attrs = md.attributes(element_type='bus')
     load_attrs = md.attributes(element_type='load')
-    with open('settings.json', 'r') as f:
-        json_data = json.load(f)
-
-    p_cost = json_data['load_curtail_cost'] if load_curtail_cost is None else load_curtail_cost
+    p_cost = model_data_options['load_curtail_cost'] if load_curtail_cost is None else load_curtail_cost
 
     logger.info('--- LOAD CURTAIL ---')
     logger.info('identifying loads')
