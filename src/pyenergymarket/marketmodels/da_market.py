@@ -88,4 +88,3 @@ class DAMarket(Market):
         super().clear_market(local_save=local_save)
         # Day-ahead specific market operations.
         # Right now, all we do in DA only is save the storage state-of-charge
-
