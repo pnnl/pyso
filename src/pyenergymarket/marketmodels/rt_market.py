@@ -101,7 +101,7 @@ class RTMarket(Market):
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
 
-    def compute_end_soc(self, storage:str, max_num_intervals:Union[int, None]=48):
+    def compute_end_soc(self, storage:str, max_num_intervals:Union[int, None]=24):
         """ This computes the ending state of charge at a given time
 
         Args:
@@ -121,6 +121,7 @@ class RTMarket(Market):
         ref_soc_series = reference_data['elements']['storage'][storage]['state_of_charge']['values']
         ref_time_keys = reference_data['system']['time_keys']
         # We can restrict to the last N intervals to limit interpolation over large inputs
+        print("MAX_NUM_INTERVALS: ", max_num_intervals)
         if max_num_intervals is not None:
             ref_soc_series = ref_soc_series[-max_num_intervals:]
             ref_time_keys = ref_time_keys[-max_num_intervals:]
@@ -129,6 +130,8 @@ class RTMarket(Market):
         min_freq = self.em.configuration["time"]["min_freq"]
         model_start_time = self.em.mdl.data['system']['time_keys'][0]
         daterange = mk_daterange(model_start_time, min_freq=min_freq, periods=periods)
+        ref_time_keys = ref_time_keys.drop_duplicates()
+        print("REF_TIME_KEYS: ", ref_time_keys)
         end_soc = get_value_at_time(ref_soc_series, ref_time_keys, daterange[-1], min_freq)
         # Bound soc on interval [0, 1]
         end_soc = min(1, max(0, end_soc))

@@ -204,7 +204,7 @@ class Market():
         self.state_machine.on_enter_bidding("collect_bids")
         self.state_machine.on_enter_clearing("clear_market")
 
-    def clear_market(self, local_save=False):
+    def clear_market(self, local_save=False, contingency_list=None):
         """
         Callback method that runs EGRET and clears a market.
 
@@ -645,7 +645,7 @@ class Market():
                 lookup_end_soc = min(1, max(0, lookup_end_soc))
                 self.em.mdl.data['elements']['storage'][storage]['end_state_of_charge'] = lookup_end_soc
 
-    def add_load_curtail(md: ModelData, load_curtail_cost: Union[int, float, None] = None):
+    def add_load_curtail(self, md: ModelData, load_curtail_cost: Union[int, float, None] = None):
         '''Adds a generator at each load bus with capacity equal to load and cost equal to load_curtail_cost.'''
         logger = logging.getLogger()
         bus_attrs = md.attributes(element_type='bus')
@@ -690,10 +690,10 @@ class Market():
         logger.info(f"\t{len(bus_attrs['names'])} buses processed")
         logger.info(f'\tp_cost={p_cost} ({len(load_slack)} slack units, total scalar equivalent {total:.2f} MW)')
 
-        add_generators(md, new_gens=load_slack)
+        self.add_generators(md, new_gens=load_slack)
         return list(load_slack.keys())
 
-    def add_generators(md: ModelData, new_gens: dict, update_duplicates=False):
+    def add_generators(self, md: ModelData, new_gens: dict, update_duplicates=False):
         '''Adds new generators to ModelData by merging new_gens with default generator data.'''
         logger = logging.getLogger()
         logger.info('adding generators')
