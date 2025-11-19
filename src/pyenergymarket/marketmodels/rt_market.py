@@ -101,7 +101,7 @@ class RTMarket(Market):
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive='left')
         return start_time_index
 
-    def compute_end_soc(self, storage:str, max_num_intervals:Union[int, None]=24):
+    def compute_end_soc(self, storage:str, max_num_intervals:Union[int, None]=48):
         """ This computes the ending state of charge at a given time
 
         Args:
@@ -130,7 +130,7 @@ class RTMarket(Market):
         min_freq = self.em.configuration["time"]["min_freq"]
         model_start_time = self.em.mdl.data['system']['time_keys'][0]
         daterange = mk_daterange(model_start_time, min_freq=min_freq, periods=periods)
-        ref_time_keys = ref_time_keys.drop_duplicates()
+        # ref_time_keys = ref_time_keys.drop_duplicates()
         print("REF_TIME_KEYS: ", ref_time_keys)
         end_soc = get_value_at_time(ref_soc_series, ref_time_keys, daterange[-1], min_freq)
         # Bound soc on interval [0, 1]
