@@ -650,7 +650,9 @@ class Market():
         logger = logging.getLogger()
         bus_attrs = md.attributes(element_type='bus')
         load_attrs = md.attributes(element_type='load')
-        p_cost = model_data_options['load_curtail_cost'] if load_curtail_cost is None else load_curtail_cost
+        with open('config.json', 'r') as f:
+            json_data = json.load(f)
+        p_cost = json_data['load_curtail_cost'] if load_curtail_cost is None else load_curtail_cost
 
         logger.info('--- LOAD CURTAIL ---')
         logger.info('identifying loads')
