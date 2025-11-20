@@ -10,7 +10,7 @@ def get_h5path():
     h5path = os.path.join(os.path.dirname(__file__), "localdata", "WECC240_20240807.h5")
     return h5path
 
-def get_pwdpath():
+def get_pwbpath():
     h5path = os.path.join(os.path.dirname(__file__), "localdata", "240busWECC_2018_PSS.pwb")
     return h5path
 
@@ -66,7 +66,7 @@ def main():
     pyen.utils.egretutils.flatten_distributed_generators(em.mdl)
 
     ### Setup PowerWorld Parsing
-    pwbpath = get_pwdpath()
+    pwbpath = get_pwbpath()
     pw = pyen.PWParse(pwbpath, config={"logging": {"level": "INFO"}})
     
     pw.logger.info("\nPower World Parsing\n===========================\n")
