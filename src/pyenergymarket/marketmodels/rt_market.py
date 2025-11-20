@@ -243,39 +243,13 @@ class RTMarket(Market):
             os.makedirs('data', exist_ok=True)
             self.em.save_model(f'data/{self.market_name}_results_{self.timestep}.json')
 
-        self.timestep += 1
+        self.timestep += self.em.configuration["time"]["window"]
         if self.timestep >= len(self.start_times):
             # Add an interval (exact value doesn't matter, just need something past the horizon)
             min_freq = self.em.configuration["time"]["min_freq"]
             self.current_start_time += datetime.timedelta(minutes=min_freq)
         else:
             self.current_start_time = self.start_times[self.timestep]
-
-    def reset_timestep(self, timestep=0, shift_commitment=True):
-        """ Resets the timestep to 0 (option to fix to a different value)
-            This also sends the commitment history backward by the number
-            of timesteps.
-
-        Args:
-            timestep (int): Specifies the timestep after the reset
-            shift_commitment (bool): Option to also shift the commitment history times back by the
-                                     start/stop time difference. This behavior is intended to support
-                                     pre-simulation runs in which the commitments happened in the past
-        """
-        self.timestep = timestep
-        self.current_start_time = self.start_times[self.timestep] # Also reset current start time
-        if shift_commitment and self.pre_simulation_days is not None:
-            # Compute the time to shift as the difference between the
-            start_time = self.start_times[0]
-            commitment_end_time = self.commitment_hist['timestamps'][-1]
-            # We also add the last interval for since the end time is not inclusive of the last time step
-            interval = commitment_end_time - self.commitment_hist['timestamps'][-2]
-            commitment_end_time += interval
-            time_shift = (commitment_end_time - start_time)*self.pre_simulation_days
-            for i in range(len(self.commitment_hist['timestamps'])):
-                self.commitment_hist['timestamps'][i] -= time_shift
-                # We also shift the state_of_charge
-                self.storage_soc['system']['time_keys'][i] -= time_shift
 
     def join_da_commitment(self, da_commitment:dict):
         """

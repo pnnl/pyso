@@ -51,7 +51,7 @@ class Market():
     pass
 
     def __init__(self, market_name, market_timing, start_date, end_date, market:EnergyMarket=None, local_save=False,
-                 **kwargs):
+                 freq:str='24h', **kwargs):
         """
         Generic version of all the markets used in the E-COMP LDRD initiative.
         As such, this is fairly particular to those needs and is 
@@ -67,7 +67,7 @@ class Market():
         self.em = market
         self.market_name = market_name
         self.current_state = market_timing["initial_state"]
-        self.start_times = self.interpolate_market_start_times(start_date, end_date)
+        self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=freq)
         logger.info("market", self.market_name, "start_times: ", self.start_times)
         self.timestep = 0
         self.current_start_time = self.start_times[self.timestep]
@@ -121,7 +121,7 @@ class Market():
         }
         """
         # Check that market timing dictionary fits expected format
-        self.validate_market_timing(self.market_timing)
+        self.validate_market_timing()
         # Set up all of the time tracking object
         self.timestep = 0
         self.current_start_time = self.start_times[self.timestep]
@@ -139,13 +139,14 @@ class Market():
         self.state_machine.on_enter_clearing("clear_market")
         self.state_machine.on_exit_clearing("publish_results")
 
-    def validate_market_timing(self, market_timing) -> None:
+    def validate_market_timing(self) -> None:
         """
         Validate that the provided market timing. Specifically check:
          - "states" keyword is present all states have the "start_time" and "duration" keys
          - initial offset and initial state match
          - total durations from all states are equal to the market_interval keyword
         """
+        market_timing = self.market_timing
         if not isinstance(market_timing, dict):
             raise TypeError(f"Must submit market_timing as a dictionary, not {type(market_timing)}")
         # Ensure the market_timing dict has the necessary keys (extraneous keys aren't penalized)
@@ -156,7 +157,7 @@ class Market():
         required_state_keys = ["start_time", "duration"]
         allowed_units = ['year', 'day', 'hour', 'minute', 'second']
         for state, state_dict in market_timing["states"].items():
-            if set(required_state_keys) < set(state_dict.keys()):
+            if set(state_dict.keys()) < set(required_state_keys):
                 raise KeyError(
                     f"Invalid keys for state {state}. All state dicts must contain keys: {required_state_keys}.")
             # If units are included, they must be from a given set
@@ -296,6 +297,33 @@ class Market():
         else:
             self.current_start_time = self.start_times[self.timestep]
         logger.info("Market ", self.market_name, "next start time: ", self.current_start_time)
+
+    def reset_timestep(self, timestep=0, shift_commitment=True):
+        """ Resets the timestep to 0 (option to fix to a different value)
+            This also sends the commitment history backward by the number
+            of timesteps.
+
+        Args:
+            timestep (int): Specifies the timestep after the reset
+            shift_commitment (bool): Option to also shift the commitment history times back by the
+                                     start/stop time difference. This behavior is intended to support
+                                     pre-simulation runs in which the commitments happened in the past
+        """
+        self.timestep = timestep
+        self.current_start_time = self.start_times[self.timestep] # Also reset current start time
+        if shift_commitment and self.pre_simulation_days is not None and self.commitment_hist is not None:
+            # Compute the time to shift as the difference between the
+            start_time = self.start_times[0]
+            commitment_end_time = self.commitment_hist['timestamps'][-1]
+            # We also add the last interval for since the end time is not inclusive of the last time step
+            interval = commitment_end_time - self.commitment_hist['timestamps'][-2]
+            commitment_end_time += interval
+            time_shift = (commitment_end_time - start_time)*self.pre_simulation_days
+            for i in range(len(self.commitment_hist['timestamps'])):
+                self.commitment_hist['timestamps'][i] -= time_shift
+                # We also shift the state_of_charge
+                if self.storage_soc is not None:
+                    self.storage_soc['system']['time_keys'][i] -= time_shift
 
     def valid_time_horizon(self):
         """ Returns T if current start time is within the horizon, otherwise F """

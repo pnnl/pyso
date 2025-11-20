@@ -132,32 +132,6 @@ class DAMarket(Market):
             self.current_start_time = self.start_times[self.timestep]
         logger.info("Market ", self.market_name, "next start time: ", self.current_start_time)
 
-    def reset_timestep(self, timestep=0, shift_commitment=True):
-        """ Resets the timestep to 0 (option to fix to a different value)
-            This also sends the commitment history backward by the number
-            of timesteps.
-
-        Args:
-            timestep (int): Specifies the timestep after the reset
-            shift_commitment (bool): Option to also shift the commitment history times back by the
-                                     start/stop time difference. This behavior is intended to support
-                                     pre-simulation runs in which the commitments happened in the past
-        """
-        self.timestep = timestep
-        self.current_start_time = self.start_times[self.timestep] # Also reset current start time
-        if shift_commitment and self.pre_simulation_days is not None:
-            # Compute the time to shift as the difference between the
-            start_time = self.start_times[0]
-            commitment_end_time = self.commitment_hist['timestamps'][-1]
-            # We also add the last interval for since the end time is not inclusive of the last time step
-            interval = commitment_end_time - self.commitment_hist['timestamps'][-2]
-            commitment_end_time += interval
-            time_shift = (commitment_end_time - start_time)*self.pre_simulation_days
-            for i in range(len(self.commitment_hist['timestamps'])):
-                self.commitment_hist['timestamps'][i] -= time_shift
-                # We also shift the state_of_charge
-                self.storage_soc['system']['time_keys'][i] -= time_shift
-
     @staticmethod
     def prep_commitment_hist(commitment_dict, etype, unit):
         """
