@@ -216,7 +216,23 @@ class RTMarket(Market):
         self.em.get_model(self.current_start_time)
         self.update_em_model()
         self.em.mdl.data = convert_64(self.em.mdl.data)
-        self.em.solve_model()
+        # Ramp rates can be binding - eventually we may find a better solution, for now double if solve is infeasible
+        try:
+            self.em.solve_model()
+        except:
+            logger.error("\nException found - error solving model. Retrying with doubled ramp rates.\n")
+            for g, g_dict in self.em.mdl.elements(element_type='generator'):
+                ramp_keys = ["ramp_up_60min", "ramp_down_60min"]
+                for ramp_key in ramp_keys:
+                    if ramp_key in g_dict.keys():
+                        g_dict[ramp_key] = g_dict[ramp_key] * 2
+            for s, s_dict in self.em.mdl.elements(element_type='storage'):
+                ramp_keys = ["ramp_up_input_60min", "ramp_down_input_60min", "ramp_up_output_60min",
+                             "ramp_down_output_60min"]
+                for ramp_key in ramp_keys:
+                    if ramp_key in s_dict.keys():
+                        s_dict[ramp_key] = s_dict[ramp_key] * 2
+            self.em.solve_model()
 
         self.market_results = self.em.mdl_sol
         self.market_results.data = convert_64(self.market_results.data)
@@ -531,12 +547,12 @@ class RTMarket(Market):
         # Create dict if needed with the timestamps as a top level key (shared by all storage units)
         use_soc_init = False
         if self.storage_soc is None:
-            self.storage_soc = {'timestamps': time_keys, 'elements': {'storage': {}}}
+            self.storage_soc = {'system': {'time_keys': time_keys}, 'elements': {'storage': {}}}
             # The first time through we use soc init (all other times it is same as last of previous)
             use_soc_init = True
         else:
             # Don't copy the first interval (it was added last time by the end padding)
-            self.storage_soc['timestamps'] = self.storage_soc['timestamps'].append(time_keys[1:])
+            self.storage_soc['system']['time_keys'] = self.storage_soc['system']['time_keys'].append(time_keys[1:])
         # loop through storage units
         for storage, storage_dict in self.em.mdl_sol.data['elements']['storage'].items():
             soc_values = storage_dict['state_of_charge']['values'][:max_intervals]
@@ -577,7 +593,7 @@ class RTMarket(Market):
             # We restrict to the last 48 intervals (assumes soc is stored hourly, which is true at time of creation)
             limit = 48
             da_soc_series = self.storage_soc['elements']['storage'][storage]['state_of_charge']['values'][-limit:]
-            da_time_keys = self.storage_soc['timestamps'][-limit:]
+            da_time_keys = self.storage_soc['system']['time_keys'][-limit:]
             # We get initial soc from the last RT interval, when available. Otherwise we lookup from DA value
             if self.em.mdl_sol is None:
                 lookup_init_soc = get_value_at_time(da_soc_series, da_time_keys, self.current_start_time)

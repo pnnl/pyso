@@ -156,7 +156,7 @@ class DAMarket(Market):
             for i in range(len(self.commitment_hist['timestamps'])):
                 self.commitment_hist['timestamps'][i] -= time_shift
                 # We also shift the state_of_charge
-                self.storage_soc['timestamps'][i] -= time_shift
+                self.storage_soc['system']['time_keys'][i] -= time_shift
 
     @staticmethod
     def prep_commitment_hist(commitment_dict, etype, unit):
@@ -290,12 +290,12 @@ class DAMarket(Market):
         # Create dict if needed with the timestamps as a top level key (shared by all storage units)
         use_soc_init = False
         if self.storage_soc is None:
-            self.storage_soc = {'timestamps': time_keys, 'elements': {'storage': {}}}
+            self.storage_soc = {'system': {'time_keys': time_keys}, 'elements': {'storage': {}}}
             # The first time through we use soc init (all other times it is same as last of previous)
             use_soc_init = True
         else:
             # Don't copy the first interval (it was added last time by the end padding)
-            self.storage_soc['timestamps'] = self.storage_soc['timestamps'].append(time_keys[1:])
+            self.storage_soc['system']['time_keys'] = self.storage_soc['system']['time_keys'].append(time_keys[1:])
         # loop through storage units
         for storage, storage_dict in self.em.mdl_sol.data['elements']['storage'].items():
             soc_values = storage_dict['state_of_charge']['values'][:max_intervals]
@@ -336,7 +336,7 @@ class DAMarket(Market):
             # We restrict to the last 48 intervals (assumes soc is stored hourly, which is true at time of creation)
             limit = 48
             da_soc_series = self.storage_soc['elements']['storage'][storage]['state_of_charge']['values'][-limit:]
-            da_time_keys = self.storage_soc['timestamps'][-limit:]
+            da_time_keys = self.storage_soc['system']['time_keys'][-limit:]
             # We get initial soc from the last RT interval, when available. Otherwise we lookup from DA value
             if self.em.mdl_sol is None:
                 lookup_init_soc = get_value_at_time(da_soc_series, da_time_keys, self.current_start_time)
