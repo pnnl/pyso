@@ -1,5 +1,4 @@
 import logging
-from .settings import model_data_options
 from egret.data.model_data import ModelData
 from typing import Union
 import numpy as np
@@ -8,12 +7,11 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.WARNING)
 
-def add_load_curtail(md: ModelData, load_curtail_cost: Union[int, float, None] = None):
+def add_load_curtail(md: ModelData, load_curtail_cost: Union[int, float] = 1000):
     '''Adds a generator at each load bus with capacity equal to load and cost equal to load_curtail_cost.'''
     logger = logging.getLogger()
     bus_attrs = md.attributes(element_type='bus')
     load_attrs = md.attributes(element_type='load')
-    p_cost = model_data_options['load_curtail_cost'] if load_curtail_cost is None else load_curtail_cost
 
     logger.info('--- LOAD CURTAIL ---')
     logger.info('identifying loads')
@@ -44,14 +42,14 @@ def add_load_curtail(md: ModelData, load_curtail_cost: Union[int, float, None] =
             load_slack[f'{b}_load_curtail'] = {
                 "bus": b,
                 "p_max": p_load,
-                "p_cost": 1000,  ### Load curtailment cost
+                "p_cost": load_curtail_cost,
                 "unit_type": "load_curtail"
             }
         elif isinstance(p_load, (int, float)) and p_load < 0:
             raise ValueError(f'Warning: Negative load at bus {b}')
 
     logger.info(f"\t{len(bus_attrs['names'])} buses processed")
-    logger.info(f'\tp_cost={p_cost} ({len(load_slack)} slack units, total scalar equivalent {total:.2f} MW)')
+    logger.info(f'\tload_curtail_cost={load_curtail_cost} ({len(load_slack)} slack units, total scalar equivalent {total:.2f} MW)')
 
     add_generators(md, new_gens=load_slack)
     return list(load_slack.keys())
