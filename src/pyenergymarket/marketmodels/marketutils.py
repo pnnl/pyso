@@ -99,7 +99,7 @@ def add_generators(md: ModelData, new_gens: dict, update_duplicates=False):
         # }
     }
     # adding bus_attrs so that we can append bus area and zone to generator
-    bus_attrs = md.attributes("bus")
+    bus_attrs = md.data['elements']["bus"]
     for gn, gen in new_gens.items():
         if gn in md_gens:
             if update_duplicates:
@@ -112,8 +112,9 @@ def add_generators(md: ModelData, new_gens: dict, update_duplicates=False):
                 duplicates.append(gn)
                 continue
         assert 'bus' in gen, "attempting to add a generator without a bus location"
-        gen['area'] = bus_attrs['area'][gen['bus']]
-        gen['zone'] = bus_attrs['zone'][gen['bus']]
+        for region in ['area', 'zone']:
+            if region in bus_attrs[gen['bus']].keys():
+                gen[region] = bus_attrs[gen['bus']][region]
         md_gens[gn] = {**default_gen, **gen}
 
     total_added = len(new_gens) - len(duplicates)

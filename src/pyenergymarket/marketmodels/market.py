@@ -25,11 +25,10 @@ logger.setLevel(logging.WARNING)
 
 class Market():
     """
-    TODO: describe this class
 
     For the off-shore-wind use case, we only need three market states so
     those will be hard-coded as below. The way this market works, all of 
-    the activity of the market takes place at the transisitions. I'm 
+    the activity of the market takes place at the transitions. I'm
     (TDH) using the "transitions" library which allows the definition
     of callback functions when entering (and exiting) any given state
     and this is the primary method by which the activity will in the
@@ -54,7 +53,7 @@ class Market():
     def __init__(self, market_name, market_timing, start_date, end_date, market:EnergyMarket=None, local_save=False,
                  **kwargs):
         """
-        Generic version of all the markets used in the E-COMP LDRD intiative.
+        Generic version of all the markets used in the E-COMP LDRD initiative.
         As such, this is fairly particular to those needs and is 
         correspondingly simple. When update_market is called, the market
         state machine moves to the next state and the time for the next
@@ -95,21 +94,25 @@ class Market():
 
         Relies on the self.market_timing dict (an input argument for __init__)
         This dictionary provides the different state information, including start times and
-        durations (in seconds). Format example is given below:
+        durations (default unit is second, can be set to year, day, hour, minute, second).
+        Format example is given below:
 
             {
             "states": {
                 "idle": {
                     "start_time": 0,
-                    "duration": 42660
+                    "duration": 42660,
+                    "unit": "second"
                 },
                 "bidding": {
                     "start_time": 42660,
-                    "duration": 540
+                    "duration": 540,
+                    "unit": "second"
                 },
                 "clearing": {
                     "start_time": 43200,
-                    "duration": 43200
+                    "duration": 43200,
+                    "unit": "second"
                 },
             },
             "initial_offset": 0, <- how many seconds into the interval to start (0=start of interval)
@@ -151,10 +154,16 @@ class Market():
             raise KeyError(f"Market timing dict must contain keys: {required_keys}. (Passed {market_timing.keys()})")
         # Ensure all states have the necessary keys (extraneous keys aren't penalized)
         required_state_keys = ["start_time", "duration"]
+        allowed_units = ['year', 'day', 'hour', 'minute', 'second']
         for state, state_dict in market_timing["states"].items():
             if set(required_state_keys) < set(state_dict.keys()):
                 raise KeyError(
                     f"Invalid keys for state {state}. All state dicts must contain keys: {required_state_keys}.")
+            # If units are included, they must be from a given set
+            if 'unit' in state_dict:
+                if state_dict['unit'] not in allowed_units:
+                    raise KeyError(f"Invalid unit {state_dict['unit']} for state {state}."
+                                   f"Valid unit choices are: {allowed_units}.")
         # Ensure the starting state is specified (0 start time)
         current_state = [st for st, val in market_timing["states"].items() if val["start_time"] == 0]
         if len(current_state) != 1:

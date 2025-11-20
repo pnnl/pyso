@@ -425,6 +425,8 @@ class DAMarket(Market):
         """
         line_types = ['branch', 'dc_branch']
         for line_type in line_types:
+            if line_type not in self.em.mdl.data['elements'].keys():
+                continue
             # Loop through the input model branches
             for branch, branch_dict in self.em.mdl.data['elements'][line_type].items():
                 # Look for out-of-service lines
