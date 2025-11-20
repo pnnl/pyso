@@ -11,8 +11,8 @@ def get_h5path():
     return h5path
 
 def get_pwbpath():
-    h5path = os.path.join(os.path.dirname(__file__), "localdata", "240busWECC_2018_PSS.pwb")
-    return h5path
+    pwbpath = os.path.join(os.path.dirname(__file__), "localdata", "240busWECC_2018_PSS.pwb")
+    return pwbpath
 
 def get_solpath():
     solpath = os.path.join(os.path.dirname(__file__), "localdata", "test_acpfmodel_solution.json")
