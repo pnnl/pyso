@@ -33,6 +33,7 @@ class EnergyMarket:
         self.data_provider = data_provider
         self.mdl = None
         self.mdl_sol = None
+        self._monitored_branches = {}
         ### get configuration
         self.configuration = copy.deepcopy(energymarket_defaults)
         if config is not None:
@@ -42,6 +43,38 @@ class EnergyMarket:
         self.logger =Logger(**self.configuration["logging"])
         if self.configuration["logging"]["file"] is not None:
             self.logger.set_logfile(self.configuration["logging"]["file"])
+
+    
+    @property
+    def monitored_branches(self) -> dict:
+        """ dictionary containing elements to force mointor, i.e. set lazy to FALSE 
+        Structure is ... keys are branches/constraines etc. and values are counts where this 
+        element was **Not** binding
+        Returns:
+            dict: _description_
+        """
+        return self._monitored_branches
+    
+    @property
+    def max_nonviolation(self) -> int:
+        """number of times a constraint needs to be non-binding, before it
+        is removed from the automatic monitor branches list.
+
+        Returns:
+            int: count
+        """
+        return self.configuration["simulation"]["constraint_monitor"]["max_nonviolation"]
+    
+    @property
+    def monitor_tolerance_percentage(self) -> float:
+        """Flows within this percent of the branch limit will be considered "binding"
+        for the purposes of the monitored branches tracking.
+
+        Returns:
+            float: percent below branch limit
+        """
+        return self.configuration["simulation"]["constraint_monitor"]["tolerance_percentage"]
+
 
     def set_property(self, value, *args, d=None):
         """set a property in the configuration dictionary.
@@ -150,12 +183,60 @@ class EnergyMarket:
             elif update_mode == 'calculate':
                 # Get the last value of the time window in the previous solution
                 previous_soc = previous_mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window - 1]
-                storage_dict['initial_state_of_charge'] = min(previous_soc, update_maxes['initial_state_of_charge'])
+                storage_dict['initial_state_of_charge'] = min(previous_soc, update_maxes['initial_state_of_charge'])    # def add_constraints(self):
 
-    def solve_model(self):
+    def update_constraints(self, mdl_sol:ModelData=None):
+        """
+        Update binding constraints violations before each model solve
+        Depends on:
+        self.max_nonviolation:  Maximum counter value allowed before removing constraint from the tracker.
+        self.monitor_tolerance_percentage: A small percentage value indicating how close to the limit a flow must be to consider a constraint binding.
+
+        Parameters:
+            mdl_sol: solved model. Defaults to None in which case self.mdl_sol will be used.
+        """
+        if mdl_sol is None:
+            mdl_sol = self.mdl_sol
+            #this ensures that this function is skipped on the first pass when the model is None
+            if mdl_sol is None:
+                return
+        
+        # Loop over all branches
+        for b, b_dict in mdl_sol.elements("branch"):
+            max_flow = np.max(np.abs(b_dict["pf"]["values"]))  # Max absolute value of the flow on the element
+            limit = abs(b_dict["rating_long_term"])       # Limit on the element (NEED TO MODIFY TO EMERGENCY LIMIT IF CONTINGENCY)
+            tolerance = self.monitor_tolerance_percentage * limit # Calculate dynamic tolerance based on percentage
+
+            # Check if constraint is tracked
+            if b in self.monitored_branches:
+                # Check if the constraint is binding
+                if (abs(max_flow - limit) <= tolerance) or (max_flow >= limit):
+                    # Constraint is still binding; keep it in the tracker and reset value to 
+                    # zero to show that it is still freshly violating
+                    self.monitored_branches[b] = 0
+                else:
+                    # Constraint is no longer binding; increment the counter
+                    self.monitored_branches[b] += 1
+                    
+                    # Remove the constraint if the counter exceeds the threshold
+                    if self.monitored_branches[b] > self.max_nonviolation:
+                        del self.monitored_branches[b]
+                        # Reset the "lazy" constraint to not track
+                        b_dict["lazy"] = True
+            else:
+                # Constraint is not tracked; check if it is binding
+                if (abs(max_flow - limit) <= tolerance) or (max_flow >= limit):
+                    # Add the constraint to the tracker with a counter value of 0
+                    self.monitored_branches[b] = 0
+                    # Since it is binding, set "lazy" attribute to track
+                    b_dict["lazy"] = False
+
+    def solve_model(self, mdl_sol:ModelData=None):
         """Run the egret model in self.mdl
         """
         self.logger.info(f"Solving Model\n")
+        self.update_constraints(mdl_sol)
+        # self.add_constraints()
         self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
                                         **self.configuration["solve_arguments"]["kwargs"])
