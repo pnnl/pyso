@@ -6,3 +6,4 @@ dependencies.log
 # place things that shouldn't be committed in a folder called scratch
 */scratch/*
 data_model_tests
+tests/localdata
