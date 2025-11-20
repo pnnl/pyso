@@ -22,12 +22,14 @@ see [how to invoke pytest](https://docs.pytest.org/en/stable/how-to/usage.html) 
 ## Location of data
 
 >Please don't put large data files in the repository as this becomes really messy with git.
+> Test data may be safely placed in `tests/localdata` which is included in `.gitignore`
 
-A project share drive is available at \\\PNL\Projects\ECOMP where data can be stored.
-The tests can then refer to this folder and data therein.
+The tests [`test_energymarket.py`](./test_energymarket.py), [`test_fuelcurve.py`](./test_fuelcurve.py),
+and [`test_acpfmodel.py`](./test_acpfmodel.py) reference the following files. For access contact
+Molly Rose Kelly-Gorham ( <mollyrose.kelly-gorham@pnnl.gov> ) or Eran Schweitzer ( <eran.schweitzer@pnnl.gov> ):
 
-For example the [`test_energymarket.py`](./test_energymarket.py) references the following two files:
 | filepath | description|
 |:-------- |:-----------|
-|`h5path = r"\\PNL\Projects\ECOMP\Shared Data\H5Files\WECC240_20240807.h5"` | path where the h5 file to run an market instance is located |
-|`solpath = r"\\PNL\Projects\ECOMP\Shared Data\PyEnergyMarketTestData\test_energymarket_solution.json"` | location of solution used to compare result after solving|
+|`h5path = "tests/localdata/WECC240_20240807.h5"` | path where the h5 file to run a market instance is located |
+|`pwdpath = "tests/localdata/240busWECC_2018_PSS.pwb"` | path where the h5 file to run a market instance is located |
+|`solpath = "tests/localdata/test_[test_name]_solution.json"` | location of solution used to compare result after solving|
