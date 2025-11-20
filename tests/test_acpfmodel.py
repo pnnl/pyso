@@ -1,15 +1,26 @@
 import pyenergymarket as pyen
 import pandas as pd
-import sys
+import sys, os
 from egret.data.model_data import ModelData
-from utilities import dictionary_testing, os_safe_networkpath
+from utilities import dictionary_testing
 import platform
 import pytest
 
+def get_h5path():
+    h5path = os.path.join(os.path.dirname(__file__), "localdata", "WECC240_20240807.h5")
+    return h5path
+
+def get_pwdpath():
+    h5path = os.path.join(os.path.dirname(__file__), "localdata", "240busWECC_2018_PSS.pwb")
+    return h5path
+
+def get_solpath():
+    solpath = os.path.join(os.path.dirname(__file__), "localdata", "test_acpfmodel_solution.json")
+    return solpath
+
+
 def main():
-    # logfile = "wecc_test_parsing.log"
-    # h5path = r"C:\Users\schw197\OneDrive - PNNL\Documents\02Projects\ECOMP\data\s1_r10_bnd_pcm_0302_2024_fixed_dupli.h5"
-    h5path = os_safe_networkpath(r"\\PNL\Projects\ECOMP\Shared Data\H5Files\WECC240_20240807.h5")
+    h5path = get_h5path()
 
     ## setup model to include reactive power
     gvconfig = {
@@ -55,7 +66,7 @@ def main():
     pyen.utils.egretutils.flatten_distributed_generators(em.mdl)
 
     ### Setup PowerWorld Parsing
-    pwbpath = os_safe_networkpath(r"\\PNL\Projects\ECOMP\Shared Data\PyEnergyMarketTestData\240busWECC_2018_PSS.pwb")
+    pwbpath = get_pwdpath()
     pw = pyen.PWParse(pwbpath, config={"logging": {"level": "INFO"}})
     
     pw.logger.info("\nPower World Parsing\n===========================\n")
@@ -79,7 +90,7 @@ def test_acpfmodel(get_data):
     if platform.system() == 'Windows':
         em = get_data
         em.logger.info("Finished Parsing Model.")
-        solpath = os_safe_networkpath(r"\\PNL\Projects\ECOMP\Shared Data\PyEnergyMarketTestData\test_acpfmodel_solution.json")
+        solpath = get_solpath()
         sol = ModelData.read(solpath)
 
         em.logger.info("Starting Comparison")
