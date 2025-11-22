@@ -263,7 +263,7 @@ class DAMarket(Market):
             pd.to_datetime([time_keys[-1] + datetime.timedelta(minutes=time_delta_end_minutes)]))
         # Create dict if needed with the timestamps as a top level key (shared by all storage units)
         use_soc_init = False
-        if self.storage_soc is None:
+        if self.storage_soc is None:# or self.storage_soc['system']['time_keys'] is None:
             self.storage_soc = {'system': {'time_keys': time_keys}, 'elements': {'storage': {}}}
             # The first time through we use soc init (all other times it is same as last of previous)
             use_soc_init = True
@@ -280,6 +280,8 @@ class DAMarket(Market):
             if storage in self.storage_soc['elements']['storage'].keys():
                 prev_soc_values = self.storage_soc['elements']['storage'][storage]['state_of_charge']['values']
                 soc_values = np.append(prev_soc_values, soc_values)
+            # Ensure non-negative, max of 1 for soc (can be out of bounds due to floating point error)
+            soc_values = [min(1, max(0, soc_value)) for soc_value in soc_values]
             self.storage_soc['elements']['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
                                                                                     'values': soc_values}}
 

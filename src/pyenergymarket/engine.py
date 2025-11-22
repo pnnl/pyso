@@ -179,11 +179,11 @@ class EnergyMarket:
                     if key in previous_mdl_sol.data['elements']['storage'][storage].keys():
                         storage_dict[key] = float(previous_mdl_sol.data['elements']['storage'][storage][key])
                         # Enforce maximum (avoids floating point roundoff errors causing constraint violations)
-                        storage_dict[key] = min(storage_dict[key], maxval)
+                        storage_dict[key] = min(max(0, storage_dict[key]), maxval)
             elif update_mode == 'calculate':
                 # Get the last value of the time window in the previous solution
                 previous_soc = previous_mdl_sol.data['elements']['storage'][storage]['state_of_charge']['values'][window - 1]
-                storage_dict['initial_state_of_charge'] = min(previous_soc, update_maxes['initial_state_of_charge'])    # def add_constraints(self):
+                storage_dict['initial_state_of_charge'] = min(max(0, previous_soc), update_maxes['initial_state_of_charge'])    # def add_constraints(self):
 
     def update_constraints(self, mdl_sol:ModelData=None):
         """
