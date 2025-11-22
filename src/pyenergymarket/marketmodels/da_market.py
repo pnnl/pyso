@@ -280,8 +280,6 @@ class DAMarket(Market):
             if storage in self.storage_soc['elements']['storage'].keys():
                 prev_soc_values = self.storage_soc['elements']['storage'][storage]['state_of_charge']['values']
                 soc_values = np.append(prev_soc_values, soc_values)
-            # Ensure non-negative, max of 1 for soc (can be out of bounds due to floating point error)
-            soc_values = [min(1, max(0, soc_value)) for soc_value in soc_values]
             self.storage_soc['elements']['storage'][storage] = {'state_of_charge': {'data_type': 'time_series',
                                                                                     'values': soc_values}}
 
