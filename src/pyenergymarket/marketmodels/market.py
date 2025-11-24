@@ -321,9 +321,12 @@ class Market():
             time_shift = (commitment_end_time - start_time)*self.pre_simulation_days
             for i in range(len(self.commitment_hist['timestamps'])):
                 self.commitment_hist['timestamps'][i] -= time_shift
-                # We also shift the state_of_charge
-                if self.storage_soc is not None:
-                    self.storage_soc['system']['time_keys'][i] -= time_shift
+            # We also shift the state_of_charge, if it is present
+            if self.storage_soc is not None:
+                time_keys = list(self.storage_soc['system']['time_keys'])
+                for j in range(len(self.storage_soc['system']['time_keys'])):
+                    time_keys[j] -= time_shift
+                self.storage_soc['system']['time_keys'] = pd.Index(time_keys)
 
     def valid_time_horizon(self):
         """ Returns T if current start time is within the horizon, otherwise F """
