@@ -18,7 +18,7 @@ class EgretProvider(DataProvider):
             md (Union[ModelData,str]): Egret Model Data
         """
         self.md = ModelData(md)
-        self.timestamps = pd.DatetimeIndex(md.data["system"]["time_keys"])
+        self.timestamps = pd.DatetimeIndex(self.md.data["system"]["time_keys"])
         
 
     def get_model(self, daterange:Union[pd.DatetimeIndex,None]) -> ModelData:
@@ -33,8 +33,11 @@ class EgretProvider(DataProvider):
         """
         
         ### list of time points
-        ## TODO: time wrapping?
         time_indices = np.where(self.timestamps.isin(daterange))[0].tolist()
+        # Wrap if times extend beyond end # TODO: make more robust - this only works for a small extension within day
+        if max(daterange) > self.timestamps.max():
+            num_extra = len(daterange[daterange > self.timestamps.max()])
+            time_indices += [e for e in range(num_extra)]
 
         ### return model
         return self.md.clone_at_time_indices(time_indices)
