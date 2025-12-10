@@ -168,7 +168,7 @@ class Market():
         # Ensure the starting state is specified (0 start time)
         current_state = [st for st, val in market_timing["states"].items() if val["start_time"] == 0]
         if len(current_state) != 1:
-            raise ValueError(f"Must include one and only one state with the start time of 0")
+            raise ValueError("Must include one and only one state with the start time of 0")
         else:
             current_state = current_state[0]  # get key/string
         # Check that start times and durations are all consistent
