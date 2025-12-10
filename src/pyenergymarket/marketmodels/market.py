@@ -258,7 +258,6 @@ class Market():
         This method must be overloaded in an instance of this class to
         implement the necessary operations to collect the bids in question.
         """
-        pass
 
     def publish_results(self):
         """
@@ -267,7 +266,6 @@ class Market():
         This method must be overloaded in an instance of this class to
         implement the necessary operations to publish the results in question.
         """
-        pass
 
     def clear_market(self, local_save=False, contingency_list=None):
         """
