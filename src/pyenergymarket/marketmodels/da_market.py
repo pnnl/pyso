@@ -46,7 +46,7 @@ class DAMarket(Market):
         state.
         """
         # if market_timing isn't specified input default vaules.
-        if market_timing == None:
+        if market_timing is None:
             market_timing = {
                 "states": {
                     "idle": {
