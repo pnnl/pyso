@@ -11,7 +11,7 @@ class EgretProvider(DataProvider):
     a subclass of DataProvider
     """
 
-    def __init__(self, md:Union[ModelData,str], t0=""):
+    def __init__(self, md:Union[ModelData,str]):
         """initialze the model data structure
 
         Args:
@@ -34,10 +34,9 @@ class EgretProvider(DataProvider):
         
         ### list of time points
         time_indices = np.where(self.timestamps.isin(daterange))[0].tolist()
-        # Wrap if times extend beyond end # TODO: make more robust - this only works for a small extension within day
-        if max(daterange) > self.timestamps.max():
-            num_extra = len(daterange[daterange > self.timestamps.max()])
-            time_indices += [e for e in range(num_extra)]
+        
+        if len(time_indices) < len(daterange):
+            print(f"Range {daterange[0]} - {daterange[-1]} exceeds the available data. Returning {self.timestamps[time_indices[0]]} - {self.timestamps[time_indices[-1]]}.")
 
         ### return model
         return self.md.clone_at_time_indices(time_indices)
