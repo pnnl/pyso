@@ -27,9 +27,9 @@ def check_dependencies():
                     print(f" - {dep} (source: {sources[dep]})", file=f)
                 print("\nThey should be installed as editable packages using pip:", file=f)
                 # for dep in dlist:
-                print(f"Clone repository from source", file=f)
+                print("Clone repository from source", file=f)
                 print("cd into repository folder", file=f)
-                print(f"pip install -e .", file=f)
+                print("pip install -e .", file=f)
 
 
 #see: https://stackoverflow.com/questions/20288711/post-install-script-with-python-setuptools
