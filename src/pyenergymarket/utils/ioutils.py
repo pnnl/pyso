@@ -52,7 +52,7 @@ class Logger(logging.Logger):
                 h = self.logger.handlers.pop(0)
                 self.logger.removeHandler(h)
             self.logger.handlers = []
-        if type(level) == str:
+        if isinstance(level, str):
             self.logger.setLevel(level.upper())
         else:
             self.logger.setLevel(level)
@@ -70,7 +70,7 @@ class Logger(logging.Logger):
     
     def setlevel(self, level):
         """change the logging level"""
-        if type(level) == str:
+        if isinstance(level, str):
             level = level.upper()
         self.logger.setLevel(level)
         self.level = level
