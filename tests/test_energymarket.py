@@ -1,4 +1,5 @@
 import pyenergymarket as pyen
+from pyenergymarket.parsers.gvparser import GVParse
 import numpy as np
 import os
 import pytest
@@ -41,7 +42,7 @@ class TestPySO:
             }
         }
 
-        gv = pyen.GVParse(h5path, default=gvconfig, logger_options={"level": loglevel})
+        gv = GVParse(h5path, default=gvconfig, logger_options={"level": loglevel})
 
         ### setup PyEnergyMarket
         pyenconfig = {

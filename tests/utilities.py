@@ -1,5 +1,4 @@
 from pytest import approx
-import platform, os
 
 def dictionary_testing(d1:dict, d2:dict):
     """Test all elements of a dictionary using default

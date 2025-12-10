@@ -11,8 +11,8 @@ def check_dependencies():
         dependencies = {"required": ["egret"],
                         "optional": ["gridtune"]
         }
-        sources = {"egret": "https://github.com/pnnl-private/egret",
-                "gridtune": "https://tanuki.pnnl.gov/gridtune/gridtune"}
+        sources = {"egret": "https://github.com/grid-parity-exchange/Egret",
+                "gridtune": "PNNL private repo."}
         missing_dependencies = {"required": [], "optional": []}
 
         for typ, dlist in dependencies.items():
