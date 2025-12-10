@@ -53,7 +53,7 @@ class RTMarket(Market):
         state.
         """
         # Supply a default market timing object for a 15-minute real-time
-        if market_timing == None:
+        if market_timing is None:
             market_timing = {
                 "states": {
                     "idle": {
