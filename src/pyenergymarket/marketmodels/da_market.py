@@ -45,7 +45,7 @@ class DAMarket(Market):
         that gets called when the market state machine enters the "clearing"
         state.
         """
-        # if market_timing isn't specified input default vaules.
+        # if market_timing isn't specified input default values.
         if market_timing is None:
             market_timing = {
                 "states": {
