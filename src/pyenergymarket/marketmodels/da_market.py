@@ -1,14 +1,8 @@
 """
-Created on 06/28/2024
-
 Class market objects in Egret
 
 This assumes EGRET functionality has been implemented as class functions that 
 can be called as methods. (This may not be a hard assumption.)
-
-
-@author: Trevor Hardy
-trevor.hardy@pnnl.gov
 """
 import datetime
 import logging
@@ -45,8 +39,8 @@ class DAMarket(Market):
         that gets called when the market state machine enters the "clearing"
         state.
         """
-        # if market_timing isn't specified input default vaules.
-        if market_timing == None:
+        # if market_timing isn't specified input default values.
+        if market_timing is None:
             market_timing = {
                 "states": {
                     "idle": {

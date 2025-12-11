@@ -53,7 +53,7 @@ class RTMarket(Market):
         state.
         """
         # Supply a default market timing object for a 15-minute real-time
-        if market_timing == None:
+        if market_timing is None:
             market_timing = {
                 "states": {
                     "idle": {
@@ -189,17 +189,6 @@ class RTMarket(Market):
                     fix_infeasible = True
         self.update_model_commitment(fix_infeasible=fix_infeasible)
         self.apply_contingencies(contingency_list=contingency_list)
-
-    def collect_bids(self):
-        """ Overloaded method of Market: adding bids from generators and storage """
-        elements = self.em.mdl.data['elements']
-        for key in self.bids.keys():
-            element_types = ['generator', 'storage']
-            for element_type in element_types:
-                if element_type not in elements.keys():
-                    continue
-                if key in elements[element_type].keys():
-                    elements[key] = self.bids[key]
 
     def clear_market(self, local_save=False, contingency_list:list=None):
         """

@@ -169,10 +169,10 @@ class Market():
                                    f"Valid unit choices are: {allowed_units}.")
         # Ensure the starting state is specified (0 start time)
         current_state = [st for st, val in market_timing["states"].items() if val["start_time"] == 0]
-        # if len(current_state) != 1:
-        #     raise ValueError(f"Must include one and only one state with the start time of 0")
-        # else:
-        current_state = current_state[0]  # get key/string
+        if len(current_state) != 1:
+            raise ValueError("Must include one and only one state with the start time of 0")
+        else:
+            current_state = current_state[0]  # get key/string
         # Check that start times and durations are all consistent
         start_times = [val['start_time'] for val in market_timing["states"].values()]
         current_time = 0
@@ -261,7 +261,6 @@ class Market():
         This method must be overloaded in an instance of this class to
         implement the necessary operations to collect the bids in question.
         """
-        pass
 
     def publish_results(self):
         """
@@ -270,7 +269,6 @@ class Market():
         This method must be overloaded in an instance of this class to
         implement the necessary operations to publish the results in question.
         """
-        pass
 
     def clear_market(self, local_save=False, contingency_list=None):
         """

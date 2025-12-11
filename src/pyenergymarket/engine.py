@@ -2,7 +2,7 @@
 EnergyMarket class is here.
 """
 from .utils.ioutils import merge_configs, Logger
-from .utils.timeutils import mk_daterange, count_onoff, get_value_at_time
+from .utils.timeutils import mk_daterange, count_onoff
 from .utils.egretutils import NumpyEncoder
 from .pyenergymarket_defaults import energymarket_defaults
 import abc
@@ -234,7 +234,7 @@ class EnergyMarket:
     def solve_model(self, mdl_sol:ModelData=None):
         """Run the egret model in self.mdl
         """
-        self.logger.info(f"Solving Model\n")
+        self.logger.info("Solving Model\n")
         self.update_constraints(mdl_sol)
         # self.add_constraints()
         self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
@@ -242,7 +242,7 @@ class EnergyMarket:
                                         **self.configuration["solve_arguments"]["kwargs"])
         pricing_model = self.configuration["simulation"]["price_model"]
         if  pricing_model is not None:
-            self.logger.info(f"Solving pricing model\n")
+            self.logger.info("Solving pricing model\n")
             self.pricing_model(pricing_model)
 
     def save_model(self, filename:str):
