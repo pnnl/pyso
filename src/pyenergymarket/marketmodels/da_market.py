@@ -147,6 +147,40 @@ class DAMarket(Market):
                                                  'values': []}}
         return commitment_dict
 
+    def _parse_merge(self, merge_dict:dict):
+        """ Helper function for self.store_commitment_hist() to parse merging """
+        # Decide whether to use times from merge_dict or, if None, use model solution
+        if merge_dict is None:
+            commit_times_new = pd.to_datetime(self.em.mdl_sol.data['system']['time_keys'])
+        else:
+            commit_times_new = merge_dict['timestamps']
+        # Check whether to loop over stored PyEnergyMarket Model or the input model dictionary
+        if merge_dict is None:
+            loop_dict = self.em.mdl_sol.data['elements']
+        else:
+            loop_dict = merge_dict
+        return commit_times_new, loop_dict
+
+    def _join_values(self, times_hist, values_hist, times_new, values_new, keep):
+        """ Joins pairs of times/values for historical and new.
+        Argument 'keep' determines whether 'new' or 'old' values are saved to the resulting list
+        Returns:
+             times_all (list): All the (non-duplicate) timestamps
+             values_all (list): All the values at times_all
+        """
+        times_all = copy.copy(times_hist)
+        values_all = copy.copy(values_hist)
+        for i, timestamp in enumerate(times_new):
+            if timestamp in times_all:
+                if keep == 'new':
+                    # Find the index of the previous value and overwrite it with the new value
+                    hidx = times_all.index(timestamp)
+                    values_all[hidx] = values_new[i]
+            else:
+                times_all.append(timestamp)
+                values_all.append(values_new[i])
+        return times_all, values_all
+
     def store_commitment_hist(self, keep='new', merge_dict=None, omit=[]):
         """
         Updates the commitment and initial status of generators (and storage) based on the
@@ -169,8 +203,9 @@ class DAMarket(Market):
                              omit = ['_w_new'] will omit any generators containing '_w_new' in their name
         """
 
-        # Helper function to check if any omit strings are in the unit name
+        # Helper functions
         def omit_unit(unit: str, omit: list):
+            """ Check if any omit strings are in the unit name """
             omit_status = False
             for om in omit:
                 if om in unit:
@@ -178,21 +213,24 @@ class DAMarket(Market):
                     break
             return omit_status
 
+        def _parse_merge_unit(merge_dict, u_dict, etype, unit, len_new_times):
+            """ Collect commitment values from a unit (from the model solution) or from a merge dictionary """
+            if merge_dict is None:
+                if 'commitment' in u_dict.keys():
+                    commit_values_new = u_dict['commitment']['values']
+                else:  # If missing, Egret accepts the None input for unfixed
+                    commit_values_new = [None] * len_new_times
+            else:
+                commit_values_new = merge_dict[etype][unit]['commitment']['values']
+            return commit_values_new
+
         assert keep in ['new', 'old'], f"keep must be either 'new' or 'old', not {keep}"
         # Create dict if needed with the timestamps as a top level key (shared by all generators/elements)
         if self.commitment_hist is None:
             self.commitment_hist = {'timestamps': []}
-        # Keep a copy of the old and the new timestamps
+        # Keep a copy of the old and the new timestamps (these are the same for all units)
         commit_times_hist = self.commitment_hist['timestamps']
-        if merge_dict is None:
-            commit_times_new = pd.to_datetime(self.em.mdl_sol.data['system']['time_keys'])
-        else:
-            commit_times_new = merge_dict['timestamps']
-        # Check whether to loop over stored PyEnergyMarket Model or an input model dictionary
-        if merge_dict is None:
-            loop_dict = self.em.mdl_sol.data['elements']
-        else:
-            loop_dict = merge_dict
+        commit_times_new, loop_dict = self._parse_merge(merge_dict)
         for etype, e_dict in loop_dict.items():
             # etype is 'generator', 'renewable', 'load', etc. - Egret types. e_dict holds each unit's info
             # Restrict to committable elements (optional - slight speedup but risk of missing new types)
@@ -205,38 +243,18 @@ class DAMarket(Market):
                     # First time through, set the initial status (this is fixed based on the starting initial_status)
                     if self.commitment_hist[etype][unit]['initial_status'] is None:
                         self.commitment_hist[etype][unit]['initial_status'] = u_dict['initial_status']
-                    # Get current commitment_hist, then check for duplicate timestamps in the incoming solution
-                    # This is expected for RT and for DA if using a lookahead window.
-                    # We will use the new value (from the model) as the latest
-                    # [Optional] Could clean this up with np.intersect1d or something
+                    # Get current commitment_hist and the latest solution commitment values
                     commit_values_hist = self.commitment_hist[etype][unit]['commitment']['values']
-                    _commit_vals_hist = copy.copy(commit_values_hist)
-                    if merge_dict is None:
-                        if 'commitment' in u_dict.keys():
-                            commit_values_new = u_dict['commitment']['values']
-                        else:  # If missing, Egret accepts the None input for unfixed
-                            commit_values_new = [None] * len(commit_times_new)
-                    else:
-                        commit_values_new = merge_dict[etype][unit]['commitment']['values']
-                    _commit_times_hist = copy.copy(commit_times_hist)
-                    for i, timestamp in enumerate(commit_times_new):
-                        if timestamp in _commit_times_hist:
-                            if keep == 'new':
-                                # Find the index of the previous value and overwrite it with the new value
-                                hidx = _commit_times_hist.index(timestamp)
-                                commit_values_hist[hidx] = commit_values_new[i]
-                        else:
-                            _commit_times_hist.append(timestamp)
-                            commit_values_hist.append(commit_values_new[i])
+                    commit_values_new = _parse_merge_unit(merge_dict, u_dict, etype, unit, len(commit_times_new))
+                    # Join solutions, checking for duplicates and only keeping one of new/old at each timestamp
+                    _commit_times_new, _commit_values_new = self._join_values(commit_times_hist, commit_values_hist,
+                                                                             commit_times_new, commit_values_new, keep)
                     # May be unnecessary, but ensuring that times are strictly ascending
-                    sorted_inds = np.argsort(_commit_times_hist)
-                    _commit_times_hist = list(np.array(_commit_times_hist)[sorted_inds])
-                    commit_values_hist = list(np.array(commit_values_hist)[sorted_inds])
-                    commit_values_hist = [int(cvh) if isinstance(cvh, int) else cvh for cvh in
-                                          commit_values_hist]  # Change to int instead of int64
-                    # Set commitment values
-                    self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_hist
-        self.commitment_hist['timestamps'] = _commit_times_hist
+                    _commit_times_new, _commit_values_new = sort_array(_commit_times_new, commit_values_new)
+                    # Set commitment values to the new list
+                    self.commitment_hist[etype][unit]['commitment']['values'] = _commit_values_new
+        # Set the commitment times (this is shared by all units)
+        self.commitment_hist['timestamps'] = _commit_times_new
 
     def store_storage_soc(self, max_intervals: int = 24):
         """
@@ -415,3 +433,20 @@ class DAMarket(Market):
                     # Also add no pf_violation
                     mdl_sol_dict[branch]['pf_violation'] = {'data_type': 'time_series',
                                                             'values': empty_list}
+
+def sort_array(ref_array, paired_array):
+    """ Takes two input arrays, one reference and its pair, and returns the reference-sorted versions """
+    # If inputs are lists instead of arrays, covert to lists before return
+    return_list = False
+    if isinstance(ref_array, list):
+        return_list = True
+    sorted_inds = np.argsort(ref_array)
+    sorted_ref_array = np.array(ref_array)[sorted_inds]
+    sorted_paired_array = np.array(paired_array)[sorted_inds]
+    if return_list:
+        sorted_ref_array = sorted_ref_array.tolist()
+        sorted_paired_array = sorted_paired_array.tolist()
+        # Convert any numpy.int64/float64 to int/float
+        sorted_paired_array = [int(cvh) if isinstance(cvh, int) else float(cvh) if isinstance(cvh,float) else cvh
+                               for cvh in sorted_paired_array]
+    return sorted_ref_array, sorted_paired_array
