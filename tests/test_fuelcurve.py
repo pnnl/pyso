@@ -2,7 +2,6 @@ import pyenergymarket as pyen
 import os
 from egret.data.model_data import ModelData
 from utilities import dictionary_testing
-from gridtune.pcm import H5
 import pytest
 
 def get_h5path():

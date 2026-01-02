@@ -51,8 +51,9 @@ class Market():
     """
     pass
 
-    def __init__(self, market_name, market_timing, start_date, end_date, market:EnergyMarket=None, local_save=False,
-                 freq:str='24h', **kwargs):
+    def __init__(self, market_name, market_timing, start_date, end_date, market:EnergyMarket,
+                 local_save=False,
+                 **kwargs):
         """
         Generic version of all the markets used in the E-COMP LDRD initiative.
         As such, this is fairly particular to those needs and is 
@@ -68,7 +69,8 @@ class Market():
         self.em = market
         self.market_name = market_name
         self.current_state = market_timing["initial_state"]
-        self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=freq)
+        market_frequency = f'{self.em.configuration["time"]["min_freq"] * self.em.configuration["time"]["window"]}min'
+        self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=market_frequency)
         logger.info("market", self.market_name, "start_times: ", self.start_times)
         self.timestep = 0
         self.current_start_time = self.start_times[self.timestep]
@@ -168,13 +170,14 @@ class Market():
                                    f"Valid unit choices are: {allowed_units}.")
         # Ensure the starting state is specified (0 start time)
         current_state = [st for st, val in market_timing["states"].items() if val["start_time"] == 0]
-        if len(current_state) != 1:
-            raise ValueError("Must include one and only one state with the start time of 0")
-        else:
-            current_state = current_state[0]  # get key/string
+        # if len(current_state) != 1:
+        #     raise ValueError(f"Must include one and only one state with the start time of 0")
+        # else:
+        current_state = current_state[0]  # get key/string
         # Check that start times and durations are all consistent
         start_times = [val['start_time'] for val in market_timing["states"].values()]
         current_time = 0
+        next_start = 0
         for change_idx in range(len(start_times) - 1):
             duration = market_timing["states"][current_state]["duration"]
             next_start = current_time + duration

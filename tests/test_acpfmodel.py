@@ -1,6 +1,5 @@
 import pyenergymarket as pyen
-import pandas as pd
-import sys, os
+import os
 from egret.data.model_data import ModelData
 from utilities import dictionary_testing
 import platform
@@ -86,6 +85,7 @@ def save_model():
     em = main()
     em.save_model("test_acpfmodel_solution.json")
 
+@pytest.mark.local
 def test_acpfmodel(get_data):
     if platform.system() == 'Windows':
         em = get_data
