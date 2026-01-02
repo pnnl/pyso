@@ -318,7 +318,8 @@ class EnergyMarket:
                 p_load_key = "p_charge" if (direction == "pos") else "p_discharge" # double check the sign on this
                 tmp = {}
                 for k in ["bus", "in_service", "area", "zone"]:
-                    tmp[k] = g_dict[k]
+                    if k in g_dict.keys():
+                        tmp[k] = g_dict[k]
                 tmp["p_load"] = g_dict[p_load_key] 
                 if direction == 'neg':
                     tmp["p_load"]["values"] = -1*np.array(tmp["p_load"]["values"])
