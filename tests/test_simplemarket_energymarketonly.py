@@ -4,20 +4,22 @@ import pandas as pd
 from pyenergymarket import EnergyMarket
 from pyenergymarket.parsers.egretparser import EgretProvider
 from egret.data.model_data import ModelData
+from utilities import find_solver
 
 THIS_DIR = os.path.split(__file__)[0]
 
 def test_simple_iteration():
     
-    datapath = os.path.join(THIS_DIR, "tiny_uc_2.json")
+    datapath = os.path.join(THIS_DIR, 'testdata', "tiny_uc_2.json")
 
     egretprovider = EgretProvider(datapath)
+    solver = find_solver()
 
     ## initialize Market Engine
     ## This should run 4 instances of the market sequentially.
     emconfig = {"time": {"window": 6, "min_freq": 60, "lookahead": 3},
                 "solve_arguments": {
-                    "solver": "cbc",
+                    "solver": solver,
                     "slack": "TRANSMISSION_LIMITS",
                     "kwargs":{
                             "mipgap": 0.01,

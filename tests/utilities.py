@@ -1,4 +1,37 @@
 from pytest import approx
+from pyomo.opt import SolverFactory
+from pyomo.common.errors import ApplicationError
+
+# Imported function from Egret tests
+def find_solver(requested_solver=None, return_mip_avail=False):
+    if requested_solver is None:
+        solver_list = ['xpress_persistent', 'gurobi_persistent', 'cplex_persistent', 'gurobi', 'cplex']
+    else:
+        solver_list = [requested_solver]
+    test_solver = None
+    comm_mip_avail = False
+    for solver in solver_list:
+        try:
+            if SolverFactory(solver).available():
+                test_solver = solver
+                comm_mip_avail = True
+                break
+        except ApplicationError:
+            continue
+    if test_solver is None:
+        for solver in ['cbc', 'glpk']:
+            try:
+                if SolverFactory(solver).available():
+                    test_solver = solver
+                    break
+            except ApplicationError:
+                continue
+    if test_solver is None:
+        raise RuntimeError("No MIP/LP solver found for unit commitment tests")
+    if return_mip_avail:
+        return test_solver, comm_mip_avail
+    else:
+        return test_solver
 
 def dictionary_testing(d1:dict, d2:dict):
     """Test all elements of a dictionary using default
