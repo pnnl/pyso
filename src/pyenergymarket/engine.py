@@ -152,20 +152,24 @@ class EnergyMarket:
             # When simulating multiple market instances, we may copy information from one market to another.
             # For example, we may want to pass day-ahead results to a real-time market.
             if update_mode == 'copy':
-                g_dict['initial_p_output'] = float(
-                    previous_mdl_sol.data['elements']['generator'][g]['initial_p_output'])
-                g_dict['initial_status'] = float(previous_mdl_sol.data['elements']['generator'][g]['initial_status'])
+                if hasattr(previous_mdl_sol.data['elements']['generator'][g], 'initial_p_output'):
+                    g_dict['initial_p_output'] = float(
+                        previous_mdl_sol.data['elements']['generator'][g]['initial_p_output'])
+                if hasattr(previous_mdl_sol.data['elements']['generator'][g], 'initial_status'):
+                    g_dict['initial_status'] = float(previous_mdl_sol.data['elements']['generator'][g]['initial_status'])
             # In all other cases, we calculate initial conditions from the end of the previous cleared market.
             elif update_mode == 'calculate':
                 # Initial power is the last power cleared in the previous window (subtract 1 to get on 0-base)
-                g_dict['initial_p_output'] = float(
-                    previous_mdl_sol.data['elements']['generator'][g]['pg']['values'][window - 1])
+                if hasattr(previous_mdl_sol.data['elements']['generator'][g], 'initial_p_output'):
+                    g_dict['initial_p_output'] = float(
+                        previous_mdl_sol.data['elements']['generator'][g]['pg']['values'][window - 1])
                 # we could also update the q/reactive power, but this first test will be dc only
                 # g_dict['initial_q_output'] = float(
                 #                 previous_mdl_sol.data['elements']['generator'][g]['qg']['values'][window - 1])
                 # Update initial status for this generator, using timeutils function
-                new_initial_status = count_onoff(previous_mdl_sol.data['elements']['generator'][g], window-1, min_freq)
-                g_dict['initial_status'] = new_initial_status
+                if hasattr(previous_mdl_sol.data['elements']['generator'][g], 'initial_status'):
+                    new_initial_status = count_onoff(previous_mdl_sol.data['elements']['generator'][g], window-1, min_freq)
+                    g_dict['initial_status'] = new_initial_status
 
         # Loop through all storage units in the upcoming model (self.mdl) and update initial_state_of_charge,
         # end_state_of_charge, initial_charge_rate and initial_discharge_rate
