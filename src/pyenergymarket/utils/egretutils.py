@@ -257,7 +257,7 @@ def merge_model_data(md1:ModelData, md2:ModelData, ts_keep='md2'):
     # We require md1 to come before md2 in the time series. Check this and if false, switch order
     t01 = md1_data['system']['time_keys'][0]
     t02 = md2_data['system']['time_keys'][0]
-    if t02 > t01:
+    if t02 < t01:
         md1_data, md2_data = md2.data, md1.data
     md_merged_data = deepcopy(md1_data)
 
@@ -265,7 +265,7 @@ def merge_model_data(md1:ModelData, md2:ModelData, ts_keep='md2'):
     # of the list that won't be kept
     idx_pivot = find_common_times(md1_data, md2_data, ts_keep)
     md_merged_data = merge_elements(md_merged_data, md2_data, idx_pivot, ts_keep)
-    md_merged_data = merge_system(md_merged_data, md1_data, idx_pivot, ts_keep)
+    md_merged_data = merge_system(md_merged_data, md2_data, idx_pivot, ts_keep)
 
     md_merged = ModelData(md_merged_data)
     return md_merged

@@ -1,6 +1,6 @@
 ### simple parser for egret data
 import os
-
+import copy
 from pyenergymarket.engine import DataProvider
 import pandas as pd
 import numpy as np
@@ -90,11 +90,12 @@ class DailyEgretProvider(EgretProvider):
             raise FileNotFoundError(f"No egret files found in {self.filedir} for daterange {daterange}")
 
         # Merge the model data objects into one (unless there is only one file)
-        md_merged = md_objects[0]
+        md_merged = copy.deepcopy(md_objects[0])
         if len(md_objects) > 1:
             for md_object in md_objects[1:]:
                 md_merged = merge_model_data(md_merged, md_object)
 
+        print("Merged model time keys are:", md_merged.data["system"]["time_keys"])
         # Now call the parent EgretProvider for the given daterange
         super().__init__(md_merged)
         selected_md = super().get_model(daterange)

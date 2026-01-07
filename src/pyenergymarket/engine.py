@@ -110,6 +110,7 @@ class EnergyMarket:
         periods = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
         min_freq = self.configuration["time"]["min_freq"]
 
+        print(f"Get model:\n  period: {periods}\n  min_freq: {min_freq}\n  start time: {start}")
         daterange = mk_daterange(start, min_freq=min_freq, periods=periods)
 
         # get the model for the specified time range 
@@ -208,6 +209,9 @@ class EnergyMarket:
         # Loop over all branches
         for b, b_dict in mdl_sol.elements("branch"):
             max_flow = np.max(np.abs(b_dict["pf"]["values"]))  # Max absolute value of the flow on the element
+            # Check if long-term rating is available. If not, skip this branch
+            if not hasattr(b_dict, "rating_long_term"):
+                continue
             limit = abs(b_dict["rating_long_term"])       # Limit on the element (NEED TO MODIFY TO EMERGENCY LIMIT IF CONTINGENCY)
             tolerance = self.monitor_tolerance_percentage * limit # Calculate dynamic tolerance based on percentage
 
