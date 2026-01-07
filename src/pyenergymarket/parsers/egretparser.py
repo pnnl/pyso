@@ -75,10 +75,8 @@ class DailyEgretProvider(EgretProvider):
         for md_date in md_dates:
             for file in files:
                 if md_date in file:
-                    print(f"Found date {md_date} in file {file}")
                     # Special loading for gzip files
                     if file.endswith('gz'):
-                        print("Opening file", file)
                         md_data = read_json_gzip(os.path.join(self.filedir, file))
                         this_md = ModelData(md_data)
                     else:
@@ -100,6 +98,5 @@ class DailyEgretProvider(EgretProvider):
         # Now call the parent EgretProvider for the given daterange
         super().__init__(md_merged)
         selected_md = super().get_model(daterange)
-        print("Completed merged model")
         selected_md.write('merge_test.json')
         return selected_md
