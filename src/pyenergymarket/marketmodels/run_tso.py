@@ -62,7 +62,7 @@ default_options = {
                     "solver": "gurobi_persistent",
                     "solver_options": {"ConcurrentMethod":0, "Method":3, "MIPFocus":1, "CutPasses": 2},
                 },
-                "_ptdf_options": {
+                "ptdf_options": {
                         "rel_ptdf_tol" : 0.0,
                         "abs_ptdf_tol" : 1e-7,
                         "abs_flow_tol" : 1e-3, # solver tolerance, plus a bit
@@ -104,7 +104,7 @@ default_options = {
                     "solver": "gurobi_persistent",
                     "solver_options": {"ConcurrentMethod":0, "Method":3, "MIPFocus":1, "CutPasses": 2},
                 },
-                "_ptdf_options": {
+                "ptdf_options": {
                         "rel_ptdf_tol" : 0.0,
                         "abs_ptdf_tol" : 1e-7,
                         "abs_flow_tol" : 1e-3, # solver tolerance, plus a bit

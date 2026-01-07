@@ -38,6 +38,7 @@ class EnergyMarket:
         self.configuration = copy.deepcopy(energymarket_defaults)
         if config is not None:
             merge_configs(self.configuration, config)
+        self.ptdf_options = self.configuration.get("ptdf_options", None)
         
         ### set up logger
         self.logger =Logger(**self.configuration["logging"])
@@ -247,7 +248,8 @@ class EnergyMarket:
         # self.add_constraints()
         self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
-                                        **self.configuration["solve_arguments"]["kwargs"])
+                                        **self.configuration["solve_arguments"]["kwargs"],
+                                        ptdf_options=self.ptdf_options)
         pricing_model = self.configuration["simulation"]["price_model"]
         if  pricing_model is not None:
             self.logger.info("Solving pricing model\n")
