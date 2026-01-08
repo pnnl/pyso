@@ -95,7 +95,6 @@ class DailyEgretProvider(EgretProvider):
             for md_object in md_objects[1:]:
                 md_merged = merge_model_data(md_merged, md_object)
 
-        print("Merged model time keys are:", md_merged.data["system"]["time_keys"])
         # Now call the parent EgretProvider for the given daterange
         super().__init__(md_merged)
         selected_md = super().get_model(daterange)

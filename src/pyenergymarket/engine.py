@@ -111,7 +111,6 @@ class EnergyMarket:
         periods = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
         min_freq = self.configuration["time"]["min_freq"]
 
-        print(f"Get model:\n  period: {periods}\n  min_freq: {min_freq}\n  start time: {start}")
         daterange = mk_daterange(start, min_freq=min_freq, periods=periods)
 
         # get the model for the specified time range 
@@ -162,7 +161,6 @@ class EnergyMarket:
             # In all other cases, we calculate initial conditions from the end of the previous cleared market.
             elif update_mode == 'calculate':
                 # Initial power is the last power cleared in the previous window (subtract 1 to get on 0-base)
-                # print(f"Computing for generator {g} with info {previous_mdl_sol.data['elements']['generator'][g]}")
                 if 'initial_p_output' in previous_mdl_sol.data['elements']['generator'][g].keys():
                     g_dict['initial_p_output'] = float(
                         previous_mdl_sol.data['elements']['generator'][g]['pg']['values'][window - 1])
@@ -246,9 +244,11 @@ class EnergyMarket:
         """
         self.logger.info("Solving Model\n")
         self.update_constraints(mdl_sol)
+        solver_options = self.configuration["solve_arguments"]["solver_options"] if "solver_options" in self.configuration["solve_arguments"] else None
         # self.add_constraints()
         self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
+                                        solver_options=solver_options,
                                         **self.configuration["solve_arguments"]["kwargs"],
                                         ptdf_options=self.ptdf_options)
         pricing_model = self.configuration["simulation"]["price_model"]
@@ -295,8 +295,12 @@ class EnergyMarket:
         ## TODO: we may want to get the pyomo model here so we can get the duals
         ## on other constraints such as flow, or contingency
         ## solve relaxed problem to populate LMPs
+        solver_options = self.configuration["solve_arguments"]["solver_options"] if "solver_options" in \
+                                                                                     self.configuration[
+                                                                                         "solve_arguments"] else None
         self.mdl_price : ModelData = solve_unit_commitment(pricing_instance, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
+                                        solver_options=solver_options,
                                         relaxed=True,
                                         **self.configuration["solve_arguments"]["kwargs"]) 
 

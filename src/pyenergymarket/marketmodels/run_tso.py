@@ -72,32 +72,33 @@ default_options = {
                         "max_violations_per_iteration" : 20
                         #    "lp_cleanup_phase" : False,
                 }
+            },
         },
         "weekly": {
             "market_timing": {
                 "states": {
                     "clearing": {
                         "start_time": 0,
-                        "duration": 1,
+                        "duration": 4,
                     },
                     "idle": {
-                        "start_time": 1,
-                        "duration": 46,
+                        "start_time": 4,
+                        "duration": 184,
                     },
                     "bidding": {
-                        "start_time": 47,
-                        "duration": 1,
+                        "start_time": 188,
+                        "duration": 4,
                     },
 
                 },
                 "initial_offset": 0,
                 "initial_state": "idle",
-                "market_interval": 48
+                "market_interval": 192
             },
             "em_config": {
                 "time": {
                     "min_freq": 240, # period length in minutes
-                    "window": 48, # solution window
+                    "window": 42, # solution window
                     "lookahead": 6 # solution lookahead
                 },
                 "solve_arguments": {
@@ -132,6 +133,10 @@ class TSO:
         # Time resolution and unit will default to 1 hour resolution
         self.time_resolution = options.get('time_resolution', 1)
         self.time_unit = options.get('time_unit', 'hour')
+        scaling_options = {'second': 1, 'minute': 60, 'hour': 3600, 'day': 86400, 'year': 31536000}
+        if self.time_unit.lower() not in scaling_options.keys():
+            raise ValueError(f"Invalid time unit {self.time_unit}. Time unit must be one of: {scaling_options.keys()}")
+        self.time_scaling = scaling_options[self.time_unit.lower()]
 
         # Initialize the market models
         self.start = pd.to_datetime(options['start_time'], format='%Y%m%d%H%M')
@@ -201,16 +206,15 @@ class TSO:
         horizon_reached = False
         # Run the simulation until the finish
         while not horizon_reached:
-            # Clear DA (will only run when self.simulation_time == clearing_time
+            # Loop through all markets and try to clear
             for market_name in self.market_order:
-                print(f"At simulation time {self.simulation_time} checking on run for market", market_name)
                 market_cleared = self.run_market(market_name)
                 if market_cleared:
                     logger.info(f"{market_name} cleared at simulation time {self.simulation_time} {self.time_unit}s")
             # Can add callback features to pass data between markets here
             # Increment time and see if the end horizon is reached
             self.simulation_time += self.time_resolution
-            if self.start + datetime.timedelta(seconds=self.simulation_time) >= self.end:
+            if self.start + datetime.timedelta(seconds=self.simulation_time*self.time_scaling) >= self.end:
                 horizon_reached = True
         t1 = pytime.time()
         simulation_wallclock = t1 - t0
@@ -229,7 +233,6 @@ def create_market(mtype, em_config, market_timing, start=None, end=None, filenam
         start = f'{start.year}-{start.month:02d}-{start.day:02d}'
     if not isinstance(end, str):
         end = f'{end.year}-{end.month:02d}-{end.day:02d}'
-    print("Creating market in range", start, "to", end)
     market = generic_market.Market(mtype, market_timing, start, end, market=em, freq=freq)
     return market
 
