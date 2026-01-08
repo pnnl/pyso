@@ -14,6 +14,7 @@ import datetime as dt
 import logging
 import pandas as pd
 import math
+import numpy as np
 
 from transitions import Machine
 from ..engine import EnergyMarket
@@ -339,3 +340,119 @@ class Market():
             return False
         return True
 
+    @staticmethod
+    def prep_commitment_hist(commitment_dict, etype, unit):
+        """
+        Creates an empty dictionary structure for the commitment history for a given element and generator/unit
+
+        Args:
+            etype (str): Type of element ('generator', 'storage', etc.)
+            unit (str): Name of unit (typical use case is Egret generator name)
+        """
+        if etype not in commitment_dict.keys():
+            commitment_dict[etype] = {unit: {'initial_status': None,
+                                             'commitment':
+                                                 {'data_type': 'time_series',
+                                                  'values': []}}}
+        if unit not in commitment_dict[etype].keys():
+            commitment_dict[etype][unit] = {'initial_status': None,
+                                            'commitment':
+                                                {'data_type': 'time_series',
+                                                 'values': []}}
+        return commitment_dict
+
+    def store_commitment_hist(self, keep='new', merge_dict=None, omit=[]):
+        """
+        Updates the commitment and initial status of generators (and storage) based on the
+        model solution from a cleared market. Stored in the self.commitment_hist dictionary
+        This is a partial copy of the Egret generator element dictionary, specifically designed
+        to hold and update commitment history (and initial status) as markets pass
+
+        Note - there is a case for merging entire egret models (rather than just commitment history),
+        although there is the chance for conflicts if settings change and the overall size is larger (though
+        probably not large enough to cause RAM issues, so maybe that doesn't matter)
+        Option - this type of method could also be generalized to merge particular time series, although
+        some special handling may still be needed.
+
+        Args:
+            keep (string): In the case of duplicate timestamps whether to keep 'new' or 'old' values. Defaults to new.
+            merge_dict (dict): Option to merge a commitment history (typically merging DA into RT). Defaults to None.
+                               Note, if merge_dict is specified, Egret model will be ignored. Keep='new' will use
+                               the merge_dict values in case of duplicate timestamps.
+            omit (list): List of strings for generators to omit. This can be part of the name. For example:
+                             omit = ['_w_new'] will omit any generators containing '_w_new' in their name
+        """
+
+        # Helper function to check if any omit strings are in the unit name
+        def omit_unit(unit: str, omit: list):
+            omit_status = False
+            for om in omit:
+                if om in unit:
+                    omit_status = True
+                    break
+            return omit_status
+
+        # Create dict if needed with the timestamps as a top level key (shared by all generators/elements)
+        if self.commitment_hist is None:
+            self.commitment_hist = {'timestamps': []}
+        # Keep a copy of the old and the new timestamps
+        commit_times_hist = self.commitment_hist['timestamps']
+        commit_times_new = pd.to_datetime(self.em.mdl_sol.data['system']['time_keys']) if merge_dict is None \
+            else merge_dict['timestamps']
+        # Join times, ensuring that any shared times are not duplicated
+        common_times, i_hist, i_new = np.intersect1d(commit_times_hist, commit_times_new, return_indices=True)
+        commit_times_all = commit_times_hist.extend([commit_times_new[i] for i in range(len(commit_times_new))
+                                                     if i not in i_new])
+        # Check whether to loop over stored PyEnergyMarket Model or an input model dictionary
+        loop_dict = self.em.mdl_sol.data['elements'] if merge_dict is None else merge_dict
+        for etype, e_dict in loop_dict.items():
+            # etype is 'generator', 'renewable', 'load', etc. - Egret types. e_dict holds each unit's info
+            # Restrict to committable elements (optional - slight speedup but risk of missing new types)
+            if etype in ['generator']:
+                for unit, u_dict in e_dict.items():
+                    if omit_unit(unit, omit):
+                        continue  # Skip if unit name is in the omit list
+                    # Add empty key if it doesn't already exist. Structure matches Egret (with timestamps added)
+                    self.commitment_hist = self.prep_commitment_hist(self.commitment_hist, etype, unit)
+                    # First time through, set the initial status (this is fixed based on the starting initial_status)
+                    if self.commitment_hist[etype][unit]['initial_status'] is None:
+                        self.commitment_hist[etype][unit]['initial_status'] = u_dict['initial_status']
+                    # Get current and new values
+                    commit_values_hist = self.commitment_hist[etype][unit]['commitment']['values']
+                    if merge_dict is None:
+                        if 'commitment' in u_dict.keys():
+                            commit_values_new = u_dict['commitment']['values']
+                        else:  # If missing, Egret accepts the None input for unfixed
+                            commit_values_new = [None] * len(commit_times_new)
+                    else:
+                        commit_values_new = merge_dict[etype][unit]['commitment']['values']
+                    # Join current and new - with handling for which to keep if there are any common times
+                    if keep == 'new':
+                        commit_values_hist = [commit_values_hist[j] for j in range(len(commit_values_hist))
+                                              if j not in i_hist]
+                    else:
+                        commit_values_new = [commit_values_new[j] for j in range(len(commit_values_new))
+                                             if j not in i_new]
+                    commit_values_all = commit_values_hist.extend(commit_values_new)
+                    # This ensures that times are strictly ascending (ideally unnecessary)
+                    commit_times_all_sort, commit_values_all_sort = sort_array(commit_times_all, commit_values_all)
+                    # Set commitment values
+                    self.commitment_hist[etype][unit]['commitment']['values'] = commit_values_all_sort
+        self.commitment_hist['timestamps'] = sorted(commit_times_all)
+
+def sort_array(ref_array, paired_array):
+    """ Takes two input arrays, one reference and its pair, and returns the reference-sorted versions """
+    # If inputs are lists instead of arrays, covert to lists before return
+    return_list = False
+    if isinstance(ref_array, list):
+        return_list = True
+    sorted_inds = np.argsort(ref_array)
+    sorted_ref_array = np.array(ref_array)[sorted_inds]
+    sorted_paired_array = np.array(paired_array)[sorted_inds]
+    if return_list:
+        sorted_ref_array = sorted_ref_array.tolist()
+        sorted_paired_array = sorted_paired_array.tolist()
+        # Convert any numpy.int64/float64 to int/float
+        sorted_paired_array = [int(cvh) if isinstance(cvh, int) else float(cvh) if isinstance(cvh,float) else cvh
+                               for cvh in sorted_paired_array]
+    return sorted_ref_array, sorted_paired_array

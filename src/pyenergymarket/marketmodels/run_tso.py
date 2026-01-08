@@ -12,6 +12,7 @@ from pyenergymarket.marketmodels import market as generic_market
 from pyenergymarket.engine import DataProvider
 import pyenergymarket as pyen
 import argparse, json, datetime
+from reverse_argparse import ReverseArgumentParser
 from scipy.interpolate import CubicSpline
 import time as pytime
 import logging
@@ -415,6 +416,10 @@ if __name__ == '__main__':
                                                                       "units of seconds.", default=None)
     parser.add_argument("-m", "--market_type", help="Which market type to use", default='generic')
     args = parser.parse_args()
+    # Show command line options
+    rev_parser = ReverseArgumentParser(parser, args)
+    logger.info(f"Command line options selected:\n{rev_parser.get_pretty_command_line_invocation()}")
+
     options = args.__dict__
     options.update({'save':True})
     if args.market_type == 'generic':
