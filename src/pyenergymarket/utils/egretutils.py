@@ -156,7 +156,7 @@ def flatten_distributed_generators(md:ModelData, key="generator"):
 
 def sum_properties(a:Union[float, dict], b:Union[float,dict]):
 
-    if type(a) != type(b):
+    if not isinstance(a, type(b)):
         raise TypeError("sum_properities: the two properties should be of the same type")
     
     if isinstance(a,dict):
