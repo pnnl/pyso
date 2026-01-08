@@ -162,14 +162,15 @@ class EnergyMarket:
             # In all other cases, we calculate initial conditions from the end of the previous cleared market.
             elif update_mode == 'calculate':
                 # Initial power is the last power cleared in the previous window (subtract 1 to get on 0-base)
-                if hasattr(previous_mdl_sol.data['elements']['generator'][g], 'initial_p_output'):
+                # print(f"Computing for generator {g} with info {previous_mdl_sol.data['elements']['generator'][g]}")
+                if 'initial_p_output' in previous_mdl_sol.data['elements']['generator'][g].keys():
                     g_dict['initial_p_output'] = float(
                         previous_mdl_sol.data['elements']['generator'][g]['pg']['values'][window - 1])
                 # we could also update the q/reactive power, but this first test will be dc only
                 # g_dict['initial_q_output'] = float(
                 #                 previous_mdl_sol.data['elements']['generator'][g]['qg']['values'][window - 1])
                 # Update initial status for this generator, using timeutils function
-                if hasattr(previous_mdl_sol.data['elements']['generator'][g], 'initial_status'):
+                if 'initial_status' in previous_mdl_sol.data['elements']['generator'][g].keys():
                     new_initial_status = count_onoff(previous_mdl_sol.data['elements']['generator'][g], window-1, min_freq)
                     g_dict['initial_status'] = new_initial_status
 

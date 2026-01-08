@@ -233,13 +233,6 @@ def create_market(mtype, em_config, market_timing, start=None, end=None, filenam
     market = generic_market.Market(mtype, market_timing, start, end, market=em, freq=freq)
     return market
 
-def execute_dart(options):
-    """ Runs a market instance with the given options """
-    # Creates a market operator
-    tso = TSO_DART(options)
-    # Runs the simulation
-    tso.simulate()
-
 def execute_sequence(options, time_unit='hour'):
     """ Runs a market instance with the given options """
     options['time_unit'] = time_unit

@@ -69,7 +69,7 @@ class Market():
         self.em = market
         self.market_name = market_name
         self.current_state = market_timing["initial_state"]
-        market_frequency = f'{self.em.configuration["time"]["min_freq"]}min'
+        market_frequency = f'{self.em.configuration["time"]["min_freq"] * self.em.configuration["time"]["window"]}min'
         self.start_times = self.interpolate_market_start_times(start_date, end_date, freq=market_frequency)
         logger.info("market", self.market_name, "start_times: ", self.start_times)
         self.timestep = 0
