@@ -60,17 +60,19 @@ default_options = {
                 },
                 "solve_arguments": {
                     "solver": "gurobi_persistent",
-                    "solver_options": {"ConcurrentMethod":0, "Method":3, "MIPFocus":1, "CutPasses": 2},
-                },
-                "ptdf_options": {
-                        "rel_ptdf_tol" : 0.0,
-                        "abs_ptdf_tol" : 1e-7,
-                        "abs_flow_tol" : 1e-3, # solver tolerance, plus a bit
-                        "rel_flow_tol" : 0.0,
-                        "branch_kv_threshold" : 100.0,
-                        "kv_threshold_type" : "both",
-                        "max_violations_per_iteration" : 20
-                        #    "lp_cleanup_phase" : False,
+                    "kwargs":{
+                        "solver_options": {"ConcurrentMethod":0, "Method":3, "MIPFocus":1, "CutPasses": 2},
+                        "ptdf_options": {
+                            "rel_ptdf_tol" : 0.0,
+                            "abs_ptdf_tol" : 1e-7,
+                            "abs_flow_tol" : 1e-3, # solver tolerance, plus a bit
+                            "rel_flow_tol" : 0.0,
+                            "branch_kv_threshold" : 100.0,
+                            "kv_threshold_type" : "both",
+                            "max_violations_per_iteration" : 20
+                            #    "lp_cleanup_phase" : False,
+                }
+                    },
                 }
             },
         },
@@ -103,17 +105,19 @@ default_options = {
                 },
                 "solve_arguments": {
                     "solver": "gurobi_persistent",
-                    "solver_options": {"ConcurrentMethod":0, "Method":3, "MIPFocus":1, "CutPasses": 2},
-                },
-                "ptdf_options": {
-                        "rel_ptdf_tol" : 0.0,
-                        "abs_ptdf_tol" : 1e-7,
-                        "abs_flow_tol" : 1e-3, # solver tolerance, plus a bit
-                        "rel_flow_tol" : 0.0,
-                        "branch_kv_threshold" : 100.0,
-                        "kv_threshold_type" : "both",
-                        "max_violations_per_iteration" : 20
-                        #    "lp_cleanup_phase" : False,
+                    "kwargs":{
+                        "solver_options": {"ConcurrentMethod":0, "Method":3, "MIPFocus":1, "CutPasses": 2},
+                        "ptdf_options": {
+                            "rel_ptdf_tol" : 0.0,
+                            "abs_ptdf_tol" : 1e-7,
+                            "abs_flow_tol" : 1e-3, # solver tolerance, plus a bit
+                            "rel_flow_tol" : 0.0,
+                            "branch_kv_threshold" : 100.0,
+                            "kv_threshold_type" : "both",
+                            "max_violations_per_iteration" : 20
+                            #    "lp_cleanup_phase" : False,
+                        }
+                    },
                 }
             }
         }

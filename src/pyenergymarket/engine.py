@@ -38,7 +38,6 @@ class EnergyMarket:
         self.configuration = copy.deepcopy(energymarket_defaults)
         if config is not None:
             merge_configs(self.configuration, config)
-        self.ptdf_options = self.configuration.get("ptdf_options", None)
         
         ### set up logger
         self.logger =Logger(**self.configuration["logging"])
@@ -244,15 +243,12 @@ class EnergyMarket:
         """
         self.logger.info("Solving Model\n")
         self.update_constraints(mdl_sol)
-        solver_options = self.configuration["solve_arguments"]["solver_options"] if "solver_options" in self.configuration["solve_arguments"] else None
         # self.add_constraints()
-        self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
+        self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"],
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
-                                        solver_options=solver_options,
-                                        **self.configuration["solve_arguments"]["kwargs"],
-                                        ptdf_options=self.ptdf_options)
+                                        **self.configuration["solve_arguments"]["kwargs"])
         pricing_model = self.configuration["simulation"]["price_model"]
-        if  pricing_model is not None:
+        if pricing_model is not None and not self.configuration["simulation"]["kwargs"].get("relaxed", False):
             self.logger.info("Solving pricing model\n")
             self.pricing_model(pricing_model)
 
@@ -295,12 +291,8 @@ class EnergyMarket:
         ## TODO: we may want to get the pyomo model here so we can get the duals
         ## on other constraints such as flow, or contingency
         ## solve relaxed problem to populate LMPs
-        solver_options = self.configuration["solve_arguments"]["solver_options"] if "solver_options" in \
-                                                                                     self.configuration[
-                                                                                         "solve_arguments"] else None
         self.mdl_price : ModelData = solve_unit_commitment(pricing_instance, self.configuration["solve_arguments"]["solver"], 
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
-                                        solver_options=solver_options,
                                         relaxed=True,
                                         **self.configuration["solve_arguments"]["kwargs"]) 
 
