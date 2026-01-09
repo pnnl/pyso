@@ -248,7 +248,7 @@ class EnergyMarket:
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
                                         **self.configuration["solve_arguments"]["kwargs"])
         pricing_model = self.configuration["simulation"]["price_model"]
-        if pricing_model is not None and not self.configuration["simulation"]["kwargs"].get("relaxed", False):
+        if pricing_model is not None and not self.configuration["solve_arguments"]["kwargs"].get("relaxed", False):
             self.logger.info("Solving pricing model\n")
             self.pricing_model(pricing_model)
 

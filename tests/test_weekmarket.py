@@ -100,10 +100,10 @@ def sequential_pass_testing(fstart, ndays=6):
     """
     for day in range(ndays):
         # Open the given day
-        with open(f'{fstart}_{day}.json', 'r') as f:
+        with open(os.path.join(THIS_DIR, f'{fstart}_{day}.json'), 'r') as f:
             first_solution = json.load(f)
         # Open the next day
-        with open(f'{fstart}_{day+1}.json', 'r') as f:
+        with open(os.path.join(THIS_DIR, f'{fstart}_{day+1}.json'), 'r') as f:
             second_solution = json.load(f)
         # Check that initial power from day 2 come from the end of day1
         tstart = second_solution['system']['time_keys'][0]
