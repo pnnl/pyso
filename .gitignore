@@ -8,3 +8,8 @@ dependencies.log
 data_model_tests
 tests/localdata
 .vscode
+.pytest_cache
+.coverage
+coverage.xml
+junit.xml
+htmlcov/
