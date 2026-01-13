@@ -7,7 +7,6 @@ import numpy as np
 from typing import Union
 from egret.data.model_data import ModelData
 from pyenergymarket.utils.egretutils import merge_model_data
-from pyenergymarket.utils.ioutils import read_json_gzip
 
 class EgretProvider(DataProvider):
     """simple class to provide egret ModelData in a given daterange
@@ -75,12 +74,7 @@ class DailyEgretProvider(EgretProvider):
         for md_date in md_dates:
             for file in files:
                 if md_date in file:
-                    # Special loading for gzip files
-                    if file.endswith('gz'):
-                        md_data = read_json_gzip(os.path.join(self.filedir, file))
-                        this_md = ModelData(md_data)
-                    else:
-                        this_md = ModelData(os.path.join(self.filedir, file))
+                    this_md = ModelData(os.path.join(self.filedir, file))
                     md_objects.append(this_md)
                     break
             if len(md_objects) == len(md_dates):

@@ -3,8 +3,6 @@ place here.
 """
 import logging
 import sys
-import json
-import gzip
 
 def merge_configs(defaults:dict, user:dict, level=0):
     """update the default options with user inputs"""
@@ -42,30 +40,6 @@ def format_filename(datetime_str):
         to:   '2032-01-01_00-00-00'
     """
     return datetime_str.replace(':', '-').replace(' ', '_')
-
-def read_json_gzip(file_path: str):
-    """
-    Reads a gzipped JSON file and returns its content as a Python object.
-
-    Args:
-        file_path (str): The path to the .json.gz file.
-
-    Returns:
-        dict or list: The Python object parsed from the JSON data.
-    """
-    try:
-        with gzip.open(file_path, 'rt', encoding='utf-8') as f:
-            data = json.load(f)
-        return data
-    except FileNotFoundError:
-        print(f"Error: File not found at {file_path}")
-        return None
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from {file_path}. Ensure it's a valid JSON file.")
-        return None
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return None
 
 class Logger(logging.Logger):
     def __init__(self, name, level=logging.INFO, msg_format="{message}", **kwargs):
