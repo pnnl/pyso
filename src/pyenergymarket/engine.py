@@ -148,28 +148,22 @@ class EnergyMarket:
             previous_mdl_sol = self.mdl_sol
 
         # Loop through all generators in the upcoming model (self.mdl) and update initial_p_output and initial_status
-        for g, g_dict in self.mdl.elements(element_type='generator'):
+        for g, g_dict in self.mdl.elements(element_type='generator', generator_type=("thermal", "dispatchable")):
             # When simulating multiple market instances, we may copy information from one market to another.
             # For example, we may want to pass day-ahead results to a real-time market.
             if update_mode == 'copy':
-                if hasattr(previous_mdl_sol.data['elements']['generator'][g], 'initial_p_output'):
-                    g_dict['initial_p_output'] = float(
-                        previous_mdl_sol.data['elements']['generator'][g]['initial_p_output'])
-                if hasattr(previous_mdl_sol.data['elements']['generator'][g], 'initial_status'):
-                    g_dict['initial_status'] = float(previous_mdl_sol.data['elements']['generator'][g]['initial_status'])
+                g_dict['initial_p_output'] = float(previous_mdl_sol.data['elements']['generator'][g]['initial_p_output'])
+                g_dict['initial_status'] = float(previous_mdl_sol.data['elements']['generator'][g]['initial_status'])
             # In all other cases, we calculate initial conditions from the end of the previous cleared market.
             elif update_mode == 'calculate':
                 # Initial power is the last power cleared in the previous window (subtract 1 to get on 0-base)
-                if 'initial_p_output' in previous_mdl_sol.data['elements']['generator'][g].keys():
-                    g_dict['initial_p_output'] = float(
-                        previous_mdl_sol.data['elements']['generator'][g]['pg']['values'][window - 1])
+                g_dict['initial_p_output'] = float(previous_mdl_sol.data['elements']['generator'][g]['pg']['values'][window - 1])
                 # we could also update the q/reactive power, but this first test will be dc only
                 # g_dict['initial_q_output'] = float(
                 #                 previous_mdl_sol.data['elements']['generator'][g]['qg']['values'][window - 1])
                 # Update initial status for this generator, using timeutils function
-                if 'initial_status' in previous_mdl_sol.data['elements']['generator'][g].keys():
-                    new_initial_status = count_onoff(previous_mdl_sol.data['elements']['generator'][g], window-1, min_freq)
-                    g_dict['initial_status'] = new_initial_status
+                new_initial_status = count_onoff(previous_mdl_sol.data['elements']['generator'][g], window-1, min_freq)
+                g_dict['initial_status'] = new_initial_status
 
         # Loop through all storage units in the upcoming model (self.mdl) and update initial_state_of_charge,
         # end_state_of_charge, initial_charge_rate and initial_discharge_rate
@@ -209,7 +203,7 @@ class EnergyMarket:
         for b, b_dict in mdl_sol.elements("branch"):
             max_flow = np.max(np.abs(b_dict["pf"]["values"]))  # Max absolute value of the flow on the element
             # Check if long-term rating is available. If not, skip this branch
-            if not hasattr(b_dict, "rating_long_term"):
+            if b_dict.get("rating_long_term", None) is None:
                 continue
             limit = abs(b_dict["rating_long_term"])       # Limit on the element (NEED TO MODIFY TO EMERGENCY LIMIT IF CONTINGENCY)
             tolerance = self.monitor_tolerance_percentage * limit # Calculate dynamic tolerance based on percentage
