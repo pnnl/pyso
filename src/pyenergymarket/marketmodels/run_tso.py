@@ -2,11 +2,14 @@
 This script adds a market operator capable of running the DA and RT market for
 a user-defined time range.
 """
-import os.path
 
+import os
 import pandas as pd
+import argparse
 from pyenergymarket.marketmodels import market as generic_market
+from pyenergymarket.marketmodels.default_tso_config import get_defaults
 from pyenergymarket.parsers.egretparser import DailyEgretProvider
+from pyenergymarket.utils.ioutils import merge_configs
 import pyenergymarket as pyen
 import json, datetime
 import time as pytime
@@ -15,114 +18,6 @@ import logging
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
-
-default_options = {
-    "start_time": '202401010000', # Start time in YYYYmmddHHMM format
-    "end_time": '202401080000', # End time in YYYYmmddHHMM format
-    "filename": '../../../../pcm-data-pipeline/output', # Name (with path) to egret model_data file
-    "case": None, # String to append to the save directory
-    "time_resolution": 1, # Time resolution for simulation steps
-    "time_unit": 'hour', # Unit of time_resolution (allows second, minute, hour, day, year)
-    "save": True, # Whether to save output (will save locally)
-    # Dictionaries for the different market types
-    # These must be of the form
-    #    "market_name": {
-    #       "market_timing": { market_timing_dictionary }
-    #       "em_config": { energymarket_config_dictionary }
-    #    }
-    "market_order": ["weekly", "daily"],
-    "markets": {
-        "daily": {
-            "market_timing": {
-                "states": {
-                    "clearing": {
-                        "start_time": 0,
-                        "duration": 3,
-                    },
-                    "idle": {
-                        "start_time": 3,
-                        "duration": 18,
-                    },
-                    "bidding": {
-                        "start_time": 21,
-                        "duration": 3,
-                    },
-                },
-                "initial_offset": 0,
-                "initial_state": "idle",
-                "market_interval": 24
-                },
-            "em_config": {
-                "time": {
-                    "min_freq": 60,  # period length in minutes
-                    "window": 24,  # solution window
-                    "lookahead": 24  # solution lookahead
-                },
-                "solve_arguments": {
-                    "solver": "gurobi_persistent",
-                    "kwargs":{
-                        "solver_options": {"ConcurrentMethod":0, "Method":3, "MIPFocus":1, "CutPasses": 2},
-                        "ptdf_options": {
-                            "rel_ptdf_tol" : 0.0,
-                            "abs_ptdf_tol" : 1e-7,
-                            "abs_flow_tol" : 1e-3, # solver tolerance, plus a bit
-                            "rel_flow_tol" : 0.0,
-                            "branch_kv_threshold" : 100.0,
-                            "kv_threshold_type" : "both",
-                            "max_violations_per_iteration" : 20
-                            #    "lp_cleanup_phase" : False,
-                }
-                    },
-                }
-            },
-        },
-        "weekly": {
-            "market_timing": {
-                "states": {
-                    "clearing": {
-                        "start_time": 0,
-                        "duration": 4,
-                    },
-                    "idle": {
-                        "start_time": 4,
-                        "duration": 184,
-                    },
-                    "bidding": {
-                        "start_time": 188,
-                        "duration": 4,
-                    },
-
-                },
-                "initial_offset": 0,
-                "initial_state": "idle",
-                "market_interval": 192
-            },
-            "em_config": {
-                "time": {
-                    "min_freq": 240, # period length in minutes
-                    "window": 42, # solution window
-                    "lookahead": 6 # solution lookahead
-                },
-                "solve_arguments": {
-                    "solver": "gurobi_persistent",
-                    "kwargs":{
-                        "solver_options": {"ConcurrentMethod":0, "Method":3, "MIPFocus":1, "CutPasses": 2},
-                        "ptdf_options": {
-                            "rel_ptdf_tol" : 0.0,
-                            "abs_ptdf_tol" : 1e-7,
-                            "abs_flow_tol" : 1e-3, # solver tolerance, plus a bit
-                            "rel_flow_tol" : 0.0,
-                            "branch_kv_threshold" : 100.0,
-                            "kv_threshold_type" : "both",
-                            "max_violations_per_iteration" : 20
-                            #    "lp_cleanup_phase" : False,
-                        }
-                    },
-                }
-            }
-        }
-    }
-}
 
 class TSO:
     """
@@ -255,15 +150,28 @@ def execute_sequence(options, time_unit='hour'):
     tso.simulate()
 
 if __name__ == '__main__':
-    # Read in configuration settings (if this file doesn't exist, create a file with default settings
-    if not os.path.exists('tso_config.json'):
-        logger.critical("No configuration (tso_config.json) found. Creating file with defaults.")
-        with open('tso_config.json', 'w') as f:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--config", help="Name/path of tso configuration file",
+                        default="tso_config.json")
+    args = parser.parse_args()
+
+    config_file = args.config
+
+    # Import default settings
+    default_options = get_defaults()
+
+    # Check if the configuration file exists. If this file doesn't exist, create a file with default settings
+    if not os.path.exists(args.config):
+        logger.critical(f"No configuration ({config_file}) found. Creating file with defaults.")
+        with open(config_file, 'w') as f:
             json.dump(default_options, f, indent=4)
         logger.critical("Default config created. Edit tso_config.json to update run settings")
         exit()
 
-    with open('tso_config.json', 'r') as f:
+    # Read in configuration settings and merge with the defaults (defaults will only be applied
+    # to any missing/unspecified configuration elements
+    with open(config_file, 'r') as f:
         options = json.load(f)
+    options = merge_configs(default_options, options)
 
     execute_sequence(options)
