@@ -13,6 +13,14 @@ cache:
 
 before_script:
   - python --version
+  # Configure git to use the CI job token for authentication
+  - |
+    cat > ~/.netrc << EOF
+    machine gitlab.naerm.team
+    login gitlab-ci-token
+    password ${CI_JOB_TOKEN}
+    EOF
+    chmod 600 ~/.netrc
   - pip install -e ".[test,dev]"
 
 lint:

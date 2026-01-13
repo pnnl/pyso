@@ -1,18 +1,19 @@
-from setuptools import setup
-from setuptools.command.develop import develop
-from setuptools.command.install import install
-from setuptools.command.egg_info import egg_info
-
 #### Dependency checking
 import importlib.util
 
+from setuptools import setup
+from setuptools.command.develop import develop
+from setuptools.command.egg_info import egg_info
+from setuptools.command.install import install
+
+
 def check_dependencies():
     with open("dependencies.log", "w") as f:
-        dependencies = {"required": ["gridx-egret"],
-                        "optional": ["gridtune"]
+        dependencies = {"required": ["gridx-egret"], "optional": ["gridtune"]}
+        sources = {
+            "gridx-egret": "https://gitlab.naerm.team/egret/egret-int.git",
+            "gridtune": "PNNL private repo.",
         }
-        sources = {"gridx-egret": "https://gitlab.naerm.team/egret/egret-int.git",
-                "gridtune": "PNNL private repo."}
         missing_dependencies = {"required": [], "optional": []}
 
         for typ, dlist in dependencies.items():
@@ -32,42 +33,48 @@ def check_dependencies():
                 print("pip install -e .", file=f)
 
 
-#see: https://stackoverflow.com/questions/20288711/post-install-script-with-python-setuptools
+# see: https://stackoverflow.com/questions/20288711/post-install-script-with-python-setuptools
+
 
 class PostDevelopCommand(develop):
     """Post installation in develop mode"""
+
     def run(self):
         print("IN POST DEVELOP COMMAND")
         post_install()
         # install.run(self)
         super().run()
 
+
 class PostEggCommand(egg_info):
     """Post installation in egg info mode"""
+
     def run(self):
         print("IN EGG INFO COMMAND")
         post_install()
         # install.run(self)
         super().run()
-        
+
 
 class PostInstallCommand(install):
     """Post installation in installation mode"""
+
     def run(self):
         print("IN POST INSTALL COMMAND", flush=True)
         post_install()
         # install.run(self)
         super().run()
-        
+
 
 def post_install():
     check_dependencies()
-    
+
+
 setup(
     name="pyenergymarket",
     cmdclass={
         "install": PostInstallCommand,
         "develop": PostDevelopCommand,
-        "egg_info": PostEggCommand # https://stackoverflow.com/questions/19569557/pip-not-picking-up-a-custom-install-cmdclass
+        "egg_info": PostEggCommand,  # https://stackoverflow.com/questions/19569557/pip-not-picking-up-a-custom-install-cmdclass
     },
 )
