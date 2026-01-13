@@ -8,10 +8,10 @@ import importlib.util
 
 def check_dependencies():
     with open("dependencies.log", "w") as f:
-        dependencies = {"required": ["egret"],
+        dependencies = {"required": ["gridx-egret"],
                         "optional": ["gridtune"]
         }
-        sources = {"egret": "https://github.com/grid-parity-exchange/Egret",
+        sources = {"gridx-egret": "https://gitlab.naerm.team/egret/egret-int.git",
                 "gridtune": "PNNL private repo."}
         missing_dependencies = {"required": [], "optional": []}
 

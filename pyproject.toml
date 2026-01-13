@@ -17,7 +17,8 @@ dependencies = [
     "pandas>=2.2.1",
     "networkx>=2.8.4",
     "transitions",
-    "reverse-argparse"
+    "reverse-argparse",
+    "gridx-egret @ git+https://gitlab.naerm.team/egret/egret-int.git"
 ]
 [project.optional-dependencies]
 gv = ["numpy>=1.26"]
