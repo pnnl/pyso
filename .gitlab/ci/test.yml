@@ -31,7 +31,8 @@ test:naerm:
       coverage_line=$(echo "$coverage_report" | grep "TOTAL")
       coverage_percentage=$(echo "$coverage_line" | grep -o '[0-9]\+%' | head -1)
       echo "Coverage: $coverage_percentage (NAERM)"
-  coverage: '/Coverage: (\d+\%) \(NAERM\)/i'
+      echo "Test coverage: $coverage_percentage"
+  coverage: '/^Test coverage: (\d+\%)/i'
   artifacts:
     paths:
       - htmlcov-naerm/
@@ -62,7 +63,8 @@ test:standard:
       coverage_line=$(echo "$coverage_report" | grep "TOTAL")
       coverage_percentage=$(echo "$coverage_line" | grep -o '[0-9]\+%' | head -1)
       echo "Coverage: $coverage_percentage (Standard)"
-  coverage: '/Coverage: (\d+\%) \(Standard\)/i'
+      echo "Test coverage: $coverage_percentage"
+  coverage: '/^Test coverage: (\d+\%)/i'
   artifacts:
     paths:
       - htmlcov-standard/
