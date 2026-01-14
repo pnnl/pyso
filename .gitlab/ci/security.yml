@@ -2,8 +2,6 @@
 security:
   extends: .common_config
   stage: security
-  needs:
-    - build
   script:
     - pip install bandit safety
     - bandit -r src/
