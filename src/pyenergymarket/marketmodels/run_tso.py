@@ -135,9 +135,13 @@ def create_market(mtype, em_config, market_timing, start=None, end=None, filenam
     market = generic_market.Market(mtype, market_timing, start, end, market=em, freq=freq)
     return market
 
-def execute_sequence(options, time_unit='hour'):
+def execute_sequence(options):
     """ Runs a market instance with the given options """
-    options['time_unit'] = time_unit
+    # Check to make sure empty default options have been specified
+    empty_defaults = ['start_time', 'end_time', 'filename']
+    for default in empty_defaults:
+        if options.get(default, '') == '':
+            raise ValueError(f"Must specify a value for config option {default}")
     # Creates a market operator
     tso = TSO(options)
     # Add markets from options (requires a market_timing and em_config specified)
@@ -165,13 +169,14 @@ if __name__ == '__main__':
         logger.critical(f"No configuration ({config_file}) found. Creating file with defaults.")
         with open(config_file, 'w') as f:
             json.dump(default_options, f, indent=4)
-        logger.critical("Default config created. Edit tso_config.json to update run settings")
+        logger.critical(f"Default config created. Edit {config_file} to update run settings")
         exit()
 
     # Read in configuration settings and merge with the defaults (defaults will only be applied
     # to any missing/unspecified configuration elements
     with open(config_file, 'r') as f:
         options = json.load(f)
-    options = merge_configs(default_options, options)
+    # Joins any user options onto the default options
+    merge_configs(default_options, options)
 
-    execute_sequence(options)
+    execute_sequence(default_options)

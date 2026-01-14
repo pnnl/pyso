@@ -24,7 +24,6 @@ energymarket_defaults = {
             "timelimit": 300,
         }
     },
-    "ptdf_options": {}, # Can pass ptdf_options to Egret
     "logging": {
         "name": "pyenergy",
         "level": "INFO",
