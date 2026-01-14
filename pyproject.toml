@@ -18,9 +18,10 @@ dependencies = [
     "networkx>=2.8.4",
     "transitions",
     "reverse-argparse",
-    "gridx-egret @ git+https://gitlab.naerm.team/egret/egret-int.git"
 ]
 [project.optional-dependencies]
+naerm = ["gridx-egret @ git+https://gitlab.naerm.team/egret/egret-int.git"]
+standard = ["gridx-egret @ git+https://github.com/grid-parity-exchange/Egret.git"]
 gv = ["numpy>=1.26"]
 test = ["pytest", "pytest-cov"]
 dev = [

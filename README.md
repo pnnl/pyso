@@ -44,13 +44,34 @@ Will shift to Mini WECC once it is available
 * 15 minute resolution
 
 # Setup
-## Intalling Egret
-To install Egret the repository needs to be cloned and then installed via pip in edit mode.
+## Installing Egret
+The package allows you to use different sources for the Egret dependency based on your needs.
+
+### NAERM Project (Default for CI)
+If you're part of the NAERM project, you can install with the NAERM-specific Egret:
+
+```bash
+pip install -e ".[naerm]"
+```
+
+This will install Egret from the NAERM GitLab repository.
+
+### Standard Egret
+If you're not part of the NAERM project or need the standard Egret version:
+
+```bash
+pip install -e ".[standard]"
+```
+
+This will install Egret from the official Grid Parity Exchange repository.
+
+### Manual Installation
+Alternatively, you can manually install Egret. The repository needs to be cloned and then installed via pip in edit mode.
 See the instructions [here](https://github.com/pnnl-private/egret?tab=readme-ov-file#installation).
 Please use the `develop` branch.
 This is on PNNL's private GitHub, if you need access reach out to either Eran (<eran.schweitzer@pnnl.gov>), or Trevor (<trevor.hardy@pnnl.gov>)
 
-Make sure to [install a solver](#solvers)
+In all cases, make sure to [install a solver](#solvers)
 
 Then proceed to verify the installation, see [these instructions](https://github.com/breldridge/Egret?tab=readme-ov-file#testing-the-installation)
 
