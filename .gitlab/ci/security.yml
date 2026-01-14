@@ -3,6 +3,6 @@ security:
   extends: .common_config
   stage: security
   script:
-    - pip install bandit safety
+    - pip install bandit pip-audit
     - bandit -r src/
-    - safety scan
+    - pip-audit
