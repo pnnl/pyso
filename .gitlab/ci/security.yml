@@ -2,6 +2,9 @@
 security:
   extends: .common_config
   stage: security
+  needs:
+    - job: build
+      optional: true
   script:
     - pip install bandit pip-audit
     - bandit -r src/
