@@ -29,26 +29,32 @@ RUN echo "...downloading solvers" && \
     echo "$SOLVER_DIR" && \
     ls -l $SOLVER_DIR
 
-RUN echo 'export PATH="/app/solvers:$PATH"' > ~/.bashrc
+# Set up environment path globally (not just in .bashrc)
+ENV PATH="/app/solvers:$PATH"
+ENV PATH="/opt/conda/envs/pyso/bin:$PATH"
 
 RUN conda update -n base -c defaults conda
 
 RUN conda config --add channels conda-forge && \
     conda config --set channel_priority strict
 
-# Create the environment
+# Create the environment and install CBC solver
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda create -y -n pyso python=3.12 && \
     conda activate pyso && \
-    conda install -y -c conda-forge pytest coveralls && \
+    conda install -y -c conda-forge coincbc pytest coveralls && \
     conda clean -a
 
+# Create activation script for conda
 RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
 RUN echo "conda activate pyso" >> ~/.bashrc
 
-RUN cat ~/.bashrc
-RUN export PATH="/app/solvers:$PATH"
-RUN echo $PATH
+# Make sure CBC is accessible globally
+RUN ln -sf /opt/conda/envs/pyso/bin/cbc /usr/local/bin/
+
+# Verify installation
+RUN ls -la /opt/conda/envs/pyso/bin/cbc || echo "CBC not found in conda env"
+RUN ls -la /usr/local/bin/cbc || echo "CBC not found in /usr/local/bin"
 RUN which cbc
 
 # (Optional) Set the default environment when the container starts
