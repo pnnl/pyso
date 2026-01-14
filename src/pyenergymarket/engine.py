@@ -148,18 +148,16 @@ class EnergyMarket:
             previous_mdl_sol = self.mdl_sol
 
         # Loop through all generators in the upcoming model (self.mdl) and update initial_p_output and initial_status
-        for g, g_dict in self.mdl.elements(element_type='generator'):
+        for g, g_dict in self.mdl.elements(element_type='generator', generator_type=("thermal", "dispatchable")):
             # When simulating multiple market instances, we may copy information from one market to another.
             # For example, we may want to pass day-ahead results to a real-time market.
             if update_mode == 'copy':
-                g_dict['initial_p_output'] = float(
-                    previous_mdl_sol.data['elements']['generator'][g]['initial_p_output'])
+                g_dict['initial_p_output'] = float(previous_mdl_sol.data['elements']['generator'][g]['initial_p_output'])
                 g_dict['initial_status'] = float(previous_mdl_sol.data['elements']['generator'][g]['initial_status'])
             # In all other cases, we calculate initial conditions from the end of the previous cleared market.
             elif update_mode == 'calculate':
                 # Initial power is the last power cleared in the previous window (subtract 1 to get on 0-base)
-                g_dict['initial_p_output'] = float(
-                    previous_mdl_sol.data['elements']['generator'][g]['pg']['values'][window - 1])
+                g_dict['initial_p_output'] = float(previous_mdl_sol.data['elements']['generator'][g]['pg']['values'][window - 1])
                 # we could also update the q/reactive power, but this first test will be dc only
                 # g_dict['initial_q_output'] = float(
                 #                 previous_mdl_sol.data['elements']['generator'][g]['qg']['values'][window - 1])
@@ -204,6 +202,9 @@ class EnergyMarket:
         # Loop over all branches
         for b, b_dict in mdl_sol.elements("branch"):
             max_flow = np.max(np.abs(b_dict["pf"]["values"]))  # Max absolute value of the flow on the element
+            # Check if long-term rating is available. If not, skip this branch
+            if b_dict.get("rating_long_term", None) is None:
+                continue
             limit = abs(b_dict["rating_long_term"])       # Limit on the element (NEED TO MODIFY TO EMERGENCY LIMIT IF CONTINGENCY)
             tolerance = self.monitor_tolerance_percentage * limit # Calculate dynamic tolerance based on percentage
 
@@ -237,11 +238,11 @@ class EnergyMarket:
         self.logger.info("Solving Model\n")
         self.update_constraints(mdl_sol)
         # self.add_constraints()
-        self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"], 
+        self.mdl_sol : ModelData = solve_unit_commitment(self.mdl, self.configuration["solve_arguments"]["solver"],
                                         slack_type=SlackType[self.configuration["solve_arguments"]["slack"]],
                                         **self.configuration["solve_arguments"]["kwargs"])
         pricing_model = self.configuration["simulation"]["price_model"]
-        if  pricing_model is not None:
+        if pricing_model is not None and not self.configuration["solve_arguments"]["kwargs"].get("relaxed", False):
             self.logger.info("Solving pricing model\n")
             self.pricing_model(pricing_model)
 

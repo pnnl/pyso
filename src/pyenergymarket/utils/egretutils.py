@@ -182,6 +182,95 @@ def get_total_gen(md:ModelData):
             out = sum_properties(out, g_dict["pg"])
     return out
 
+def merge_model_data(md1:ModelData, md2:ModelData, ts_keep='md2'):
+    """ Merges all time series elements within two model data objects and returns the result
+        Non-time series elements will be drawn from md1
+
+    Args:
+        md1 (ModelData): The first model data object
+        md2 (ModelData): The second model data object
+        ts_keep (str, optional): If md1 and md2 have common time keys, specifies which time series to keep.
+    Returns:
+        md_merge (ModelData): The merged model data object
+    """
+
+    def find_common_times(md1:dict, md2:dict, ts_keep:str):
+        times1 = md1['system']['time_keys']
+        times2 = md2['system']['time_keys']
+        common_times, i1, i2 = np.intersect1d(times1, times2, return_indices=True)
+        # If no overlap, return None
+        if len(common_times) == 0:
+            return None
+        if ts_keep == 'md1':
+            idx_pivot = i2[-1] # If keeping md1, we will omit all i2 up to the last overlap
+        else:
+            idx_pivot = i1[0] # If keeping md2, we will omit all i1 after the first overlap
+        return idx_pivot
+
+    def index_merge(list1:list, list2:list, idx:Union[int, None], ts_keep:str):
+        """ If idx is not None, use ts_keep to determine which values to use for common times"""
+        if idx is not None:
+            if ts_keep == 'md1':
+                list2 = list2[idx:]
+            else:
+                list1 = list1[:idx]
+        return list1, list2
+
+    def merge_elements(md1:dict, md2:dict, idx:Union[int,None], ts_keep:str):
+        """ Loops through all elements and merges any time series """
+        for element in md1['elements'].keys():
+            for elem_name in md1['elements'][element].keys():
+                for elem_char, elem_dict in md1['elements'][element][elem_name].items():
+                    # Check if this is an Egret-formatted time series
+                    if isinstance(elem_dict, dict):
+                        if 'data_type' in elem_dict.keys() and elem_dict['data_type'] == "time_series":
+                            md1_values = deepcopy(elem_dict['values'])
+                            md2_values = deepcopy(md2['elements'][element][elem_name][elem_char]['values'])
+                            # Handle any overlapping time
+                            md1_values, md2_values = index_merge(md1_values, md2_values, idx, ts_keep)
+                            # Add md2 values and assign to the dictionary
+                            md1_values.extend(md2_values)
+                            elem_dict['values'] = md1_values
+        return md1
+
+    def merge_system(md1:dict, md2:dict, idx:Union[int, None], ts_keep:str):
+        """ Loops through all system keys and merges any time series """
+        # First, merge time_keys itself
+        md1_times, md2_times = deepcopy(md1['system']['time_keys']), deepcopy(md2['system']['time_keys'])
+        # Handle any overlapping time
+        md1_times, md2_times = index_merge(md1_times, md2_times, idx, ts_keep)
+        md1_times.extend(md2_times)
+        md1['system']['time_keys'] = md1_times
+        for sys_key, sys_value in md1['system'].items():
+            if isinstance(sys_value, dict):
+                if 'data_type' in sys_value.keys() and sys_value['data_type'] == "time_series":
+                    md1_values = deepcopy(sys_value['values'])
+                    md2_values = deepcopy(md2['system'][sys_key]['values'])
+                    # Handle any overlapping time
+                    md1_values, md2_values = index_merge(md1_values, md2_values, idx, ts_keep)
+                    # Add md2 values and re-assign
+                    md1_values.extend(md2_values)
+                    sys_value['values'] = md1_values
+        return md1
+
+    md1_data, md2_data = md1.data, md2.data
+    # We require md1 to come before md2 in the time series. Check this and if false, switch order
+    t01 = md1_data['system']['time_keys'][0]
+    t02 = md2_data['system']['time_keys'][0]
+    if t02 < t01:
+        md1_data, md2_data = md2.data, md1.data
+    md_merged_data = deepcopy(md1_data)
+
+    # Check if there are any shared times. Depending on ts_keep, this will select the start/end index
+    # of the list that won't be kept
+    idx_pivot = find_common_times(md1_data, md2_data, ts_keep)
+    md_merged_data = merge_elements(md_merged_data, md2_data, idx_pivot, ts_keep)
+    md_merged_data = merge_system(md_merged_data, md2_data, idx_pivot, ts_keep)
+
+    md_merged = ModelData(md_merged_data)
+    return md_merged
+
+
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.integer):
