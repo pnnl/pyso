@@ -6,7 +6,7 @@ stages:
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
-  DOCKER_IMAGE_NAME: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}"
+  DOCKER_IMAGE_NAME: "${CI_REGISTRY_IMAGE}:stable"
 
 # Common configuration to be extended
 .common_config:

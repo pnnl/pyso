@@ -10,4 +10,4 @@ build:
   rules:
     - changes:
       - .gitlab/ci/Containerfile
-      - .gitlab/ci/container.yml
+      - .gitlab/ci/Containerfile
