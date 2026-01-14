@@ -5,4 +5,4 @@ security:
   script:
     - pip install bandit safety
     - bandit -r src/
-    - safety check
+    - safety scan
