@@ -6,6 +6,7 @@ lint:
     - build
   script:
     - python --version
+    - pip install -e .[dev,test]
     - ruff check .
     - ruff format --check .
 
@@ -16,6 +17,7 @@ test:
   needs:
     - build
   script:
+    - pip install -e .[dev,test]
     - pytest -v --cov=src/pyenergymarket tests/ --junitxml=junit.xml
     - coverage report
     - coverage xml
