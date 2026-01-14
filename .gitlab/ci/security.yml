@@ -2,6 +2,9 @@
 security:
   extends: .common_config
   stage: security
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
   script:
     - pip install bandit pip-audit
     - bandit -r src/
