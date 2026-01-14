@@ -1,5 +1,5 @@
 stages:
-  - build
+  - container
   - lint
   - test
   - security
@@ -20,6 +20,6 @@ variables:
     - chmod 600 ~/.netrc
 
 include:
-  - .gitlab/ci/build.yml
+  - .gitlab/ci/container.yml
   - .gitlab/ci/test.yml
   - .gitlab/ci/security.yml

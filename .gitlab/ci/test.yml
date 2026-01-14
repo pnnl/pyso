@@ -2,9 +2,6 @@
 lint:
   extends: .common_config
   stage: lint
-  needs:
-    - job: build
-      optional: true
   script:
     - python --version
     - pip install -e .[dev]
@@ -15,9 +12,6 @@ lint:
 test:
   extends: .common_config
   stage: test
-  needs:
-    - job: build
-      optional: true
   script:
     - pip install -e .[test]
     - pytest -v --cov=src/pyenergymarket tests/ --junitxml=junit.xml

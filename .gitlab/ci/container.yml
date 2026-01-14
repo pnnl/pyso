@@ -1,6 +1,6 @@
 # Build stage: Create Docker image with all dependencies installed
 build:
-  stage: build
+  stage: container
   image: gcr.io/kaniko-project/executor:debug
 
   script:
@@ -9,5 +9,5 @@ build:
     - /kaniko/executor --context $CI_PROJECT_DIR/.gitlab/ci --dockerfile $CI_PROJECT_DIR/.gitlab/ci/Containerfile --destination ${DOCKER_IMAGE_NAME}
   rules:
     - changes:
-      - .gitlab/ci/Containerfile
+      - .gitlab/ci/container.yml
       - .gitlab/ci/Containerfile
