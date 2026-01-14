@@ -14,6 +14,9 @@ cache:
 
 before_script:
   - python --version
+  # Install CBC solver for optimization tests
+  - apt-get update -qq
+  - apt-get install -y coinor-cbc
   # Configure git to use the CI job token for authentication
   - |
     cat > ~/.netrc << EOF
