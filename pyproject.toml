@@ -12,7 +12,7 @@ authors = [{name="Eran Schweitzer", email="eran.schweitzer@pnnl.gov"},
             {name="Allison Campbell", email="allison.m.campbell@pnnl.gov"},
             {name="Molly Rose Kelly-Gorham", email="mollyrose.kelly-gorham@pnnl.gov"},
             {name="Trevor Hardy", email="trevor.hardy@pnnl.gov"}]
-requires-python = ">= 3.9"
+requires-python = ">= 3.10"
 dependencies = [
     "pandas>=2.2.1",
     "networkx>=2.8.4",
@@ -23,7 +23,14 @@ dependencies = [
 [project.optional-dependencies]
 gv = ["numpy>=1.26"]
 test = ["pytest", "pytest-cov"]
-dev = ["pre-commit", "ruff>=0.1.9"]
+dev = [
+    "pre-commit",
+    "ruff>=0.1.9",
+    "mypy>=1.5.1",
+    "pandas-stubs",
+    "types-networkx",
+    "scipy-stubs"
+]
 
 ## see: https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
 [tool.setuptools.packages.find]
@@ -33,3 +40,45 @@ where = ["src"]
 [tool.pytest.ini_options]
 minversion = "6.0"
 markers = ["local: marks tests that require local data (use --run-local to run these tests)"]
+
+[tool.mypy]
+# Very lenient configuration for initial gradual typing adoption
+python_version = "3.10"
+warn_return_any = false            # Don't warn about returning Any
+warn_unused_configs = true
+disallow_untyped_defs = false      # Don't require type annotations on all functions
+disallow_incomplete_defs = false   # Allow partial type annotations
+check_untyped_defs = false         # Don't check the body of functions without type annotations
+disallow_untyped_decorators = false
+no_implicit_optional = false       # Allow implicit Optional for None default values
+strict_optional = false            # More lenient handling of None
+warn_redundant_casts = false
+warn_unused_ignores = false
+warn_no_return = false             # Don't require explicit return statements
+warn_unreachable = false           # Don't warn about unreachable code
+ignore_missing_imports = true      # Ignore missing imports entirely
+allow_untyped_globals = true       # Allow untyped global variables
+allow_redefinition = true          # Allow variable redefinition
+disable_error_code = ["attr-defined", "index", "assignment", "var-annotated", "arg-type"]  # Disable specific error codes
+
+# Ignore missing imports for these modules
+[[tool.mypy.overrides]]
+module = [
+    "egret.*",
+    "gridtune.*",
+    "transitions.*",
+    "reverse_argparse.*"
+]
+ignore_missing_imports = true
+
+
+[[tool.mypy.overrides]]
+module = "pyenergymarket.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false

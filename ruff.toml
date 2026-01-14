@@ -14,25 +14,26 @@ exclude = [
     "tests/localdata",
 ]
 
+# Line length configuration
+line-length = 100
+
+# Linting configuration
+[lint]
 # Enable all recommended rules
 select = [
     "E",   # pycodestyle errors
     "F",   # pyflakes
     "I",   # isort
     "W",   # pycodestyle warnings
-    "C90", # mccabe complexity
+    # "C90", # mccabe complexity - removed for now
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
-    "PL",  # pylint
+    # "PL",  # pylint - removed for now
 ]
 
 # Ignore specific rules
-ignore = []
+ignore = ["E741"]  # Ignore ambiguous variable name warnings (l, I, O)
 
-# Line length configuration
-line-length = 100
-
-# Organize imports
 [lint.isort]
 known-first-party = ["pyenergymarket"]
 

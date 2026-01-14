@@ -104,13 +104,58 @@ cd into repository folder
 pip install -e .
 ```
 
+## Developer Setup
+
+### Installing Development Dependencies
+
+To set up the development environment with all necessary tools for linting and type checking:
+
+```bash
+# Install the package in development mode with dev dependencies
+pip install -e ".[dev]"
+```
+
+This will install development tools including:
+- pre-commit (for Git hooks)
+- ruff (for linting)
+- mypy (for type checking)
+- pandas-stubs, types-networkx and other type stub packages
+
+### Setting Up Pre-commit Hooks
+
+Pre-commit hooks ensure that code quality checks run before each commit, preventing common issues from being committed:
+
+```bash
+# Install the pre-commit hooks
+pre-commit install
+```
+
+This will set up Git hooks to automatically run:
+- Trailing whitespace removal
+- End-of-file fixer
+- YAML and TOML syntax checkers
+- Ruff linting and formatting
+- Mypy type checking
+
+### Running Type Checking Manually
+
+To run type checking manually:
+
+```bash
+# Run mypy on the entire codebase
+python -m mypy src
+
+# Run mypy on a specific file
+python -m mypy src/pyenergymarket/utils/timeutils.py
+```
+
 ### Known Issues
 There are some issues that arise when the `pandas`, `blosc` and `tables` (pytables) are not installed from the same channel as the latter two are optional dependencies of pandas for reading form sources like hdf5 and excel.
 If there are `ImportError` issues, the solution is to uninstall these and make sure to install them all from the same location.
 One option, would be to uninstall them and pandas and do something like:
 ```
 pip install "pandas[hdf5, excel]"
-``` 
+```
 
 ## Solvers
 ### Installing CBC on Windows
@@ -165,7 +210,7 @@ conda install ipopt=3.11 -c conda-forge
 ```
 
 >*Note*:<br>
->Ipopt is installed along with scip, so if you are installing scip it may be better to install this first, otherwise there appear to be dependency issues. 
+>Ipopt is installed along with scip, so if you are installing scip it may be better to install this first, otherwise there appear to be dependency issues.
 
 ### Verify Installation
 In the command line run:

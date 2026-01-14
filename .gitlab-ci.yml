@@ -1,8 +1,9 @@
-image: python:3.9
+image: python:3.10
 
 stages:
   - lint
   - test
+  - security
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
@@ -53,3 +54,10 @@ test:
         coverage_format: cobertura
         path: coverage.xml
     when: always
+
+security:
+  stage: security
+  script:
+    - pip install bandit safety
+    - bandit -r src/
+    - safety check
