@@ -47,6 +47,7 @@ RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
 RUN echo "conda activate pyso" >> ~/.bashrc
 
 RUN cat ~/.bashrc
+RUN export PATH="/app/solvers:$PATH"
 RUN echo $PATH
 RUN which cbc
 
