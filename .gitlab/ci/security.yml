@@ -1,0 +1,10 @@
+# Security stage: Use the pre-built image
+security:
+  extends: .common_config
+  stage: security
+  needs:
+    - build
+  script:
+    - pip install bandit safety
+    - bandit -r src/
+    - safety check
