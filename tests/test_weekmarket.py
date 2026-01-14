@@ -98,7 +98,7 @@ def sequential_pass_testing(fstart, ndays=6):
         with open(os.path.join(THIS_DIR, f"{fstart}_{day}.json")) as f:
             first_solution = json.load(f)
         # Open the next day
-        with open(os.path.join(THIS_DIR, f"{fstart}_{day+1}.json")) as f:
+        with open(os.path.join(THIS_DIR, f"{fstart}_{day + 1}.json")) as f:
             second_solution = json.load(f)
         # Check that initial power from day 2 come from the end of day1
         tstart = second_solution["system"]["time_keys"][0]
@@ -108,14 +108,14 @@ def sequential_pass_testing(fstart, ndays=6):
             p_init = second_solution["elements"]["generator"][g]["initial_p_output"]
             p_end = first_solution["elements"]["generator"][g]["pg"]["values"][tend]
             assert p_init == p_end, (
-                f"Initial power on day {day+1} does not match final power from day {day} "
+                f"Initial power on day {day + 1} does not match final power from day {day} "
                 f"for generator {g}."
             )
             # Check status
             s_init = second_solution["elements"]["generator"][g]["initial_status"]
             s_end = count_onoff(first_solution["elements"]["generator"][g], 23)
             assert s_init == s_end, (
-                f"Initial status on day {day+1} does not match final status on day {day} "
+                f"Initial status on day {day + 1} does not match final status on day {day} "
                 f"for generator {g}."
             )
 
