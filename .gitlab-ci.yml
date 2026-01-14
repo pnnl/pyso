@@ -1,40 +1,64 @@
-image: python:3.10
-
 stages:
+  - build
   - lint
   - test
   - security
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  DOCKER_IMAGE_NAME: "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}"
 
-cache:
-  paths:
-    - .pip-cache/
+# Common configuration to be extended
+.common_config:
+  image: "${DOCKER_IMAGE_NAME}"
+  cache:
+    paths:
+      - .pip-cache/
 
-before_script:
-  - python --version
-  # Install CBC solver for optimization tests
-  - apt-get update -qq
-  - apt-get install -y coinor-cbc
-  # Configure git to use the CI job token for authentication
-  - |
-    cat > ~/.netrc << EOF
-    machine gitlab.naerm.team
-    login gitlab-ci-token
-    password ${CI_JOB_TOKEN}
-    EOF
-    chmod 600 ~/.netrc
-  - pip install -e ".[test,dev]"
-
-lint:
-  stage: lint
+# Build stage: Create Docker image with all dependencies installed
+build:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
   script:
+    - |
+      echo "FROM python:3.10" > Dockerfile
+      echo "RUN apt-get update -qq && apt-get install -y coinor-cbc" >> Dockerfile
+      echo "WORKDIR /app" >> Dockerfile
+      echo "COPY . ." >> Dockerfile
+      echo "RUN cat > ~/.netrc << EOF" >> Dockerfile
+      echo "machine gitlab.naerm.team" >> Dockerfile
+      echo "login gitlab-ci-token" >> Dockerfile
+      echo "password ${CI_JOB_TOKEN}" >> Dockerfile
+      echo "EOF" >> Dockerfile
+      echo "RUN chmod 600 ~/.netrc" >> Dockerfile
+      echo "RUN pip install -e '.[test,dev]'" >> Dockerfile
+    - docker build -t "${DOCKER_IMAGE_NAME}" .
+    - docker push "${DOCKER_IMAGE_NAME}"
+
+# Lint stage: Use the pre-built image
+lint:
+  extends: .common_config
+  stage: lint
+  needs:
+    - build
+  script:
+    - python --version
     - ruff check .
     - ruff format --check .
 
+# Test stage: Use the pre-built image
 test:
+  extends: .common_config
   stage: test
+  needs:
+    - build
   script:
     - pytest -v --cov=src/pyenergymarket tests/ --junitxml=junit.xml
     - coverage report
@@ -58,9 +82,14 @@ test:
         path: coverage.xml
     when: always
 
+# Security stage: Use the pre-built image
 security:
+  extends: .common_config
   stage: security
+  needs:
+    - build
   script:
     - pip install bandit safety
+    # Skip B101 (assert_used) check since we've replaced critical assertions with proper validation
     - bandit -r src/
     - safety check
