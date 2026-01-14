@@ -40,11 +40,14 @@ RUN conda config --add channels conda-forge && \
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda create -y -n pyso python=3.12 && \
     conda activate pyso && \
-    conda install -y -c conda-forge coincbc pytest coveralls && \
+    conda install -y -c conda-forge pytest coveralls && \
     conda clean -a
 
 RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
 RUN echo "conda activate pyso" >> ~/.bashrc
+
+RUN cat ~/.bashrc
+RUN echo $PATH
 
 # (Optional) Set the default environment when the container starts
 SHELL ["/bin/bash"]
