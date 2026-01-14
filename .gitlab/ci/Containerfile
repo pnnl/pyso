@@ -48,6 +48,7 @@ RUN echo "conda activate pyso" >> ~/.bashrc
 
 RUN cat ~/.bashrc
 RUN echo $PATH
+RUN which cbc
 
 # (Optional) Set the default environment when the container starts
 SHELL ["/bin/bash"]
