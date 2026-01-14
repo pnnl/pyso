@@ -38,11 +38,11 @@ RUN conda update -n base -c defaults conda
 RUN conda config --add channels conda-forge && \
     conda config --set channel_priority strict
 
-# Create the environment and install CBC solver
+# Create the environment
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda create -y -n pyso python=3.12 && \
     conda activate pyso && \
-    conda install -y -c conda-forge coincbc pytest coveralls && \
+    conda install -y -c conda-forge pytest coveralls && \
     conda clean -a
 
 # Create activation script for conda
