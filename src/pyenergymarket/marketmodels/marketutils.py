@@ -116,7 +116,10 @@ def add_generators(md: ModelData, new_gens: dict, update_duplicates=False):
     for gn, gen in new_gens.items():
         if gn in md_gens:
             if update_duplicates:
-                assert gen["bus"] == md_gens["bus"]
+                if gen["bus"] != md_gens[gn]["bus"]:
+                    raise ValueError(
+                        f"Generator {gn} bus mismatch: {gen['bus']} != {md_gens[gn]['bus']}"
+                    )
                 # If gen already exists, we reuse existing values and update new ones
                 # (e.g., assume area and zone have already been added). It would be wise to
                 # check that the updated gen exists at the same bus as before.
@@ -124,7 +127,8 @@ def add_generators(md: ModelData, new_gens: dict, update_duplicates=False):
             else:
                 duplicates.append(gn)
                 continue
-        assert "bus" in gen, "attempting to add a generator without a bus location"
+        if "bus" not in gen:
+            raise ValueError("attempting to add a generator without a bus location")
         for region in ["area", "zone"]:
             if region in bus_attrs[gen["bus"]].keys():
                 gen[region] = bus_attrs[gen["bus"]][region]
