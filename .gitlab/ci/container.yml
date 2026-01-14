@@ -1,5 +1,5 @@
 # Build stage: Create Docker image with all dependencies installed
-build:
+build_container:
   stage: container
   image: gcr.io/kaniko-project/executor:debug
 
