@@ -4,7 +4,7 @@ lint:
   stage: lint
   script:
     - python --version
-    - pip install -e .[dev,test]
+    - pip install -e .[dev]
     - ruff check .
     - ruff format --check .
 
@@ -13,7 +13,7 @@ test:
   extends: .common_config
   stage: test
   script:
-    - pip install -e .[dev,test]
+    - pip install -e .[test]
     - pytest -v --cov=src/pyenergymarket tests/ --junitxml=junit.xml
     - coverage report
     - coverage xml
