@@ -1,5 +1,5 @@
-"""Utilities related to handling egret models
-"""
+"""Utilities related to handling egret models"""
+
 import json
 from copy import deepcopy
 from typing import Union
@@ -67,7 +67,7 @@ def flatten_distributed_generators(md: ModelData, key="generator"):
             tmp["values"] = [scale * v for v in ts["values"]]
         else:
             err_msg = (
-                "scale_time_series: expected values key of time series " "to be either dict or str"
+                "scale_time_series: expected values key of time series to be either dict or str"
             )
             raise ValueError(f"{err_msg} but got {type(ts['values'])}")
         return tmp
@@ -97,7 +97,7 @@ def flatten_distributed_generators(md: ModelData, key="generator"):
         "min_up_time",
         "min_down_time",
         "initial_status",
-        "fuel_cost" "agc_marginal_cost",
+        "fuel_costagc_marginal_cost",
         "spinning_cost",
         "non_spinning_cost",
         "supplemental_cost",
@@ -156,8 +156,7 @@ def flatten_distributed_generators(md: ModelData, key="generator"):
                         tmp[k] = scale_fuel_curve(v, frac)
                     else:
                         err_msg = (
-                            f"flatten_distributed_generators: unknown data type "
-                            f"for generator {g}"
+                            f"flatten_distributed_generators: unknown data type for generator {g}"
                         )
                         raise KeyError(f"{err_msg} key {k}")
                 elif isinstance(v, list):

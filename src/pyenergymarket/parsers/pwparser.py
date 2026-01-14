@@ -180,8 +180,7 @@ class PWParse:
                 min_voltage = self.defaults["bus"]["min_acceptable_voltage"]
                 # Log warning when voltage is below threshold
                 warning_msg = (
-                    f"\tWARNING: voltage for bus {b} ({vm:0.3f}) "
-                    f"is below threshold ({min_voltage})"
+                    f"\tWARNING: voltage for bus {b} ({vm:0.3f}) is below threshold ({min_voltage})"
                 )
                 self.logger.warning(warning_msg)
         elif vm > self.defaults["bus"]["max_acceptable_voltage"]:
@@ -190,8 +189,7 @@ class PWParse:
                 max_voltage = self.defaults["bus"]["max_acceptable_voltage"]
                 # Log warning when voltage is above threshold
                 warning_msg = (
-                    f"\tWARNING: voltage for bus {b} ({vm:0.3f}) "
-                    f"is above threshold ({max_voltage})"
+                    f"\tWARNING: voltage for bus {b} ({vm:0.3f}) is above threshold ({max_voltage})"
                 )
                 self.logger.warning(warning_msg)
         return out
@@ -220,7 +218,7 @@ class PWParse:
                 vm, va, dist, b_neighbor = self.get_nearest_bus_with_voltage(b)
                 # Log info about voltage used from a neighboring bus
                 info_msg = (
-                    f"\tUsing voltage ({vm:0.3f}) from bus {b_neighbor} " f"at distance {dist} hops"
+                    f"\tUsing voltage ({vm:0.3f}) from bus {b_neighbor} at distance {dist} hops"
                 )
                 self.logger.info(info_msg)
 

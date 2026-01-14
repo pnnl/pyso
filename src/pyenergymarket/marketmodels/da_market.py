@@ -4,6 +4,7 @@ Class market objects in Egret
 This assumes EGRET functionality has been implemented as class functions that
 can be called as methods. (This may not be a hard assumption.)
 """
+
 import copy
 import datetime
 import logging

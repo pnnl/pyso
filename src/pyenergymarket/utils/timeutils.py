@@ -1,5 +1,4 @@
-"""Utilites related to time management should be placed here
-"""
+"""Utilites related to time management should be placed here"""
 
 import warnings
 from typing import Union
@@ -115,7 +114,7 @@ def get_value_at_time(
         # Warning if the number of paddings is greater than one
         if ncopies > 1:
             warn_msg = (
-                f"Target time of {target_time} is {ncopies} periods away " f"from input time range."
+                f"Target time of {target_time} is {ncopies} periods away from input time range."
             )
             warnings.warn(
                 f"{warn_msg} This may indicate an error in the timing inputs.", stacklevel=2

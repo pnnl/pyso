@@ -10,6 +10,7 @@ can be called as methods. (This may not be a hard assumption.)
 @author: Trevor Hardy
 trevor.hardy@pnnl.gov
 """
+
 import copy
 import datetime
 import logging
@@ -335,8 +336,7 @@ class RTMarket(Market):
         if remainder != 0:
             # Warn if frequency doesn't divide evenly into hours
             logger.warning(
-                f"Parameter min_freq {min_freq} is not a divisor of 60. "
-                f"Results may be inaccurate"
+                f"Parameter min_freq {min_freq} is not a divisor of 60. Results may be inaccurate"
             )
         num_copy = int(60 / min_freq)
         # Use numpy arrays and repeat function for fast copying

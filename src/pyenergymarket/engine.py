@@ -1,6 +1,7 @@
 """The core functionality of pyenergymarket, encapsulated in the
 EnergyMarket class is here.
 """
+
 import abc
 import copy
 from typing import Union

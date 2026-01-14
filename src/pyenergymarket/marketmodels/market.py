@@ -10,6 +10,7 @@ can be called as methods. (This may not be a hard assumption.)
 @author: Trevor Hardy
 trevor.hardy@pnnl.gov
 """
+
 import datetime as dt
 import logging
 import math
@@ -377,8 +378,7 @@ class Market:
                 # Create warning message about exceeding horizon
                 # Format message about current time exceeding horizon
                 info_msg = (
-                    f"Current start time {self.current_start_time} is past horizon "
-                    f"{horizon_time}"
+                    f"Current start time {self.current_start_time} is past horizon {horizon_time}"
                 )
                 logger.info(f"{info_msg} Market will not be cleared")
                 self.send_horizon_message = False  # Only send warning once
