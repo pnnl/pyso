@@ -5,6 +5,7 @@ EnergyMarket class is here.
 import abc
 import copy
 from typing import Union
+import inspect
 
 import numpy as np
 import pandas as pd
@@ -287,10 +288,17 @@ class EnergyMarket:
             self.pricing_model(pricing_model)
 
     def save_model(self, filename: str):
+        def _encoder_safe_write(md, filename, encoder=NumpyEncoder):
+            """Check that md.write method has encoder kwarg (for backward compatibility)"""
+            write_args = inspect.getfullargspec(md.write)[0]
+            if 'encoder' in write_args:
+                md.write(filename, encoder=encoder)
+            else:
+                md.write(filename)
         if self.mdl_sol is not None:
-            self.mdl_sol.write(filename, encoder=NumpyEncoder)
+            _encoder_safe_write(self.mdl_sol, filename)
         elif self.mdl is not None:
-            self.mdl.write(filename, encoder=NumpyEncoder)
+            _encoder_safe_write(self.mdl, filename)
         else:
             raise ValueError("No model currently loaded.")
 
