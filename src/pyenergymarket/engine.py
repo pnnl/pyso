@@ -115,7 +115,9 @@ class EnergyMarket:
         periods = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
         min_freq = self.configuration["time"]["min_freq"]
 
-        daterange = mk_daterange(start, min_freq=min_freq, periods=periods, tz=self.configuration["time"]["tz"])
+        daterange = mk_daterange(
+            start, min_freq=min_freq, periods=periods, tz=self.configuration["time"]["tz"]
+        )
 
         # get the model for the specified time range
         self.logger.info(f"Forming model starting at: {daterange[0]} - {daterange[-1]}")

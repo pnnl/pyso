@@ -2,11 +2,11 @@ energymarket_defaults = {
     "time": {
         "datefrom": None,
         "dateto": None,
-        "min_freq": 60, # period length in minutes
-        "window": 24, # solution window
-        "lookahead": 0, # solution lookahead
-        "tz": None, # specify time zone for INPUT dates
-        "convert_to_utc": True
+        "min_freq": 60,  # period length in minutes
+        "window": 24,  # solution window
+        "lookahead": 0,  # solution lookahead
+        "tz": None,  # specify time zone for INPUT dates
+        "convert_to_utc": True,
     },
     "simulation": {
         "price_model": "lmp",  # can be "lmp" (fix commitment),
