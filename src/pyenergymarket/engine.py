@@ -115,10 +115,17 @@ class EnergyMarket:
         periods = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
         min_freq = self.configuration["time"]["min_freq"]
 
-        daterange = mk_daterange(start, min_freq=min_freq, periods=periods)
+        daterange = mk_daterange(
+            start, min_freq=min_freq, periods=periods, tz=self.configuration["time"]["tz"]
+        )
 
         # get the model for the specified time range
         self.logger.info(f"Forming model starting at: {daterange[0]} - {daterange[-1]}")
+        # convert to UTC if timezone provided and flag is set to TRUE
+        if (daterange.tz is not None) and self.configuration["time"]["convert_to_utc"]:
+            daterange = daterange.tz_convert("UTC")
+        # move time-zone information
+        daterange = daterange.tz_localize(None)
         self.mdl = self.data_provider.get_model(daterange)
 
     def update_initial_conditions(
