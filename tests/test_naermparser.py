@@ -29,46 +29,42 @@ from pyenergymarket.parsers.naermparser import (
 def create_mock_json_gzip_file(data, tmp_path, filename):
     """Create a mock .json.gz file for testing"""
     filepath = tmp_path / filename
-    with gzip.open(filepath, 'wt', encoding='utf-8') as f:
+    with gzip.open(filepath, "wt", encoding="utf-8") as f:
         json.dump(data, f)
     return filepath
+
 
 def create_mock_h5_file(tmp_path, filename):
     """Create a mock HDF5 file for testing"""
     filepath = tmp_path / filename
 
-    with h5py.File(filepath, 'w') as f:
+    with h5py.File(filepath, "w") as f:
         # Create name dataset
-        names = np.array(['load1', 'load2', 'gen1', 'gen2'], dtype='S10')
-        f.create_dataset('name', data=names)
+        names = np.array(["load1", "load2", "gen1", "gen2"], dtype="S10")
+        f.create_dataset("name", data=names)
 
         # Create uid dataset
-        uids = np.array(['L1', 'L2', 'G1', 'G2'], dtype='S10')
-        f.create_dataset('uid', data=uids)
+        uids = np.array(["L1", "L2", "G1", "G2"], dtype="S10")
+        f.create_dataset("uid", data=uids)
 
         # Create timestamp dataset - 24 hours starting from Jan 1, 2024 00:00 UTC
         # Make sure to use a timezone-aware approach that matches pd.date_range
-        start_time = int(pd.Timestamp('2024-01-01 00:00:00').timestamp())
+        start_time = int(pd.Timestamp("2024-01-01 00:00:00").timestamp())
         timestamps = np.array([start_time + i * 3600 for i in range(24)], dtype=np.int64)
-        f.create_dataset('timestamp', data=timestamps)
+        f.create_dataset("timestamp", data=timestamps)
 
         # Create values dataset - Random values for 4 entities over 24 hours
         values = np.random.rand(24, 4)  # 24 hours, 4 entities
-        f.create_dataset('values', data=values)
+        f.create_dataset("values", data=values)
 
     return filepath
 
+
 # Example mock data
 mock_static_data = {
-    "system": {
-        "name": "test_system",
-        "base_power": 100.0
-    },
+    "system": {"name": "test_system", "base_power": 100.0},
     "elements": {
-        "bus": {
-            "bus1": {"base_kv": 138.0},
-            "bus2": {"base_kv": 345.0}
-        },
+        "bus": {"bus1": {"base_kv": 138.0}, "bus2": {"base_kv": 345.0}},
         "branch": {
             "branch1": {
                 "from_bus": "bus1",
@@ -77,8 +73,8 @@ mock_static_data = {
                 "rating_long_term": {
                     "data_type": "persistent_time_series",
                     "timestamps": [1704067200, 1704153600],  # Jan 1, 2024 and Jan 2, 2024
-                    "values": [100.0, 110.0]
-                }
+                    "values": [100.0, 110.0],
+                },
             }
         },
         "generator": {
@@ -89,41 +85,33 @@ mock_static_data = {
                 "p_max": {
                     "data_type": "time_series",
                     "time_series_uid": "G1",
-                    "scale_factor": 100.0
-                }
+                    "scale_factor": 100.0,
+                },
             },
             "gen2": {
                 "bus": "bus2",
                 "generator_type": "renewable",
                 "model_type": "PV",
-                "p_min": {
-                    "data_type": "time_series",
-                    "time_series_uid": "G2",
-                    "scale_factor": 0.0
-                },
+                "p_min": {"data_type": "time_series", "time_series_uid": "G2", "scale_factor": 0.0},
                 "p_max": {
                     "data_type": "time_series",
                     "time_series_uid": "G2",
-                    "scale_factor": 50.0
-                }
-            }
+                    "scale_factor": 50.0,
+                },
+            },
         },
         "load": {
             "load1": {
                 "bus": "bus1",
-                "p": {
-                    "data_type": "time_series",
-                    "time_series_uid": "L1",
-                    "scale_factor": 80.0
-                }
+                "p": {"data_type": "time_series", "time_series_uid": "L1", "scale_factor": 80.0},
             }
-        }
-    }
+        },
+    },
 }
+
 
 # Tests for helper functions
 class TestHelperFunctions:
-
     @pytest.fixture(scope="function")
     def setup_files(self, tmp_path):
         """Set up test files and clean up after tests"""
@@ -131,11 +119,7 @@ class TestHelperFunctions:
         static_file = create_mock_json_gzip_file(mock_static_data, tmp_path, "test_static.json.gz")
         ts_file = create_mock_h5_file(tmp_path, "test_ts.h5")
 
-        return {
-            "static_file": static_file,
-            "ts_file": ts_file,
-            "tmp_path": tmp_path
-        }
+        return {"static_file": static_file, "ts_file": ts_file, "tmp_path": tmp_path}
 
     def test_read_json_gzip(self, setup_files):
         """Test reading a gzipped JSON file"""
@@ -153,20 +137,16 @@ class TestHelperFunctions:
 
     def test_read_str_array_from_h5(self, setup_files):
         """Test reading string array from H5 file"""
-        with h5py.File(setup_files["ts_file"], 'r') as h5f:
-            names = read_str_array_from_h5(h5f['name'])
+        with h5py.File(setup_files["ts_file"], "r") as h5f:
+            names = read_str_array_from_h5(h5f["name"])
             assert isinstance(names, np.ndarray)
             assert np.issubdtype(names.dtype, np.str_)  # Check if it's a string type
-            assert list(names) == ['load1', 'load2', 'gen1', 'gen2']
+            assert list(names) == ["load1", "load2", "gen1", "gen2"]
 
     def test_is_time_series(self):
         """Test is_time_series function"""
         # Valid time series
-        ts = {
-            "data_type": "time_series",
-            "time_series_uid": "G1",
-            "scale_factor": 100.0
-        }
+        ts = {"data_type": "time_series", "time_series_uid": "G1", "scale_factor": 100.0}
         assert is_time_series(ts)
 
         # Not a dict
@@ -180,10 +160,7 @@ class TestHelperFunctions:
     def test_is_egret_time_series(self):
         """Test is_egret_time_series function"""
         # Valid Egret time series
-        ts = {
-            "data_type": "time_series",
-            "values": [100.0, 110.0, 120.0]
-        }
+        ts = {"data_type": "time_series", "values": [100.0, 110.0, 120.0]}
         assert is_egret_time_series(ts)
 
         # Not a dict
@@ -199,7 +176,7 @@ class TestHelperFunctions:
         pts = {
             "data_type": "persistent_time_series",
             "timestamps": [1704067200, 1704153600],
-            "values": [100.0, 110.0]
+            "values": [100.0, 110.0],
         }
         assert is_persistent_time_series(pts)
 
@@ -222,7 +199,7 @@ class TestHelperFunctions:
         pts = {
             "data_type": "persistent_time_series",
             "timestamps": [1704067200, 1704153600, 1704240000],  # Jan 1, 2, 3, 2024
-            "values": [100.0, 110.0, 120.0]
+            "values": [100.0, 110.0, 120.0],
         }
 
         # Get value at exact timestamp
@@ -245,7 +222,7 @@ class TestHelperFunctions:
             "data_type": "time_series",
             "time_series_uid": "G1",
             "scale_factor": 100.0,
-            "values": [90.0, 95.0, 100.0]
+            "values": [90.0, 95.0, 100.0],
         }
 
         clean_egret_time_series(ts)
@@ -259,7 +236,7 @@ class TestHelperFunctions:
             "time_series_uid": ["G1", "G2"],
             "scale_factor": [50.0, 50.0],
             "scale_factor_idx": [0, 1],
-            "values": [90.0, 95.0, 100.0]
+            "values": [90.0, 95.0, 100.0],
         }
 
         clean_egret_time_series(ts)
@@ -273,7 +250,7 @@ class TestHelperFunctions:
             "data_type": "time_series",
             "time_series_uid": "G1",
             "scale_factor": "invalid",
-            "values": [90.0, 95.0, 100.0]
+            "values": [90.0, 95.0, 100.0],
         }
 
         with pytest.raises(ValueError):
@@ -282,20 +259,14 @@ class TestHelperFunctions:
     def test_assign_ts_values(self):
         """Test assign_ts_values function"""
         ts = {
-            "values": np.array([
-                [10.0, 20.0, 30.0, 40.0],
-                [15.0, 25.0, 35.0, 45.0],
-                [20.0, 30.0, 40.0, 50.0]
-            ])
+            "values": np.array(
+                [[10.0, 20.0, 30.0, 40.0], [15.0, 25.0, 35.0, 45.0], [20.0, 30.0, 40.0, 50.0]]
+            )
         }
         ts_uid_to_idx = {"L1": 0, "L2": 1, "G1": 2, "G2": 3}
 
         # Test with single uid
-        elem_ts = {
-            "data_type": "time_series",
-            "time_series_uid": "G1",
-            "scale_factor": 2.0
-        }
+        elem_ts = {"data_type": "time_series", "time_series_uid": "G1", "scale_factor": 2.0}
 
         assign_ts_values(elem_ts, ts, ts_uid_to_idx)
         assert elem_ts["values"] == [60.0, 70.0, 80.0]
@@ -306,7 +277,7 @@ class TestHelperFunctions:
         elem_ts = {
             "data_type": "time_series",
             "time_series_uid": ["L1", "L2"],
-            "scale_factor": [1.0, 0.5]
+            "scale_factor": [1.0, 0.5],
         }
 
         assign_ts_values(elem_ts, ts, ts_uid_to_idx)
@@ -317,27 +288,20 @@ class TestHelperFunctions:
     def test_enforce_p_min_p_max_consistency(self):
         """Test enforce_p_min_p_max_consistency function"""
         md_elem_gen = {
-            "gen1": {
-                "generator_type": "thermal",
-                "p_min": 10.0,
-                "p_max": 100.0
-            },
+            "gen1": {"generator_type": "thermal", "p_min": 10.0, "p_max": 100.0},
             "gen2": {
                 "generator_type": "renewable",
                 "model_type": "PV",
-                "p_min": {
-                    "data_type": "time_series",
-                    "values": [0.0, 20.0, 10.0]
-                },
+                "p_min": {"data_type": "time_series", "values": [0.0, 20.0, 10.0]},
                 "p_max": {
                     "data_type": "time_series",
-                    "values": [50.0, 50.0, 5.0]  # inconsistent at index 2
-                }
-            }
+                    "values": [50.0, 50.0, 5.0],  # inconsistent at index 2
+                },
+            },
         }
 
         # Capture print output for checking warnings
-        with mock.patch('builtins.print') as mocked_print:
+        with mock.patch("builtins.print") as mocked_print:
             enforce_p_min_p_max_consistency(md_elem_gen)
 
             # Verify warning was printed
@@ -355,22 +319,22 @@ class TestHelperFunctions:
                     "p_min": 10.0,
                     "p_max": {
                         "data_type": "time_series",
-                        "values": [100.0]  # Single value time series should be converted
-                    }
+                        "values": [100.0],  # Single value time series should be converted
+                    },
                 }
             },
             "load": {
                 "load1": {
                     "p": {
                         "data_type": "time_series",
-                        "values": [80.0, 85.0, 90.0]  # Multi-value time series should remain
+                        "values": [80.0, 85.0, 90.0],  # Multi-value time series should remain
                     }
                 }
-            }
+            },
         }
 
         # Capture print output for checking warnings
-        with mock.patch('builtins.print') as mocked_print:
+        with mock.patch("builtins.print") as mocked_print:
             remove_non_time_series(md_elem)
 
             # Verify warning was printed
@@ -396,8 +360,8 @@ class TestHelperFunctions:
                         "p_max": {
                             "data_type": "time_series",
                             "time_series_uid": "G1",
-                            "scale_factor": 100.0
-                        }
+                            "scale_factor": 100.0,
+                        },
                     }
                 },
                 "load": {
@@ -405,7 +369,7 @@ class TestHelperFunctions:
                         "p": {
                             "data_type": "time_series",
                             "time_series_uid": "L1",
-                            "scale_factor": 80.0
+                            "scale_factor": 80.0,
                         }
                     }
                 },
@@ -417,11 +381,11 @@ class TestHelperFunctions:
                         "rating_long_term": {
                             "data_type": "persistent_time_series",
                             "timestamps": [1704067200, 1704153600],  # Jan 1, 2024 and Jan 2, 2024
-                            "values": [100.0, 110.0]
-                        }
+                            "values": [100.0, 110.0],
+                        },
                     }
-                }
-            }
+                },
+            },
         }
 
         # Create time series data
@@ -429,11 +393,11 @@ class TestHelperFunctions:
             "name": np.array(["load1", "gen1"]),
             "uid": np.array(["L1", "G1"]),
             "timestamp": np.array([1704067200, 1704153600]),  # Jan 1, 2024 and Jan 2, 2024
-            "values": np.array([[0.5, 0.8], [0.6, 0.9]])  # 2 timestamps, 2 entities (load1, gen1)
+            "values": np.array([[0.5, 0.8], [0.6, 0.9]]),  # 2 timestamps, 2 entities (load1, gen1)
         }
 
         # Capture print output to avoid cluttering test results
-        with mock.patch('builtins.print'):
+        with mock.patch("builtins.print"):
             # Call the function under test
             result = create_egret_md(md, ts)
 
@@ -449,9 +413,9 @@ class TestHelperFunctions:
             # Check persistent time series were converted to values
             assert isinstance(result["elements"]["branch"]["branch1"]["rating_long_term"], float)
 
+
 # Tests for TimeSeries class
 class TestTimeSeries:
-
     @pytest.fixture(scope="function")
     def ts_file(self, tmp_path):
         """Create a test time series file"""
@@ -468,8 +432,8 @@ class TestTimeSeries:
         """Test TimeSeries initialization"""
         assert isinstance(time_series.name, np.ndarray)
         assert isinstance(time_series.uid, np.ndarray)
-        assert list(time_series.name) == ['load1', 'load2', 'gen1', 'gen2']
-        assert list(time_series.uid) == ['L1', 'L2', 'G1', 'G2']
+        assert list(time_series.name) == ["load1", "load2", "gen1", "gen2"]
+        assert list(time_series.uid) == ["L1", "L2", "G1", "G2"]
 
     def test_unix_tmstamp_to_idx_forw(self, time_series):
         """Test _unix_tmstamp_to_idx_forw method"""
@@ -528,9 +492,9 @@ class TestTimeSeries:
         assert ts_dict["timestamp"][-1] == middle_ts
         assert ts_dict["values"].shape == (13, 4)  # 13 hours, 4 entities
 
+
 # Tests for NAERMProvider class
 class TestNAERMProvider:
-
     @pytest.fixture(scope="function")
     def setup_files(self, tmp_path):
         """Set up test files for NAERMProvider"""
@@ -538,10 +502,7 @@ class TestNAERMProvider:
         static_file = create_mock_json_gzip_file(mock_static_data, tmp_path, file_name)
         ts_file = create_mock_h5_file(tmp_path, "test_naerm_ts.h5")
 
-        return {
-            "static_file": static_file,
-            "ts_file": ts_file
-        }
+        return {"static_file": static_file, "ts_file": ts_file}
 
     @pytest.fixture
     def provider(self, setup_files):
@@ -570,10 +531,7 @@ class TestNAERMProvider:
 
         # Ensure exact timezone matching by explicitly converting to UTC timestamp
         # This makes our daterange match the timestamps in our mock H5 file
-        daterange = pd.DatetimeIndex([
-            pd.Timestamp(dt).replace(tzinfo=None)
-            for dt in daterange
-        ])
+        daterange = pd.DatetimeIndex([pd.Timestamp(dt).replace(tzinfo=None) for dt in daterange])
 
         ts_dict = provider._get_time_series(daterange)
         assert len(ts_dict["timestamp"]) == 6
@@ -592,10 +550,7 @@ class TestNAERMProvider:
 
         # Ensure exact timezone matching by explicitly converting to UTC timestamp
         # This makes our daterange match the timestamps in our mock H5 file
-        daterange = pd.DatetimeIndex([
-            pd.Timestamp(dt).replace(tzinfo=None)
-            for dt in daterange
-        ])
+        daterange = pd.DatetimeIndex([pd.Timestamp(dt).replace(tzinfo=None) for dt in daterange])
 
         # Get model for the daterange
         model = provider.get_model(daterange)
