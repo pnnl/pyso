@@ -4,8 +4,8 @@ EnergyMarket class is here.
 
 import abc
 import copy
-from typing import Union
 import inspect
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -291,10 +291,11 @@ class EnergyMarket:
         def _encoder_safe_write(md, filename, encoder=NumpyEncoder):
             """Check that md.write method has encoder kwarg (for backward compatibility)"""
             write_args = inspect.getfullargspec(md.write)[0]
-            if 'encoder' in write_args:
+            if "encoder" in write_args:
                 md.write(filename, encoder=encoder)
             else:
                 md.write(filename)
+
         if self.mdl_sol is not None:
             _encoder_safe_write(self.mdl_sol, filename)
         elif self.mdl is not None:
