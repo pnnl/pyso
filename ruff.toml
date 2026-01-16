@@ -32,7 +32,7 @@ select = [
 ]
 
 # Ignore specific rules
-ignore = ["E741"]  # Ignore ambiguous variable name warnings (l, I, O)
+ignore = ["E741", "E501"]  # Ignore ambiguous variable name warnings (l, I, O)
 
 [lint.isort]
 known-first-party = ["pyenergymarket"]

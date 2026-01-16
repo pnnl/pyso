@@ -1,8 +1,11 @@
-import os, json
-from pyenergymarket.marketmodels.market import Market
-from pyenergymarket import EnergyMarket
-from pyenergymarket.parsers.egretparser import EgretProvider
+import json
+import os
+
 from utilities import dictionary_testing, find_solver
+
+from pyenergymarket import EnergyMarket
+from pyenergymarket.marketmodels.market import Market
+from pyenergymarket.parsers.egretparser import EgretProvider
 
 THIS_DIR = os.path.split(__file__)[0]
 
