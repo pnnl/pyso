@@ -17,6 +17,7 @@ dependencies = [
     "pandas>=2.2.1",
     "networkx>=2.8.4",
     "transitions",
+    "h5py",
 ]
 [project.optional-dependencies]
 gv = ["numpy>=1.26"]
