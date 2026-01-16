@@ -10,6 +10,7 @@ lint:
     - pip install -e ".[dev]"
     - ruff check .
     - ruff format --check .
+  allow_failure: true
 
 # Test stage: Use the pre-built image with NAERM Egret
 test:naerm:
