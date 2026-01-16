@@ -1,16 +1,16 @@
 ### simple parser for egret data
-from typing import Union
 import copy
-import json
 import gzip
+import json
 from datetime import datetime
+from typing import Union
 
 import h5py
-import pandas as pd
 import numpy as np
+import pandas as pd
+from egret.data.model_data import ModelData
 
 from pyenergymarket.engine import DataProvider
-from egret.data.model_data import ModelData
 
 ########
 # Helper functions
@@ -85,7 +85,7 @@ def assign_ts_values(elem_ts: dict, ts: dict, ts_uid_to_idx: dict):
                                     dtype=float)
         elem_ts['values'] = elem_ts['values'].tolist()
     else:
-        raise Exception(f'unexpected time series structure: {v}')
+        raise Exception(f'unexpected time series structure: {ts_uid}')
     # remove metadata not necessary for Egret and return
     clean_egret_time_series(elem_ts)
     return None
@@ -156,7 +156,8 @@ def enforce_p_min_p_max_consistency(md_elem_gen: dict):
                 for i in idx_set:
                     gen['p_min']['values'][i] = gen_p_max
     if len(corrected_gens) > 0:
-        print(f'[warn] Removed {lost_production:.1f}MWh of generation to ensure consistency of p_min/p_max. Affected {len(corrected_gens)} generators:', corrected_gens)
+        print(f'[warn] Removed {lost_production:.1f}MWh of generation to ensure consistency '
+              f'of p_min/p_max. Affected {len(corrected_gens)} generators:', corrected_gens)
     return None
 
 def remove_non_time_series(md_elem):
@@ -173,34 +174,38 @@ def remove_non_time_series(md_elem):
             if len(fixed_fields) > 0:
                 fixed_elem_fields.append((elem_k, list(k for k in fixed_fields)))
         if len(fixed_elem_fields) > 0:
-            print(f'[warn] Fixed single-valued time series at {elem_type} with (key, properties) =', \
+            print(f'[warn] Fixed single-valued time series at {elem_type} with (key, properties) =',
                   fixed_elem_fields)
     return None
 
 def create_egret_md(md: dict, ts: dict):
     # replace time series references with values
     ts_uid_to_idx = create_ts_uid_to_idx_map(ts['uid'])
-    for h, elem in md['elements']['generator'].items():
-        for k, v in elem.items():
+    for _h, elem in md['elements']['generator'].items():
+        for _k, v in elem.items():
             if not is_time_series(v):
                 continue
             assign_ts_values(v, ts, ts_uid_to_idx)
-    for h, elem in md['elements']['load'].items():
-        for k, v in elem.items():
+    for _h, elem in md['elements']['load'].items():
+        for _k, v in elem.items():
             if not is_time_series(v):
                 continue
             assign_ts_values(v, ts, ts_uid_to_idx)
     # replace persistent time series for values
-    # NOTE: 
+    # NOTE:
     if ts['timestamp'][-1] - ts['timestamp'][0] > 168 * 3600:
-        print('[warn] You have selected a date range spanning more than 1 week. Note that Persistent Time Series are converted to values instead of Egret time series, which works well for persistence beyond market clearing timelines. Supporting conversion to time series will require modification of Egret to support time_series in all parameters.')
+        print('[warn] You have selected a date range spanning more than 1 week. Note that '
+              'Persistent Time Series are converted to values instead of Egret time series, '
+              'which works well for persistence beyond market clearing timelines. Supporting '
+              'conversion to time series will require modification of Egret to support '
+              'time_series in all parameters.')
     ref_unixtime = (ts['timestamp'][0] + ts['timestamp'][-1]) // 2
-    for h, elem in md['elements']['branch'].items():
+    for _h, elem in md['elements']['branch'].items():
         for k, v in elem.items():
             if not is_persistent_time_series(v):
                 continue
             elem[k] = get_persistent_ts_value(v, ref_unixtime)
-    for h, elem in md['elements']['generator'].items():
+    for _h, elem in md['elements']['generator'].items():
         for k, v in elem.items():
             if not is_persistent_time_series(v):
                 continue
@@ -209,7 +214,7 @@ def create_egret_md(md: dict, ts: dict):
     enforce_p_min_p_max_consistency(md['elements']['generator'])
     # remove all time series that actually fixed values
     remove_non_time_series(md['elements'])
-    # add time series keys to system 
+    # add time series keys to system
     md['system']['time_keys'] = [datetime.fromtimestamp(tstamp).strftime('%Y-%m-%d %H:%M GMT') \
                                  for tstamp in ts['timestamp']]
     # all done, return dictionary to caller
@@ -220,7 +225,6 @@ def create_egret_md(md: dict, ts: dict):
 ########
 
 class TimeSeries:
-    
     def __init__(self, time_series_fname: str):
         """initialize the metadata time series strucutre
         Args:
@@ -231,12 +235,12 @@ class TimeSeries:
         self.uid = read_str_array_from_h5(self.__ts_file_handle['uid'])
         self._timestamp = self.__ts_file_handle['timestamp'][:]
         self._values = self.__ts_file_handle['values']
-    
+
     def __del__(self):
         """close HDF5 file
         """
         self.__ts_file_handle.close()
-    
+
     def _unix_tmstamp_to_idx_forw(self, unix_tmstamp: int):
         """finds relative index of first timestamp equal or greater than unix_tmstamp
         """
@@ -244,7 +248,7 @@ class TimeSeries:
         if idx is None:
             raise ValueError(f'{unix_tmstamp} not contained within or after time series range')
         return idx
-    
+
     def _unix_tmstamp_to_idx_back(self, unix_tmstamp: int):
         """finds relative index of last timestamp equal or smaller than unix_tmstamp
         """
@@ -254,15 +258,15 @@ class TimeSeries:
         if idx is None:
             raise ValueError(f'{unix_tmstamp} not contained within or before time series range')
         return idx
-    
+
     def asdict(self, unix_tstart: Union[int, None]=None, unix_tend: Union[int, None]=None):
         """constructs and returns time series dictionary with timestamps within a time interval
         Args:
-            unix_tstart (Union[int, None]): unix timestamp for start of time interval. Defaults to 
-                                            None, which indicates start of the timestamps in the 
+            unix_tstart (Union[int, None]): unix timestamp for start of time interval. Defaults to
+                                            None, which indicates start of the timestamps in the
                                             TimeSeries object.
             unix_tend (Union[int, None]): unix timestamp for end of time interval. Defaults to
-                                          None, which indicates end of the timestamps in the 
+                                          None, which indicates end of the timestamps in the
                                           TimeSeries object.
         Returns:
             dict: time series dictionary with all timestamps within the specified window
@@ -290,7 +294,7 @@ class TimeSeries:
 ########
 
 class NAERMProvider(DataProvider):
-    
+
     def __init__(self, static_fname: str, time_series_fname: str):
         """initialize the static structure and opens handle to time series data
         Args:
@@ -300,7 +304,7 @@ class NAERMProvider(DataProvider):
         # read all data into memory (this will be revisited later, as necessary)
         self.__static_data = read_json_gzip(static_fname)
         self.__time_series = TimeSeries(time_series_fname)
-    
+
     def _get_time_series(self, daterange: Union[pd.DatetimeIndex, None]):
         """method that interfaces with underlying TimeSeries object
         Args:
@@ -320,12 +324,16 @@ class NAERMProvider(DataProvider):
         unix_tend = int(round(daterange[-1].timestamp()))
         # generate time series dictionary
         ts_dict = self.__time_series.asdict(unix_tstart, unix_tend)
-        # check consistency: lenghts should match
+        # check consistency: lengths should match
         if len(ts_dict['timestamp']) != len(daterange):
-            raise ValueError(f"mismatch in number of steps in time series dictionary ({len(ts_dict['timestamp'])}) and in provided daterange ({len(daterange)}). Only hourly resolution is supported.")
+            ts_len = len(ts_dict['timestamp'])
+            dr_len = len(daterange)
+            raise ValueError(
+                f"mismatch in number of steps in time series dictionary ({ts_len}) "
+                f"and in provided daterange ({dr_len}). Only hourly resolution is supported.")
         # all is good, return time series dictionary
         return ts_dict
-    
+
     def get_model(self, daterange: Union[pd.DatetimeIndex, None]=None) -> ModelData:
         """Data provider callback for EnergyMarket.
         Args:

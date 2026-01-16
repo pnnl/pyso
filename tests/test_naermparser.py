@@ -1,27 +1,29 @@
-import json
 import gzip
-import pytest
-import numpy as np
-import pandas as pd
-import h5py
+import json
 from unittest import mock
 
+import h5py
+import numpy as np
+import pandas as pd
+import pytest
+
 from pyenergymarket.parsers.naermparser import (
-    read_json_gzip,
-    read_str_array_from_h5,
-    is_time_series,
+    NAERMProvider,
+    TimeSeries,
+    assign_ts_values,
+    clean_egret_time_series,
+    create_egret_md,
+    create_ts_uid_to_idx_map,
+    enforce_p_min_p_max_consistency,
+    get_persistent_ts_value,
     is_egret_time_series,
     is_persistent_time_series,
-    create_ts_uid_to_idx_map,
-    get_persistent_ts_value,
-    clean_egret_time_series,
-    assign_ts_values,
-    enforce_p_min_p_max_consistency,
+    is_time_series,
+    read_json_gzip,
+    read_str_array_from_h5,
     remove_non_time_series,
-    create_egret_md,
-    TimeSeries,
-    NAERMProvider
 )
+
 
 # Mock data creation utilities
 def create_mock_json_gzip_file(data, tmp_path, filename):
@@ -233,7 +235,7 @@ class TestHelperFunctions:
         assert get_persistent_ts_value(pts, 1704326400) == 120.0  # Jan 4
 
         # Test error case - timestamp before first entry
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             get_persistent_ts_value(pts, 1703980800)  # Dec 31, 2023
 
     def test_clean_egret_time_series(self):
@@ -274,7 +276,7 @@ class TestHelperFunctions:
             "values": [90.0, 95.0, 100.0]
         }
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             clean_egret_time_series(ts)
 
     def test_assign_ts_values(self):
@@ -503,7 +505,8 @@ class TestTimeSeries:
         # Test error for timestamp BEFORE first entry (which is what the implementation checks)
         # Looking at the code, it raises ValueError if there's no timestamp <= unix_tmstamp
         with pytest.raises(ValueError):
-            time_series._unix_tmstamp_to_idx_back(first_ts - 3600000)  # Timestamp before the first one
+            # Timestamp before the first one
+            time_series._unix_tmstamp_to_idx_back(first_ts - 3600000)
 
     def test_asdict(self, time_series):
         """Test asdict method"""
@@ -531,7 +534,8 @@ class TestNAERMProvider:
     @pytest.fixture(scope="function")
     def setup_files(self, tmp_path):
         """Set up test files for NAERMProvider"""
-        static_file = create_mock_json_gzip_file(mock_static_data, tmp_path, "test_naerm_static.json.gz")
+        file_name = "test_naerm_static.json.gz"
+        static_file = create_mock_json_gzip_file(mock_static_data, tmp_path, file_name)
         ts_file = create_mock_h5_file(tmp_path, "test_naerm_ts.h5")
 
         return {
