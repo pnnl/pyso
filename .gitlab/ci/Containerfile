@@ -1,0 +1,61 @@
+FROM docker.io/continuumio/miniconda3
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt install -y make curl libgfortran5 liblapack-dev libgomp1 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN echo "...downloading solvers" && \
+    SOLVER_DIR="/app/solvers" && \
+    mkdir -p "$SOLVER_DIR" && \
+    export PATH="$SOLVER_DIR:$PATH" && \
+    DOWNLOAD_DIR="/app/download" && \
+    mkdir -p "$DOWNLOAD_DIR" && \
+    SOLVER_TAR=${DOWNLOAD_DIR}/solvers.tar.gz && \
+    URL=https://github.com/IDAES/idaes-ext && \
+    RELEASE=$(curl --max-time 150 --retry 8 -L -s -H 'Accept: application/json' ${URL}/releases/latest) && \
+    VER=$(echo $RELEASE | sed -e 's/.*"tag_name":"\([^"]*\)".*/\1/') && \
+    URL=${URL}/releases/download/$VER && \
+    # XXX - Assume debian/Ubuntu for CI pipeline during Hackathon.
+    # This drops the flexibility for testing against a matrix of environments.
+    curl --max-time 150 --retry 8 \
+        -L $URL/idaes-solvers-ubuntu2204-x86_64.tar.gz \
+        > $SOLVER_TAR && \
+    cd $SOLVER_DIR && \
+    tar -xz < $SOLVER_TAR && \
+    echo "" && \
+    echo "$SOLVER_DIR" && \
+    ls -l $SOLVER_DIR
+
+# Set up environment path globally (not just in .bashrc)
+ENV PATH="/app/solvers:$PATH"
+ENV PATH="/opt/conda/envs/pyso/bin:$PATH"
+
+RUN conda update -n base -c defaults conda
+
+RUN conda config --add channels conda-forge && \
+    conda config --set channel_priority strict
+
+# Create the environment
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda create -y -n pyso python=3.12 && \
+    conda activate pyso && \
+    conda install -y -c conda-forge pytest coveralls && \
+    conda clean -a
+
+# Create activation script for conda
+RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
+RUN echo "conda activate pyso" >> ~/.bashrc
+
+# Make sure CBC is accessible globally
+RUN ln -sf /opt/conda/envs/pyso/bin/cbc /usr/local/bin/
+
+# Verify installation
+RUN ls -la /opt/conda/envs/pyso/bin/cbc || echo "CBC not found in conda env"
+RUN ls -la /usr/local/bin/cbc || echo "CBC not found in /usr/local/bin"
+RUN which cbc
+
+# (Optional) Set the default environment when the container starts
+SHELL ["/bin/bash"]

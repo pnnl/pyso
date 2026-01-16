@@ -1,0 +1,24 @@
+# Build stage: Create Docker image with all dependencies installed
+build_container:
+  stage: container
+  image: gcr.io/kaniko-project/executor:debug
+
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "$DOCKER_AUTH_CONFIG" >> /kaniko/.docker/config.json
+    - /kaniko/executor --context $CI_PROJECT_DIR/.gitlab/ci --dockerfile $CI_PROJECT_DIR/.gitlab/ci/Containerfile --destination ${DOCKER_IMAGE_NAME}
+  rules:
+    # Run container build when these files change - either on merge request or normal push
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+      changes:
+        - .gitlab/ci/container.yml
+        - .gitlab/ci/Containerfile
+        - .gitlab-ci.yml
+      when: always
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - .gitlab/ci/container.yml
+        - .gitlab/ci/Containerfile
+        - .gitlab-ci.yml
+      when: always
+    - when: never

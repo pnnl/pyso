@@ -44,13 +44,34 @@ Will shift to Mini WECC once it is available
 * 15 minute resolution
 
 # Setup
-## Intalling Egret
-To install Egret the repository needs to be cloned and then installed via pip in edit mode.
+## Installing Egret
+The package allows you to use different sources for the Egret dependency based on your needs.
+
+### NAERM Project (Default for CI)
+If you're part of the NAERM project, you can install with the NAERM-specific Egret:
+
+```bash
+pip install -e ".[naerm]"
+```
+
+This will install Egret from the NAERM GitLab repository.
+
+### Standard Egret
+If you're not part of the NAERM project or need the standard Egret version:
+
+```bash
+pip install -e ".[standard]"
+```
+
+This will install Egret from the official Grid Parity Exchange repository.
+
+### Manual Installation
+Alternatively, you can manually install Egret. The repository needs to be cloned and then installed via pip in edit mode.
 See the instructions [here](https://github.com/pnnl-private/egret?tab=readme-ov-file#installation).
 Please use the `develop` branch.
 This is on PNNL's private GitHub, if you need access reach out to either Eran (<eran.schweitzer@pnnl.gov>), or Trevor (<trevor.hardy@pnnl.gov>)
 
-Make sure to [install a solver](#solvers)
+In all cases, make sure to [install a solver](#solvers)
 
 Then proceed to verify the installation, see [these instructions](https://github.com/breldridge/Egret?tab=readme-ov-file#testing-the-installation)
 
@@ -104,13 +125,58 @@ cd into repository folder
 pip install -e .
 ```
 
+## Developer Setup
+
+### Installing Development Dependencies
+
+To set up the development environment with all necessary tools for linting and type checking:
+
+```bash
+# Install the package in development mode with dev dependencies
+pip install -e ".[dev]"
+```
+
+This will install development tools including:
+- pre-commit (for Git hooks)
+- ruff (for linting)
+- mypy (for type checking)
+- pandas-stubs, types-networkx and other type stub packages
+
+### Setting Up Pre-commit Hooks
+
+Pre-commit hooks ensure that code quality checks run before each commit, preventing common issues from being committed:
+
+```bash
+# Install the pre-commit hooks
+pre-commit install
+```
+
+This will set up Git hooks to automatically run:
+- Trailing whitespace removal
+- End-of-file fixer
+- YAML and TOML syntax checkers
+- Ruff linting and formatting
+- Mypy type checking
+
+### Running Type Checking Manually
+
+To run type checking manually:
+
+```bash
+# Run mypy on the entire codebase
+python -m mypy src
+
+# Run mypy on a specific file
+python -m mypy src/pyenergymarket/utils/timeutils.py
+```
+
 ### Known Issues
 There are some issues that arise when the `pandas`, `blosc` and `tables` (pytables) are not installed from the same channel as the latter two are optional dependencies of pandas for reading form sources like hdf5 and excel.
 If there are `ImportError` issues, the solution is to uninstall these and make sure to install them all from the same location.
 One option, would be to uninstall them and pandas and do something like:
 ```
 pip install "pandas[hdf5, excel]"
-``` 
+```
 
 ## Solvers
 ### Installing CBC on Windows
@@ -165,7 +231,7 @@ conda install ipopt=3.11 -c conda-forge
 ```
 
 >*Note*:<br>
->Ipopt is installed along with scip, so if you are installing scip it may be better to install this first, otherwise there appear to be dependency issues. 
+>Ipopt is installed along with scip, so if you are installing scip it may be better to install this first, otherwise there appear to be dependency issues.
 
 ### Verify Installation
 In the command line run:
