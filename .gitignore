@@ -10,3 +10,8 @@ tests/localdata
 src/pyenergymarket/marketmodels/tso_config.json
 src/pyenergymarket/marketmodels/data
 .vscode
+.pytest_cache
+.coverage
+coverage.xml
+junit.xml
+htmlcov/

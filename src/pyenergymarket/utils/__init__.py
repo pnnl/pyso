@@ -1,5 +1,3 @@
-from . import egretutils
-from . import ioutils
-from . import timeutils
+from . import egretutils, ioutils, timeutils
 
 __all__ = ["egretutils", "ioutils", "timeutils"]

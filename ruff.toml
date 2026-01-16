@@ -1,0 +1,45 @@
+# Ruff configuration
+# See https://docs.astral.sh/ruff/configuration/
+
+# Target Python version
+target-version = "py39"
+
+# Exclude directories and files
+exclude = [
+    ".git",
+    ".pytest_cache",
+    "__pycache__",
+    "*.egg-info",
+    "data_model_tests",
+    "tests/localdata",
+]
+
+# Line length configuration
+line-length = 100
+
+# Linting configuration
+[lint]
+# Enable all recommended rules
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "W",   # pycodestyle warnings
+    # "C90", # mccabe complexity - removed for now
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    # "PL",  # pylint - removed for now
+]
+
+# Ignore specific rules
+ignore = ["E741"]  # Ignore ambiguous variable name warnings (l, I, O)
+
+[lint.isort]
+known-first-party = ["pyenergymarket"]
+
+# Format configuration
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

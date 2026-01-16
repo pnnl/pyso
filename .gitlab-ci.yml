@@ -1,0 +1,25 @@
+stages:
+  - container
+  - lint
+  - test
+  - security
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  DOCKER_IMAGE_NAME: "${CI_REGISTRY_IMAGE}"
+
+# Common configuration to be extended
+.common_config:
+  image: "${DOCKER_IMAGE_NAME}"
+  cache:
+    paths:
+      - .pip-cache/
+  before_script:
+    # Set up authentication for private GitLab repositories
+    - echo -e "machine gitlab.naerm.team\nlogin gitlab-ci-token\npassword ${CI_JOB_TOKEN}" > ~/.netrc
+    - chmod 600 ~/.netrc
+
+include:
+  - .gitlab/ci/container.yml
+  - .gitlab/ci/test.yml
+  - .gitlab/ci/security.yml
