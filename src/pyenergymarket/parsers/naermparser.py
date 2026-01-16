@@ -68,7 +68,7 @@ def clean_egret_time_series(ts):
     elif isinstance(ts["scale_factor"], float):
         ts["reference_value"] = ts["scale_factor"]
     else:
-        raise Exception(f"scale factor({ts['scale_factor']}) is neither float or list")
+        raise TypeError(f"scale factor({ts['scale_factor']}) is neither float or list")
     del ts["scale_factor"]
     if "scale_factor_idx" in ts:
         del ts["scale_factor_idx"]
@@ -85,7 +85,7 @@ def assign_ts_values(elem_ts: dict, ts: dict, ts_uid_to_idx: dict):
         ).tolist()
     elif isinstance(ts_uid, list):
         if len(ts_uid) != len(ts_scale_factor):
-            raise Exception("incorrect dimensions")
+            raise ValueError("incorrect dimensions")
         elem_ts["values"] = np.zeros(ts["values"].shape[0], dtype=float)
         for i in range(len(ts_uid)):
             elem_ts["values"] += np.array(
@@ -93,7 +93,7 @@ def assign_ts_values(elem_ts: dict, ts: dict, ts_uid_to_idx: dict):
             )
         elem_ts["values"] = elem_ts["values"].tolist()
     else:
-        raise Exception(f"unexpected time series structure: {ts_uid}")
+        raise TypeError(f"unexpected time series structure: {ts_uid}")
     # remove metadata not necessary for Egret and return
     clean_egret_time_series(elem_ts)
     return None
@@ -110,7 +110,7 @@ def get_persistent_ts_value(pts: dict, unixtime: int):
     elif idx > 0:
         idx = idx - 1
     else:
-        raise Exception(f"persistent time series {pts} does not contain {unixtime}")
+        raise ValueError(f"persistent time series {pts} does not contain {unixtime}")
     return pts["values"][idx]
 
 

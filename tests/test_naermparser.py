@@ -212,7 +212,7 @@ class TestHelperFunctions:
         assert get_persistent_ts_value(pts, 1704326400) == 120.0  # Jan 4
 
         # Test error case - timestamp before first entry
-        with pytest.raises(Exception, match="persistent time series .* does not contain"):
+        with pytest.raises(ValueError, match="persistent time series .* does not contain"):
             get_persistent_ts_value(pts, 1703980800)  # Dec 31, 2023
 
     def test_clean_egret_time_series(self):
@@ -253,7 +253,7 @@ class TestHelperFunctions:
             "values": [90.0, 95.0, 100.0],
         }
 
-        with pytest.raises(Exception, match="scale factor.*neither float or list"):
+        with pytest.raises(TypeError, match="scale factor.*neither float or list"):
             clean_egret_time_series(ts)
 
     def test_assign_ts_values(self):
@@ -284,6 +284,24 @@ class TestHelperFunctions:
         assert elem_ts["values"] == [20.0, 27.5, 35.0]
         assert "time_series_uid" not in elem_ts
         assert "scale_factor" not in elem_ts
+
+        # Test error case - incorrect dimensions
+        elem_ts = {
+            "data_type": "time_series",
+            "time_series_uid": ["L1", "L2", "G1"],
+            "scale_factor": [1.0, 0.5],
+        }
+        with pytest.raises(ValueError, match="incorrect dimensions"):
+            assign_ts_values(elem_ts, ts, ts_uid_to_idx)
+
+        # Test error case - unexpected time series structure
+        elem_ts = {
+            "data_type": "time_series",
+            "time_series_uid": 123,  # Not a string or list
+            "scale_factor": 1.0,
+        }
+        with pytest.raises(TypeError, match="unexpected time series structure"):
+            assign_ts_values(elem_ts, ts, ts_uid_to_idx)
 
     def test_enforce_p_min_p_max_consistency(self):
         """Test enforce_p_min_p_max_consistency function"""
