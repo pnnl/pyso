@@ -212,7 +212,7 @@ class TestHelperFunctions:
         assert get_persistent_ts_value(pts, 1704326400) == 120.0  # Jan 4
 
         # Test error case - timestamp before first entry
-        with pytest.raises(ValueError):
+        with pytest.raises(Exception, match="persistent time series .* does not contain"):
             get_persistent_ts_value(pts, 1703980800)  # Dec 31, 2023
 
     def test_clean_egret_time_series(self):
@@ -253,7 +253,7 @@ class TestHelperFunctions:
             "values": [90.0, 95.0, 100.0],
         }
 
-        with pytest.raises(ValueError):
+        with pytest.raises(Exception, match="scale factor.*neither float or list"):
             clean_egret_time_series(ts)
 
     def test_assign_ts_values(self):
