@@ -1,0 +1,76 @@
+# Lint stage: Use the pre-built image
+lint:
+  extends: .common_config
+  stage: lint
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+  script:
+    - python --version
+    - pip install -e ".[dev]"
+    - ruff check .
+    - ruff format --check .
+
+# Test stage: Use the pre-built image with NAERM Egret
+test:naerm:
+  extends: .common_config
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+  script:
+    - pip install -e ".[test,naerm]"
+    - pytest -v --cov=src/pyenergymarket tests/ --junitxml=junit-naerm.xml
+    - coverage report
+    - coverage xml -o coverage-naerm.xml
+    - coverage html -d htmlcov-naerm
+    # Extract coverage percentage for GitLab UI
+    - |
+      coverage_report=$(coverage report)
+      echo "$coverage_report"
+      coverage_line=$(echo "$coverage_report" | grep "TOTAL")
+      coverage_percentage=$(echo "$coverage_line" | grep -o '[0-9]\+%' | head -1)
+      echo "Coverage: $coverage_percentage (NAERM)"
+      echo "Test coverage: $coverage_percentage"
+  coverage: /Test coverage:\s+([0-9.]+)%/
+  artifacts:
+    paths:
+      - htmlcov-naerm/
+    reports:
+      junit: junit-naerm.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage-naerm.xml
+    when: always
+
+# Test stage with standard Egret
+test:standard:
+  extends: .common_config
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+  script:
+    - pip install -e ".[test,standard]"
+    - pytest -v --cov=src/pyenergymarket tests/ --junitxml=junit-standard.xml
+    - coverage report
+    - coverage xml -o coverage-standard.xml
+    - coverage html -d htmlcov-standard
+    # Extract coverage percentage for GitLab UI
+    - |
+      coverage_report=$(coverage report)
+      echo "$coverage_report"
+      coverage_line=$(echo "$coverage_report" | grep "TOTAL")
+      coverage_percentage=$(echo "$coverage_line" | grep -o '[0-9]\+%' | head -1)
+      echo "Coverage: $coverage_percentage (Standard)"
+      echo "Test coverage: $coverage_percentage"
+  coverage: /Test coverage:\s+([0-9.]+)%/
+  artifacts:
+    paths:
+      - htmlcov-standard/
+    reports:
+      junit: junit-standard.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage-standard.xml
+    when: always

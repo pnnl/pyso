@@ -1,11 +1,19 @@
-from pytest import approx
-from pyomo.opt import SolverFactory
 from pyomo.common.errors import ApplicationError
+from pyomo.opt import SolverFactory
+from pytest import approx
+
 
 # Imported function from Egret tests
 def find_solver(requested_solver=None, return_mip_avail=False):
     if requested_solver is None:
-        solver_list = ['xpress_persistent', 'gurobi_persistent', 'cplex_persistent', 'gurobi', 'cplex']
+        # List of solvers in priority order
+        solver_list = [
+            "xpress_persistent",
+            "gurobi_persistent",
+            "cplex_persistent",
+            "gurobi",
+            "cplex",
+        ]
     else:
         solver_list = [requested_solver]
     test_solver = None
@@ -19,7 +27,7 @@ def find_solver(requested_solver=None, return_mip_avail=False):
         except ApplicationError:
             continue
     if test_solver is None:
-        for solver in ['cbc', 'glpk']:
+        for solver in ["cbc", "glpk"]:
             try:
                 if SolverFactory(solver).available():
                     test_solver = solver
@@ -33,10 +41,11 @@ def find_solver(requested_solver=None, return_mip_avail=False):
     else:
         return test_solver
 
-def dictionary_testing(d1:dict, d2:dict):
+
+def dictionary_testing(d1: dict, d2: dict):
     """Test all elements of a dictionary using default
     precision.
-    
+
     NOTE:
         It is assumed that the dictionaries share the same
         keys
@@ -45,19 +54,20 @@ def dictionary_testing(d1:dict, d2:dict):
         d1 (dict): dictionary one
         d2 (dict): dictionary two
     """
-    for k,v in d1.items():
+    for k, v in d1.items():
         if isinstance(v, dict):
             dictionary_testing(v, d2[k])
         elif isinstance(v, list):
             list_testing(v, d2[k])
         else:
-            assert v == approx(d2[k])  
-            
+            assert v == approx(d2[k])
+
+
 def list_testing(l1, l2):
     for i, j in zip(l1, l2):
         if isinstance(i, dict):
-            dictionary_testing(i,j)
+            dictionary_testing(i, j)
         elif isinstance(i, list):
-            list_testing(i,j)
+            list_testing(i, j)
         else:
             assert i == approx(j)
