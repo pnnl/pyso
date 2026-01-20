@@ -17,10 +17,13 @@ from pyenergymarket.marketmodels import market as generic_market
 from pyenergymarket.marketmodels.default_tso_config import get_defaults
 from pyenergymarket.parsers.egretparser import DailyEgretProvider
 from pyenergymarket.utils.ioutils import merge_configs
+from pyenergymarket.utils.ioutils import get_provider_by_name, Logger
 
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+# logger = logging.getLogger(__name__)
+# logger.addHandler(logging.StreamHandler())
+# logger.setLevel(logging.INFO)
+
+logger = Logger("TSO")
 
 
 class TSO:
@@ -32,7 +35,6 @@ class TSO:
     def __init__(self, options: dict):
         # Loads in the options
         self.save = options.get("save", True)
-        self.filename = options["filename"]
         self.simulation_time = 0
         # Time resolution and unit will default to 1 hour resolution
         self.time_resolution = options.get("time_resolution", 1)
@@ -51,7 +53,7 @@ class TSO:
         self.markets = {}
         self.market_order = options["market_order"]
 
-    def add_market(self, market_name, market_timing, em_config, freq=None):
+    def add_market(self, market_name, dataprovider, market_timing, em_config, freq=None):
         """Adds an energymarket object, containing market characteristcs"""
         if market_name not in self.market_order:
             raise ValueError(
@@ -59,10 +61,10 @@ class TSO:
             )
         market_object = create_market(
             market_name,
+            dataprovider,
             em_config,
             start=self.start,
             end=self.end,
-            filename=self.filename,
             market_timing=market_timing,
             freq=freq,
         )
@@ -148,10 +150,11 @@ class TSO:
         pass
 
 
-def create_market(mtype, em_config, market_timing, start=None, end=None, filename=None, freq=None):
+def create_market(mtype, provider:dict, em_config:dict, market_timing:dict, start=None, end=None, freq=None):
     """Builds a market instance"""
-    data_provider = DailyEgretProvider(filename)
-    em = pyen.EnergyMarket(data_provider, config=em_config)
+    # data_provider = DailyEgretProvider(filename)
+    data_provider = get_provider_by_name(provider["type"])
+    em = pyen.EnergyMarket(data_provider(**provider["kwargs"]), config=em_config)
     # Format start/end as strings so they will work in market.py
     if not isinstance(start, str):
         start = f"{start.year}-{start.month:02d}-{start.day:02d}"
@@ -161,13 +164,17 @@ def create_market(mtype, em_config, market_timing, start=None, end=None, filenam
     return market
 
 
+    
+
 def execute_sequence(options):
     """Runs a market instance with the given options"""
     # Check to make sure empty default options have been specified
-    empty_defaults = ["start_time", "end_time", "filename"]
+    empty_defaults = ["start_time", "end_time"]
     for default in empty_defaults:
         if options.get(default, "") == "":
             raise ValueError(f"Must specify a value for config option {default}")
+    if options.get("tso_logfile", ""):
+        logger.set_logfile(options["tso_logfile"])
     # Creates a market operator
     tso = TSO(options)
     # Add markets from options (requires a market_timing and em_config specified)
@@ -175,7 +182,8 @@ def execute_sequence(options):
         market_timing = options["markets"][market]["market_timing"]
         em_config = options["markets"][market]["em_config"]
         freq = em_config["time"]["min_freq"]
-        tso.add_market(market, market_timing, em_config, freq=freq)
+        dataprovider = options["markets"][market]["dataprovider"]
+        tso.add_market(market, dataprovider, market_timing, em_config, freq=freq)
     # Runs the simulation
     tso.simulate()
 
@@ -196,16 +204,25 @@ if __name__ == "__main__":
     # If this file doesn't exist, create a file with default settings
     if not os.path.exists(args.config):
         logger.critical(f"No configuration ({config_file}) found. Creating file with defaults.")
-        with open(config_file, "w") as f:
-            json.dump(default_options, f, indent=4)
+        if config_file.endswith("json"):
+            with open(config_file, "w") as f:
+                json.dump(default_options, f, indent=4)
+        elif config_file.endswith("toml"):
+            from pyenergymarket.utils.ioutils import save_config
+            save_config(config_file, default_options)
         logger.critical(f"Default config created. Edit {config_file} to update run settings")
         exit()
 
     # Read in configuration settings and merge with the defaults (defaults will only be applied
     # to any missing/unspecified configuration elements
-    with open(config_file) as f:
-        options = json.load(f)
-    # Joins any user options onto the default options
-    merge_configs(default_options, options)
+    if config_file.endswith("json"):
+        with open(config_file) as f:
+            options = json.load(f)
+    elif config_file.endswith("toml"):
+        from pyenergymarket.utils.ioutils import load_config
+        options = load_config(config_file)
+    # # Joins any user options onto the default options
+    # merge_configs(default_options, options)
 
-    execute_sequence(default_options)
+    # execute_sequence(default_options)
+    execute_sequence(options)
