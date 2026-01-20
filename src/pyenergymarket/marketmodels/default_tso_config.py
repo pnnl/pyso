@@ -104,7 +104,7 @@ def get_defaults():
         "start_time": "",  # Start time in YYYYmmddHHMM format (e.g. 202401010000)
         "end_time": "",  # End time in YYYYmmddHHMM format (e.g. 202401080000)
         "filename": "",  # Path to Egret date
-        "case": None,  # Optional name to append to save directory
+        "case": "",  # Optional name to append to save directory
         "time_resolution": 1,
         "time_unit": "hour",
         "save": True,
