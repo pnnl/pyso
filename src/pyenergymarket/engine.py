@@ -14,7 +14,7 @@ from egret.models.unit_commitment import SlackType, solve_unit_commitment
 
 from .pyenergymarket_defaults import energymarket_defaults
 from .utils.egretutils import NumpyEncoder
-from .utils.ioutils import Logger, merge_configs
+from .utils.ioutils import Logger, merge_configs, print_inputs
 from .utils.timeutils import count_onoff, mk_daterange
 
 
@@ -48,6 +48,9 @@ class EnergyMarket:
         self.logger = Logger(**self.configuration["logging"])
         if self.configuration["logging"]["file"] is not None:
             self.logger.set_logfile(self.configuration["logging"]["file"])
+        
+        if self.configuration["logging"]["print_config"]:
+            print_inputs(self.configuration, self.logger.info)
 
     @property
     def monitored_branches(self) -> dict:
