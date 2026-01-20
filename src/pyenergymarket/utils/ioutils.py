@@ -4,7 +4,92 @@ place here.
 
 import logging
 import sys
+import tomli_w
+import tomli
+import gzip
+import copy
+import importlib
+from typing import Mapping
 
+### This is for type checking and syntax highlighting
+### see: https://www.youtube.com/watch?v=UnKa_t-M_kM
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pyenergymarket.engine import DataProvider
+
+def save_config(filepath:str, data:dict) -> None:
+    """
+    Saves a dictionary into a TOML configuration file, supporting gzip compression.
+
+    Args:
+        filepath (str): The path where the TOML configuration file will be saved. If the
+            filepath ends with '.gz', the content is compressed in Gzip format.
+        data (dict): A dictionary containing the data to be saved. 
+
+    """
+    if filepath.endswith('.gz'):
+        with gzip.open(filepath, "wb") as outfile:
+            tomli_w.dump(data, outfile)
+    else:
+        with open(filepath, "wb") as outfile:
+            tomli_w.dump(data, outfile)
+
+def load_config(filepath:str, default_path:str=None) -> dict:
+    """
+    Load and merge TOML configuration files, supporting gzip compression.
+
+    This function loads configuration settings from a user-specified TOML file 
+    and optionally merges them with default settings from another TOML file. 
+    User settings take precedence over default settings.
+
+    Args:
+        filepath (str): The path to the user-specified TOML configuration file.
+        default_path (str, optional): The path to the default TOML configuration file. 
+            If not provided or None, no default settings are used.
+
+    Returns:
+        dict: A dictionary containing the combined configuration settings, 
+        where user settings override default settings.
+    """
+    inputs = {}
+    if default_path is not None:
+        if default_path.endswith('.gz'):
+            with gzip.open(default_path, mode='rb') as f:
+                inputs = tomli.load(f)
+        else: 
+            with open(default_path, mode='rb') as f:
+                inputs = tomli.load(f)
+    
+    user = {}
+    if filepath:
+        if filepath.endswith('.gz'):
+            with gzip.open(filepath, mode='rb') as f:
+                user = tomli.load(f)
+        else:
+            with open(filepath, mode='rb') as f:
+                user = tomli.load(f)
+
+    inputs = merge_dicts(inputs,user)
+    
+    return inputs
+
+def merge_dicts(d1:dict, d2:dict) -> dict:
+    """Recursively merges two dictionaries.
+
+    Args:
+        d1 (dict): The first dictionary to merge. This is typically the base dictionary.
+        d2 (dict): The second dictionary to merge. This dictionary's values will overwrite those in d1 where there are conflicts.
+
+    Returns:
+        dict: A new dictionary which is the result of merging d2 into d1.
+    """
+    merged = copy.deepcopy(d1)
+    for k, v in d2.items():
+        if isinstance(v, Mapping):
+            merged[k] = merge_dicts(merged.get(k, {}), v)
+        else:
+            merged[k] = v
+    return merged
 
 def merge_configs(defaults: dict, user: dict, level=0):
     """update the default options with user inputs"""
@@ -47,6 +132,17 @@ def format_filename(datetime_str):
     """
     return datetime_str.replace(":", "-").replace(" ", "_")
 
+def print_inputs(d:dict, printf):
+    from pprint import pformat
+    sinput = pformat(d, sort_dicts=False, compact=True)
+    printf(sinput)
+
+def get_provider_by_name(name:str):
+    module = importlib.import_module("pyenergymarket")
+    try:
+        return getattr(module, name)
+    except AttributeError:
+        raise ValueError(f"No DataProvider named {name} available.")
 
 class Logger(logging.Logger):
     def __init__(self, name, level=logging.INFO, msg_format="{message}", **kwargs):
