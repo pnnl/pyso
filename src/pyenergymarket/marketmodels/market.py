@@ -14,6 +14,9 @@ trevor.hardy@pnnl.gov
 import datetime as dt
 import logging
 import math
+from copy import deepcopy
+import abc
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -25,8 +28,45 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.WARNING)
 
+class MarketTiming:
+    """Class that defines the timing of various market states
+    """
+    def __init__(self, market_interval, timing:list[dict], initial_offset=0, **kwargs):
+        """initialize market timing class indicating interval and the timing
+        definition.
+        
+        Note:
+            The units for all timing, interval etc. are currently not fixed.
+            This is because some may work with integer counters, while others
+            with timedelta objects.
 
-class Market:
+        Args:
+            market_interval (Any): Duration of one cycle through the state timing list
+            timing (list[dict]): list of states within a market cycle (in ORDER).
+                                 each entry must have the following keys:
+                                     - name (str): name of the state
+                                     - start_time: the time within the market interval where this state is transitioned into.
+            initial_offset (optional, int): this gets added to the first state transition calculation. Probably just keep it 0.
+        """
+
+        self.intial_offset=initial_offset
+        self.market_interval = market_interval
+        self.timing = deepcopy(timing)
+
+        ## calculate duration
+        ## TODO: what if the first start_time is not 0 or Timedelta(0) etc....that would be a user error but we should catch it.
+        for i, d in enumerate(self.timing):
+            if i == (len(self.timing) - 1):
+                d["duration"] = market_interval - d["start_time"]
+            else:
+                d["duration"] = self.timing[i+1]["start_time"] - d["start_time"]
+    
+    @property
+    def state_list(self) -> list[str]:
+        return [d["name"] for d in self.timing]
+
+
+class Market(abc.ABC):
     """
 
     For the off-shore-wind use case, we only need three market states so
@@ -56,10 +96,10 @@ class Market:
 
     def __init__(
         self,
-        market_name,
-        market_timing,
-        start_date,
-        end_date,
+        market_name:str,
+        market_timing:Union[MarketTiming, dict],
+        start_date:str,
+        end_date:str,
         market: EnergyMarket,
         local_save=False,
         **kwargs,
@@ -78,7 +118,7 @@ class Market:
         """
         self.em = market
         self.market_name = market_name
-        self.current_state = market_timing["initial_state"]
+        self.market_timing = market_timing if isinstance(market_timing, MarketTiming) else MarketTiming(**market_timing)
         # Calculate market frequency from configuration
         min_freq = self.em.configuration["time"]["min_freq"]
         time_window = self.em.configuration["time"]["window"]
@@ -93,7 +133,7 @@ class Market:
         self.current_start_time = self.start_times[self.timestep]
         self.last_state = None
         self.send_horizon_message = True  # Will send a message when timestamp is past the horizon
-        self.market_timing = market_timing
+        self.market_timing = deepcopy(market_timing)
         self.market_results = None
 
         self.add_state_machine()
@@ -105,7 +145,11 @@ class Market:
         self.local_save = local_save
 
         # This translates all the kwarg key-value pairs into class attributes
-        self.__dict__.update(kwargs)
+        # self.__dict__.update(kwargs)
+
+    @property
+    def state_list(self) -> list[str]:
+        return self.market_timing.state_list
 
     def add_state_machine(self):
         """
@@ -148,19 +192,30 @@ class Market:
         # Set up all of the time tracking object
         self.timestep = 0
         self.current_start_time = self.start_times[self.timestep]
-        self.current_state = self.market_timing["initial_state"]
+        self.current_state = "initialization"
         self.last_state = None
         self.last_state_time = 0
         self.next_state_time = 0
         # Add the state machine
-        self.state_list = list(self.market_timing["states"].keys())
-        self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
-        self.state_machine.add_ordered_transitions()
+        # self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
+        self.state_machine = Machine(model=self, states=["initialization"] + self.state_list, initial="initialization")
+        self.state_machine.add_ordered_transitions(self.state_list)
+        
+        # add a transition from initialization to the first state
+        self.state_machine.add_transition(trigger="do_initialization", source="initialization", dest=self.state_list[0])
+
         # Adding definitions for state transition callbacks
         # These are automatically executed on state transitions
+        
         self.state_machine.on_enter_bidding("collect_bids")
         self.state_machine.on_enter_clearing("clear_market")
         self.state_machine.on_exit_clearing("publish_results")
+
+    @abc.abstractmethod
+    def do_initialization(self) -> None:
+        """This method executes any initialization steps
+        """
+        pass
 
     def validate_market_timing(self) -> None:
         """
@@ -290,6 +345,7 @@ class Market:
         start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive="left")
         return start_time_index
 
+    @abc.abstractmethod
     def collect_bids(self):
         """
         Callback method to pull in data.
@@ -297,7 +353,9 @@ class Market:
         This method must be overloaded in an instance of this class to
         implement the necessary operations to collect the bids in question.
         """
+        pass
 
+    @abc.abstractmethod
     def publish_results(self):
         """
         Method to publish results from clear_market method.
@@ -305,7 +363,9 @@ class Market:
         This method must be overloaded in an instance of this class to
         implement the necessary operations to publish the results in question.
         """
-
+        pass
+    
+    @abc.abstractmethod
     def clear_market(self, local_save=False, contingency_list=None):
         """
         Callback method that runs EGRET and clears a market.
