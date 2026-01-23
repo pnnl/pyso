@@ -64,6 +64,20 @@ class MarketTiming:
     @property
     def state_list(self) -> list[str]:
         return [d["name"] for d in self.timing]
+    
+    def __getitem__(self, index:Union[int, str]) -> dict:
+        """return the timing dictionary for a particular state
+
+        Args:
+            index (Union[int, str]): if int, the order of the state.
+                                     if str, the name of the state.
+
+        Returns:
+            dict: the state timing dictionary
+        """
+        if isinstance(index, str):
+            index = self.state_list.index(index)
+        return self.timing[index]
 
 
 class Market(abc.ABC):
