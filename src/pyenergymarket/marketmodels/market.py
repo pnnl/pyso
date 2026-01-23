@@ -12,7 +12,6 @@ trevor.hardy@pnnl.gov
 """
 
 import datetime as dt
-import logging
 import math
 from copy import deepcopy
 import abc
@@ -23,17 +22,12 @@ import pandas as pd
 from transitions import Machine
 
 from pyenergymarket.engine import EnergyMarket
-from pyenergymarket.utils.ioutils import Logger, merge_configs
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.WARNING)
+from pyenergymarket.utils.ioutils import Logger, merge_dicts
 
 class MarketTiming:
     """Class that defines the timing of various market states
     """
-    def __init__(self, market_interval, timing:list[dict], initial_offset=0, 
-                 logging={}, **kwargs):
+    def __init__(self, market_interval, timing:list[dict], initial_offset=0, **kwargs):
         """initialize market timing class indicating interval and the timing
         definition.
         
@@ -123,6 +117,7 @@ class Market(abc.ABC):
         end_date:str,
         market: EnergyMarket,
         local_save=False,
+        logging = {},
         **kwargs,
     ):
         """
@@ -137,6 +132,7 @@ class Market(abc.ABC):
         callback methods that are called when entering particular states.
 
         """
+        self.logger = Logger(merge_dicts({"name": "Market", "level": "WARNING"}, logging))
         self.em = market
         self.market_name = market_name
         self.market_timing = market_timing if isinstance(market_timing, MarketTiming) else MarketTiming(**market_timing)
@@ -149,12 +145,8 @@ class Market(abc.ABC):
         self.start_times = self.interpolate_market_start_times(
             start_date, end_date, freq=market_frequency
         )
-        logger.info("market", self.market_name, "start_times: ", self.start_times)
-        self.timestep = 0
-        self.current_start_time : pd.Timestamp = self.start_times[self.timestep]
-        self.last_state = None
+        self.logger.info("market", self.market_name, "start_times: ", self.start_times)
         self.send_horizon_message = True  # Will send a message when timestamp is past the horizon
-        self.market_timing = deepcopy(market_timing)
         self.market_results = None
 
         self.add_state_machine()
@@ -208,8 +200,7 @@ class Market(abc.ABC):
             "market_interval": 86400
         }
         """
-        # Check that market timing dictionary fits expected format
-        self.validate_market_timing()
+
         # Set up all of the time tracking object
         self.timestep = 0
         self.current_start_time = self.start_times[self.timestep]
@@ -247,11 +238,12 @@ class Market(abc.ABC):
         # Store previous state, move states, then update current state
         # Note: transitions automatically execute methods specified in add_state_machine
         self.last_state = self.current_state
-        self.next_state(*args, **kwargs)
+        if self.current_state == "initialization":
+            self.do_initialization(**args, **kwargs)
+        else:
+            self.next_state(*args, **kwargs)
         self.current_state = self.state
-        logger.debug(self.market_name, "Last state:", self.last_state)
-        logger.debug(self.market_name, "Next state:", self.current_state)
-        logger.info(f"{self.market_name} moved from {self.last_state} to {self.current_state}")
+        self.logger.info(f"{self.market_name} moved from {self.last_state} to {self.current_state}")
         return self.current_state
 
     def calculate_next_state_time(self, return_last=True) -> tuple[float, float]:
@@ -267,7 +259,7 @@ class Market(abc.ABC):
         # Initial offset only matters on first pass (included above).
         # After first pass, set to 0 for correct timing
         self.market_timing["initial_offset"] = 0
-        logger.info(f"{self.market_name}.next_state_time: {self.next_state_time}")
+        self.logger.info(f"{self.market_name}.next_state_time: {self.next_state_time}")
         if return_last:
             return last_state_time, self.next_state_time
         else:
@@ -348,7 +340,7 @@ class Market(abc.ABC):
             self.current_start_time += dt.timedelta(days=1)
         else:
             self.current_start_time = self.start_times[self.timestep]
-        logger.info("Market ", self.market_name, "next start time: ", self.current_start_time)
+        self.logger.info("Market ", self.market_name, "next start time: ", self.current_start_time)
 
     def reset_timestep(self, timestep=0, shift_commitment=True):
         """Resets the timestep to 0 (option to fix to a different value)
@@ -394,7 +386,7 @@ class Market(abc.ABC):
                 info_msg = (
                     f"Current start time {self.current_start_time} is past horizon {horizon_time}"
                 )
-                logger.info(f"{info_msg} Market will not be cleared")
+                self.logger.info(f"{info_msg} Market will not be cleared")
                 self.send_horizon_message = False  # Only send warning once
             return False
         return True
