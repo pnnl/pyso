@@ -81,25 +81,42 @@ class TSO(abc.ABC):
         # Selects the market object from the saved dictionary
         market = self.markets[mtype]
         market_cleared = False
-        # First check if we have hit a transition point (simulation time == next state time)
-        if self.simulation_time == market.next_state_time:
-            # Can supply kwargs to each state transition (idle, bidding, clearing are default)
-            state_kwargs = {"clearing": {"local_save": self.save}}
-            # Figure out which state is coming next
-            state_order = list(market.market_timing["states"].keys())
-            state_mapping = dict(zip(state_order, state_order[1:] + [state_order[0]]))
-            mkt_state = market.current_state
-            next_mkt_state = state_mapping[mkt_state]
-            # Adjust kwargs (can add arguments here also)
-            use_kwargs = {}
-            if next_mkt_state in state_kwargs.keys():
-                use_kwargs = state_kwargs[next_mkt_state]
-            # Move to next state and adjust next_state_time
-            market.move_to_next_state(**use_kwargs)
-            if market.current_state == "clearing":
-                market_cleared = True
-            market.update_market()
+        # TODO: Probably remove the kwarg passing - save these as market attributes
+        # Can supply kwargs to each state transition (idle, bidding, clearing are default)
+        state_kwargs = {"clearing": {"local_save": self.save}}
+        # Figure out which state is coming next
+        state_order = list(market.market_timing["states"].keys())
+        state_mapping = dict(zip(state_order, state_order[1:] + [state_order[0]]))
+        mkt_state = market.current_state
+        next_mkt_state = state_mapping[mkt_state]
+        # Adjust kwargs (can add arguments here also)
+        use_kwargs = {}
+        if next_mkt_state in state_kwargs.keys():
+            use_kwargs = state_kwargs[next_mkt_state]
+        # Move to next state and adjust next_state_time
+        market.move_to_next_state(**use_kwargs)
+        if market.current_state == "clearing":
+            market_cleared = True
+        market.update_market()
         return market_cleared
+
+    def find_next_market(self):
+        """Checks markets to determine which comes next"""
+        next_time = None # Initialize with None since we don't know the type
+        for market_name, market in self.markets.keys():
+            if next_time is None:
+                next_market = market_name
+                next_time = market.next_state_time
+            else:
+                if market.next_state_time < next_time:
+                    next_market = market_name
+                    next_time = market.next_state_time
+                elif market.next_state_time == next_time:
+                    # If two markets start at the same time, use market_order to determine which comes first
+                    next_market = self.market_order[min(self.market_order.index(market),
+                                                        self.market_order.index(next_market))]
+                    next_time = self.markets[next_market].next_state_time
+        return next_market, next_time
 
     @abc.abstractmethod
     def simulate(self):
@@ -109,14 +126,14 @@ class TSO(abc.ABC):
         # Run the simulation until the finish
         while not horizon_reached:
             # Ask markets for their next start times
-            next_starts =
-            for market_name in self.market_order:
-                market_cleared = self.run_market(market_name)
-                if market_cleared:
-                    logger.info(
-                        f"{market_name} cleared at simulation time {self.simulation_time} "
-                        f"{self.time_unit}s"
-                    )
+            next_market, next_time = self.find_next_market()
+            # Now run the next market and save a message each time it is cleared
+            market_cleared = self.run_market(next_market)
+            if market_cleared:
+                logger.info(
+                    f"{next_market} cleared at simulation time {next_time} "
+                    f"{self.time_unit}s"
+                )
             # Can add callback features to pass data between markets here
             # Once all market start times are at the end (inclusive), terminate the simulation
             horizon_reached = all([self.start + self.markets[mkt].next_state_time >=
