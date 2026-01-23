@@ -255,25 +255,30 @@ class TimeSeries:
     def __init__(self, time_series_fname: str):
         """initialize the metadata time series strucutre
         Args:
-            time_series_fname (str): path to HDF5 time series file
+            time_series_fname (str): path to HDF5 time series file. h5 object contains 4 keys:
+                name (np.array[str]): vector of time series' names
+                uid (np.array[str]): vector of time series' uids
+                timestamps (np.array[double]): vector of unix timestamps
+                values (np.array[float]): array of time series values with dimensions
+                                          #timestamps x #time series
         """
         self.__ts_file_handle = h5py.File(time_series_fname, "r")
         self.name = read_str_array_from_h5(self.__ts_file_handle["name"])
         self.uid = read_str_array_from_h5(self.__ts_file_handle["uid"])
         self._timestamp = self.__ts_file_handle["timestamp"][:]
         self._values = self.__ts_file_handle["values"]
-
+    
     def __del__(self):
         """close HDF5 file"""
         self.__ts_file_handle.close()
-
+    
     def _unix_tmstamp_to_idx_forw(self, unix_tmstamp: int):
         """finds relative index of first timestamp equal or greater than unix_tmstamp"""
         idx = next((i for i, x in enumerate(self._timestamp) if x >= unix_tmstamp), None)
         if idx is None:
             raise ValueError(f"{unix_tmstamp} not contained within or after time series range")
         return idx
-
+    
     def _unix_tmstamp_to_idx_back(self, unix_tmstamp: int):
         """finds relative index of last timestamp equal or smaller than unix_tmstamp"""
         n = len(self._timestamp)
@@ -324,8 +329,9 @@ class NAERMProvider(DataProvider):
     def __init__(self, static_fname: str, time_series_fname: str):
         """initialize the static structure and opens handle to time series data
         Args:
-            static_fname (str): path to static information file
-            time_series_fname (str): path to HDF5 time series file
+            static_fname (str): path to static information JSON (Egret precursor) file
+            time_series_fname (str): path to HDF5 time series file (see TimeSeries class for
+                                     format details)
         """
         # read all data into memory (this will be revisited later, as necessary)
         self.__static_data = read_json_gzip(static_fname)
