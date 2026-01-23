@@ -8,6 +8,7 @@ import datetime
 import json
 import logging
 import os
+import abc
 import time as pytime
 
 import pandas as pd
@@ -23,7 +24,7 @@ logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
 
-class TSO:
+class TSO(abc.ABC):
     """
     This provides a transmission system operator (TSO) model.
     It enables the user to initialize custom markets and will run all markets
@@ -51,6 +52,7 @@ class TSO:
         self.markets = {}
         self.market_order = options["market_order"]
 
+    @abc.abstractmethod
     def add_market(self, market_name, market_timing, em_config, freq=None):
         """Adds an energymarket object, containing market characteristcs"""
         if market_name not in self.market_order:
@@ -68,6 +70,7 @@ class TSO:
         )
         self.markets.update({market_name: market_object})
 
+    @abc.abstractmethod
     def run_market(self, mtype):
         """Uses the market transition methods to clear the market
         Args:
@@ -98,33 +101,15 @@ class TSO:
             market.update_market()
         return market_cleared
 
-    def initialize_steps(self):
-        """Performs any steps needed before the simulation loop.
-        Often the initial state must be set up - for example with an
-        initial day-ahead market clearing
-        """
-
-        def clear_and_adjust(mtype):
-            market = self.markets[mtype]
-            market.clear_market(local_save=self.save)
-            market.reset_timestep()
-            market.update_market()
-
-        for mtype in self.market_order:
-            # Perform an initial clearing of each market
-            logger.info(f"Performing an initial clearing of market {mtype}")
-            clear_and_adjust(mtype)
-            logger.info(f"{mtype} initialized at simulation time {self.simulation_time}")
-
+    @abc.abstractmethod
     def simulate(self):
         """Runs a test simulation with options specified"""
         t0 = pytime.time()  # For tracking simulation computational time
-        # Initialized necessary parameters
-        self.initialize_steps()
         horizon_reached = False
         # Run the simulation until the finish
         while not horizon_reached:
-            # Loop through all markets and try to clear
+            # Ask markets for their next start times
+            next_starts =
             for market_name in self.market_order:
                 market_cleared = self.run_market(market_name)
                 if market_cleared:
@@ -133,13 +118,9 @@ class TSO:
                         f"{self.time_unit}s"
                     )
             # Can add callback features to pass data between markets here
-            # Increment time and see if the end horizon is reached
-            self.simulation_time += self.time_resolution
-            if (
-                self.start + datetime.timedelta(seconds=self.simulation_time * self.time_scaling)
-                >= self.end
-            ):
-                horizon_reached = True
+            # Once all market start times are at the end (inclusive), terminate the simulation
+            horizon_reached = all([self.start + self.markets[mkt].next_state_time >=
+                                   self.end for mkt in self.market_order])
         t1 = pytime.time()
         simulation_wallclock = t1 - t0
         logger.info(f"Simulation complete.\nTotal computation time is {simulation_wallclock:.2f}s")
