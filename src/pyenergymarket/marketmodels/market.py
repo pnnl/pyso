@@ -22,7 +22,8 @@ import numpy as np
 import pandas as pd
 from transitions import Machine
 
-from ..engine import EnergyMarket
+from pyenergymarket.engine import EnergyMarket
+from pyenergymarket.utils.ioutils import Logger, merge_configs
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -31,7 +32,8 @@ logger.setLevel(logging.WARNING)
 class MarketTiming:
     """Class that defines the timing of various market states
     """
-    def __init__(self, market_interval, timing:list[dict], initial_offset=0, **kwargs):
+    def __init__(self, market_interval, timing:list[dict], initial_offset=0, 
+                 logging={}, **kwargs):
         """initialize market timing class indicating interval and the timing
         definition.
         
@@ -78,6 +80,11 @@ class MarketTiming:
         if isinstance(index, str):
             index = self.state_list.index(index)
         return self.timing[index]
+
+    def validate(self):
+        for s in self.state_list:
+            if self[s]["start_time"] >= self.market_interval:
+                raise ValueError(f"Start time for state {s} is {self[s]['start_time']} which is >= the market interval of {self.market_interval}.")
 
 
 class Market(abc.ABC):
@@ -144,7 +151,7 @@ class Market(abc.ABC):
         )
         logger.info("market", self.market_name, "start_times: ", self.start_times)
         self.timestep = 0
-        self.current_start_time = self.start_times[self.timestep]
+        self.current_start_time : pd.Timestamp = self.start_times[self.timestep]
         self.last_state = None
         self.send_horizon_message = True  # Will send a message when timestamp is past the horizon
         self.market_timing = deepcopy(market_timing)
@@ -231,72 +238,6 @@ class Market(abc.ABC):
         """
         pass
 
-    def validate_market_timing(self) -> None:
-        """
-        Validate that the provided market timing. Specifically check:
-         - "states" keyword is present all states have the "start_time" and "duration" keys
-         - initial offset and initial state match
-         - total durations from all states are equal to the market_interval keyword
-        """
-        market_timing = self.market_timing
-        if not isinstance(market_timing, dict):
-            raise TypeError(f"Must submit market_timing as a dictionary, not {type(market_timing)}")
-        # Ensure the market_timing dict has the necessary keys (extraneous keys aren't penalized)
-        required_keys = ["states", "initial_offset", "initial_state", "market_interval"]
-        if set(required_keys) < set(market_timing.keys()):
-            # Construct error message for missing required keys
-            err_msg = f"Market timing dict must contain keys: {required_keys}."
-            details = f"(Passed {market_timing.keys()})"
-            raise KeyError(f"{err_msg} {details}")
-        # Ensure all states have the necessary keys (extraneous keys aren't penalized)
-        required_state_keys = ["start_time", "duration"]
-        allowed_units = ["year", "day", "hour", "minute", "second"]
-        for state, state_dict in market_timing["states"].items():
-            if set(state_dict.keys()) < set(required_state_keys):
-                # Provide clear error for missing required keys in a state
-                err_msg = f"Invalid keys for state {state}."
-                details = f"All state dicts must contain keys: {required_state_keys}."
-                raise KeyError(f"{err_msg} {details}")
-            # If units are included, they must be from a given set
-            if "unit" in state_dict:
-                if state_dict["unit"] not in allowed_units:
-                    # Provide clear error for invalid unit in a state
-                    invalid_unit = state_dict["unit"]
-                    err_msg = f"Invalid unit {invalid_unit} for state {state}."
-                    details = f"Valid unit choices are: {allowed_units}."
-                    raise KeyError(f"{err_msg} {details}")
-        # Ensure the starting state is specified (0 start time)
-        current_state = [
-            st for st, val in market_timing["states"].items() if val["start_time"] == 0
-        ]
-        # if len(current_state) != 1:
-        #     raise ValueError(f"Must include one and only one state with the start time of 0")
-        # else:
-        current_state = current_state[0]  # get key/string
-        # Check that start times and durations are all consistent
-        start_times = [val["start_time"] for val in market_timing["states"].values()]
-        current_time = 0
-        next_start = 0
-        for _change_idx in range(len(start_times) - 1):
-            duration = market_timing["states"][current_state]["duration"]
-            next_start = current_time + duration
-            # Search to see if any states have the next start time listed
-            found_next = False
-            for state, state_dict in market_timing["states"].items():
-                if math.isclose(state_dict["start_time"], next_start):
-                    current_state = state
-                    current_time = state_dict["start_time"]
-                    found_next = True
-            if not found_next:
-                raise ValueError(f"No state found with expected start time {next_start}")
-        # Finally, check if the total duration equals the market_interval
-        # (total is 'next_start' from above loop + final state's duration)
-        total_duration = next_start + market_timing["states"][current_state]["duration"]
-        if not math.isclose(total_duration, market_timing["market_interval"]):
-            err_msg = f"Total state durations of {next_start}"
-            market_interval = market_timing["market_interval"]
-            raise ValueError(f"{err_msg} do not match market_interval of {market_interval}")
-
     def move_to_next_state(self, *args, **kwargs) -> str:
         """
         Transitions to the next state in the state machine and updates
@@ -348,7 +289,7 @@ class Market(abc.ABC):
 
     def interpolate_market_start_times(
         self, start_date, end_date, freq="24h", start_time=" 00:00:00"
-    ):
+    ) -> pd.DatetimeIndex:
         """Interpolates 24 (by default) hourly data between two date strings."""
 
         # Convert strings to datetime objects
