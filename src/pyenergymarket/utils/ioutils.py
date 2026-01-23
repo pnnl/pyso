@@ -4,6 +4,8 @@ place here.
 
 import logging
 import sys
+import copy
+from typing import Mapping
 
 
 def merge_configs(defaults: dict, user: dict, level=0):
@@ -23,6 +25,23 @@ def merge_configs(defaults: dict, user: dict, level=0):
             else:
                 defaults[k] = v
 
+def merge_dicts(d1:dict, d2:dict) -> dict:
+    """Recursively merges two dictionaries.
+
+    Args:
+        d1 (dict): The first dictionary to merge. This is typically the base dictionary.
+        d2 (dict): The second dictionary to merge. This dictionary's values will overwrite those in d1 where there are conflicts.
+
+    Returns:
+        dict: A new dictionary which is the result of merging d2 into d1.
+    """
+    merged = copy.deepcopy(d1)
+    for k, v in d2.items():
+        if isinstance(v, Mapping):
+            merged[k] = merge_dicts(merged.get(k, {}), v)
+        else:
+            merged[k] = v
+    return merged
 
 def format_filename(datetime_str):
     """formats a filename for use with the solved market model based on the current market time.
