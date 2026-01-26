@@ -227,7 +227,7 @@ def create_egret_md(md: dict, ts: dict):
             "conversion to time series will require modification of Egret to support "
             "time_series in all parameters."
         )
-    ref_unixtime = (ts["timestamp"][0] + ts["timestamp"][-1]) // 2
+    ref_unixtime = np.floor(np.mean([ts["timestamp"][0],ts["timestamp"][-1]]))
     for _h, elem in md["elements"]["branch"].items():
         for k, v in elem.items():
             if not is_persistent_time_series(v):
