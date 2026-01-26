@@ -11,31 +11,106 @@ can be called as methods. (This may not be a hard assumption.)
 trevor.hardy@pnnl.gov
 """
 
-import datetime as dt
-import logging
-import math
+import abc
+import os
+from collections import deque
+from copy import deepcopy
+from typing import Union
 
 import numpy as np
 import pandas as pd
 from transitions import Machine
 
-from ..engine import EnergyMarket
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.WARNING)
+from pyenergymarket.engine import EnergyMarket
+from pyenergymarket.utils.ioutils import Logger, merge_dicts
 
 
-class Market:
+class MarketTiming:
+    """Class that defines the timing of various market states
+    """
+    def __init__(self,
+                 market_interval:Union[pd.Timedelta, int],
+                 timing:list[dict],
+                 time_unit = "hour",
+                 initial_offset=0, **kwargs):
+        """initialize market timing class indicating interval and the timing
+        definition.
+
+        Note:
+            The units for all timing, interval etc. are currently not fixed.
+            This is because some may work with integer counters, while others
+            with timedelta objects.
+
+        Args:
+            market_interval (Any): Duration of one cycle through the state timing list
+            timing (list[dict]): list of states within a market cycle (in ORDER).
+                                 each entry must have the following keys:
+                                     - name (str): name of the state
+                                     - start_time: the time within the market interval where this state is transitioned into.
+            initial_offset (optional, int): this gets added to the first state transition calculation. Probably just keep it 0.
+        """
+
+        self.time_unit = time_unit
+        self.intial_offset=self.ensure_timedelta(initial_offset)
+        self.market_interval = self.ensure_timedelta(market_interval)
+        self.timing = deepcopy(timing)
+
+        ## calculate duration
+        for i, d in enumerate(reversed(self.timing)):
+            # ensure timedelta
+            d["start_time"] = self.ensure_timedelta(d["start_time"], unit=d.get("unit", ""))
+            if i == 0:
+                d["duration"] = self.market_interval - d["start_time"]
+            else:
+                d["duration"] = self.timing[-i]["start_time"] - d["start_time"]
+
+        self.validate()
+
+    def ensure_timedelta(self, v:Union[int, pd.Timedelta], unit:str="") -> pd.Timedelta:
+        if isinstance(v, pd.Timedelta):
+            return v
+        else:
+            if not unit:
+                unit = self.time_unit
+            return pd.Timedelta(v, unit=unit)
+
+    @property
+    def state_list(self) -> list[str]:
+        return [d["name"] for d in self.timing]
+
+
+    def __getitem__(self, index:Union[int, str]) -> dict:
+        """return the timing dictionary for a particular state
+
+        Args:
+            index (Union[int, str]): if int, the order of the state.
+                                     if str, the name of the state.
+
+        Returns:
+            dict: the state timing dictionary
+        """
+        if isinstance(index, str):
+            index = self.state_list.index(index)
+        return self.timing[index]
+
+    def validate(self):
+
+        ## first state must start at time 0
+        if self[0]["start_time"] != pd.Timedelta(0):
+            raise ValueError(f"The start time for the first state {self[0]['name']} must be 0.")
+
+        ## no start time greater than the market interval
+        for s in self.state_list:
+            if self[s]["start_time"] >= self.market_interval:
+                raise ValueError(f"Start time for state {s} is {self[s]['start_time']} which is >= the market interval of {self.market_interval}.")
+
+
+
+class AbstractMarket(abc.ABC):
     """
 
-    For the off-shore-wind use case, we only need three market states so
-    those will be hard-coded as below. The way this market works, all of
-    the activity of the market takes place at the transitions. I'm
-    (TDH) using the "transitions" library which allows the definition
-    of callback functions when entering (and exiting) any given state
-    and this is the primary method by which the activity will in the
-    market will take place.
+    Abstract market class to handle various market phases using
+    a state machine.
 
     Documentation on the "transitions" library can be found here:
     https://pypi.org/project/transitions/
@@ -52,218 +127,179 @@ class Market:
 
     """
 
-    pass
-
     def __init__(
         self,
-        market_name,
-        market_timing,
-        start_date,
-        end_date,
+        market_name:str,
+        market_timing:Union[MarketTiming, dict],
+        start_time:Union[pd.Timestamp,str],
+        end_time:Union[pd.Timestamp,str],
         market: EnergyMarket,
-        local_save=False,
+        logging = None,
+        history_maxlen = 10,
         **kwargs,
     ):
-        """
-        Generic version of all the markets used in the E-COMP LDRD initiative.
-        As such, this is fairly particular to those needs and is
-        correspondingly simple. When update_market is called, the market
-        state machine moves to the next state and the time for the next
-        market transition is called. This is all just logistics for running
-        the market.
+        """Initializes a market object with state machine
 
-        The real magic of this happens when you sub-class this and add in
-        callback methods that are called when entering particular states.
-
+        Args:
+            market_name (str): name for the market (maily for logging etc.)
+            market_timing (Union[MarketTiming, dict]): Market timing description of the states.
+                Note that `bidding` and `clearing` are **assumed** to be states and have callbacks
+                attached automatically.
+            start_time (Union[pd.Timestamp,str]): The market iterates through time starting at this timestamp
+            end_time (Union[pd.Timestamp,str]): When the next state time is this timestamp or greater, the market finalizes
+            market (EnergyMarket): underlying EnergyMarket instance to solve the market.
+            logging (dict, optional): logging settings. Defaults to {}.
+            history_maxlen (int, optional): maximum length of state history queue. Defaults to 10.
         """
+        if logging is None:
+            logging = {}
+        self.logger = Logger(**merge_dicts({"name": "Market", "level": "WARNING"}, logging))
         self.em = market
         self.market_name = market_name
-        self.current_state = market_timing["initial_state"]
-        # Calculate market frequency from configuration
-        min_freq = self.em.configuration["time"]["min_freq"]
-        time_window = self.em.configuration["time"]["window"]
-        # Calculate market frequency based on time window and min frequency
-        market_frequency = f"{min_freq * time_window}min"
-        # Create list of market start times based on frequency
-        self.start_times = self.interpolate_market_start_times(
-            start_date, end_date, freq=market_frequency
-        )
-        logger.info("market", self.market_name, "start_times: ", self.start_times)
-        self.timestep = 0
-        self.current_start_time = self.start_times[self.timestep]
-        self.last_state = None
+        self.market_timing = market_timing if isinstance(market_timing, MarketTiming) else MarketTiming(**market_timing)
+        self.start_time = pd.Timestamp(start_time)
+        self.end_time = pd.Timestamp(end_time)
+
         self.send_horizon_message = True  # Will send a message when timestamp is past the horizon
-        self.market_timing = market_timing
         self.market_results = None
 
+        self.history = deque(maxlen=history_maxlen)
         self.add_state_machine()
 
-        # Default settings for various user inputs
-        self.commitment_hist = None
-        self.storage_soc = None
-        self.pre_simulation_days = None
-        self.local_save = local_save
+        self._current_time = None
 
-        # This translates all the kwarg key-value pairs into class attributes
-        self.__dict__.update(kwargs)
+    @property
+    def state_list(self) -> list[str]:
+        return self.market_timing.state_list
+
+    @property
+    def current_time(self):
+        """the current market time"""
+        return self._current_time
+
+    @current_time.setter
+    def current_time(self, t:pd.Timestamp):
+        """sets the current market time.
+        If this time is equal to the next state time,
+        the move is triggered.
+
+        Args:
+            t (pd.Timestamp): _description_
+        """
+        if self.current_time is not None:
+            # check that we are moving forward (or staying in place)
+            if t < self.current_time:
+                raise ValueError(f"Time must be monotonically increasing. Current time is {self.current_time} and received {t}.")
+        self._current_time = t
+        self.logger.debug(f"[current_time setter] setting current time to {t} | next_state_time = {self.next_state_time}")
+        while (not self.is_final) and (self.current_time >= self.next_state_time):
+            self.logger.debug(f"[current_time setter] calling move_to_next_state at time {t}")
+            self.move_to_next_state()
 
     def add_state_machine(self):
         """
         This creates and adds a transitions state machine object to the market.
-        The state machine handles timing checks and transitions.
+        The state machine calls callback functions that act the market moves from
+        state to state.
 
-        Relies on the self.market_timing dict (an input argument for __init__)
-        This dictionary provides the different state information, including start times and
-        durations (default unit is second, can be set to year, day, hour, minute, second).
-        Format example is given below:
-
-            {
-            "states": {
-                "idle": {
-                    "start_time": 0,
-                    "duration": 42660,
-                    "unit": "second"
-                },
-                "bidding": {
-                    "start_time": 42660,
-                    "duration": 540,
-                    "unit": "second"
-                },
-                "clearing": {
-                    "start_time": 43200,
-                    "duration": 43200,
-                    "unit": "second"
-                },
-            },
-            # How many seconds into the interval to start (0=start of interval)
-            "initial_offset": 0,
-            # Initial state (should match initial offset)
-            "initial_state": "idle",
-            # Total length of interval (must equal sum of all durations)
-            "market_interval": 86400
-        }
+        Relies on self.market_timing.timing that provides the state order and duration.
+        (note duration is calculated internally by the MarketTiming class).
         """
-        # Check that market timing dictionary fits expected format
-        self.validate_market_timing()
+
         # Set up all of the time tracking object
-        self.timestep = 0
-        self.current_start_time = self.start_times[self.timestep]
-        self.current_state = self.market_timing["initial_state"]
+        # self.timestep = 0
+        # self.current_start_time = self.start_times[self.timestep]
+        # self.current_state = "initialization"
         self.last_state = None
-        self.last_state_time = 0
-        self.next_state_time = 0
+        # self.last_state_time = 0
+        self.next_state_time = self.start_time
         # Add the state machine
-        self.state_list = list(self.market_timing["states"].keys())
-        self.state_machine = Machine(model=self, states=self.state_list, initial=self.current_state)
-        self.state_machine.add_ordered_transitions()
-        # Adding definitions for state transition callbacks
-        # These are automatically executed on state transitions
+        self.state_machine = Machine(model=self,
+                                     states=["initialization", {"name": "finalization", "final": True}] + self.state_list,
+                                     initial="initialization",
+                                     send_event=True,
+                                     before_state_change="track_state",
+                                     after_state_change="update_market")
+        # create ordered transitions between the market states (excludes initialization and finalization)
+        self.state_machine.add_ordered_transitions(self.state_list)
+
+        # add a transition from initialization to the first state
+        self.state_machine.add_transition(trigger="initialize", source="initialization", dest=self.state_list[0])
+
+        # add a transition to the final state
+        self.state_machine.add_transition(trigger="finalize", source=self.state_list, dest="finalization")
+
+        ## specify the initialization callback
+        self.state_machine.on_exit_initialization("do_initialization")
+        ## specify the finalization callback
+        self.state_machine.on_enter_finalization("do_finalization")
+
+        ## specify market stages callbacks
         self.state_machine.on_enter_bidding("collect_bids")
         self.state_machine.on_enter_clearing("clear_market")
         self.state_machine.on_exit_clearing("publish_results")
 
-    def validate_market_timing(self) -> None:
+    @property
+    def current_state(self) -> str:
+        """returns the current state machine state
         """
-        Validate that the provided market timing. Specifically check:
-         - "states" keyword is present all states have the "start_time" and "duration" keys
-         - initial offset and initial state match
-         - total durations from all states are equal to the market_interval keyword
+        return self.state
+
+    @property
+    def is_final(self) -> bool:
+        """Returns True if the model is in the `finalization` state.
         """
-        market_timing = self.market_timing
-        if not isinstance(market_timing, dict):
-            raise TypeError(f"Must submit market_timing as a dictionary, not {type(market_timing)}")
-        # Ensure the market_timing dict has the necessary keys (extraneous keys aren't penalized)
-        required_keys = ["states", "initial_offset", "initial_state", "market_interval"]
-        if set(required_keys) < set(market_timing.keys()):
-            # Construct error message for missing required keys
-            err_msg = f"Market timing dict must contain keys: {required_keys}."
-            details = f"(Passed {market_timing.keys()})"
-            raise KeyError(f"{err_msg} {details}")
-        # Ensure all states have the necessary keys (extraneous keys aren't penalized)
-        required_state_keys = ["start_time", "duration"]
-        allowed_units = ["year", "day", "hour", "minute", "second"]
-        for state, state_dict in market_timing["states"].items():
-            if set(state_dict.keys()) < set(required_state_keys):
-                # Provide clear error for missing required keys in a state
-                err_msg = f"Invalid keys for state {state}."
-                details = f"All state dicts must contain keys: {required_state_keys}."
-                raise KeyError(f"{err_msg} {details}")
-            # If units are included, they must be from a given set
-            if "unit" in state_dict:
-                if state_dict["unit"] not in allowed_units:
-                    # Provide clear error for invalid unit in a state
-                    invalid_unit = state_dict["unit"]
-                    err_msg = f"Invalid unit {invalid_unit} for state {state}."
-                    details = f"Valid unit choices are: {allowed_units}."
-                    raise KeyError(f"{err_msg} {details}")
-        # Ensure the starting state is specified (0 start time)
-        current_state = [
-            st for st, val in market_timing["states"].items() if val["start_time"] == 0
-        ]
-        # if len(current_state) != 1:
-        #     raise ValueError(f"Must include one and only one state with the start time of 0")
-        # else:
-        current_state = current_state[0]  # get key/string
-        # Check that start times and durations are all consistent
-        start_times = [val["start_time"] for val in market_timing["states"].values()]
-        current_time = 0
-        next_start = 0
-        for _change_idx in range(len(start_times) - 1):
-            duration = market_timing["states"][current_state]["duration"]
-            next_start = current_time + duration
-            # Search to see if any states have the next start time listed
-            found_next = False
-            for state, state_dict in market_timing["states"].items():
-                if math.isclose(state_dict["start_time"], next_start):
-                    current_state = state
-                    current_time = state_dict["start_time"]
-                    found_next = True
-            if not found_next:
-                raise ValueError(f"No state found with expected start time {next_start}")
-        # Finally, check if the total duration equals the market_interval
-        # (total is 'next_start' from above loop + final state's duration)
-        total_duration = next_start + market_timing["states"][current_state]["duration"]
-        if not math.isclose(total_duration, market_timing["market_interval"]):
-            err_msg = f"Total state durations of {next_start}"
-            market_interval = market_timing["market_interval"]
-            raise ValueError(f"{err_msg} do not match market_interval of {market_interval}")
+        return self.state_machine.get_state(self.state).final
+
+    def track_state(self, event):
+        """This method is called *before* every transition is executed.
+        it is used to track/update the state history
+        """
+        self.history.appendleft({"time": self.current_time,
+                                 "source": event.transition.source,
+                                 "dest": event.transition.dest})
+        self.logger.debug(f"[track_state] {self.market_name} latest transition: {self.history[0]}")
+
+    @abc.abstractmethod
+    def do_initialization(self, *args, **kwargs) -> None:
+        """This method executes any necessary initialization steps
+        """
+        pass
+
+    @abc.abstractmethod
+    def do_finalization(self, *args, **kwargs) -> None:
+        """This method executes at the end of the simulation, and can capture
+        any necessary finalization steps.
+        """
+        pass
 
     def move_to_next_state(self, *args, **kwargs) -> str:
         """
         Transitions to the next state in the state machine and updates
         appropriate object parameters.
-        Input arguments and kwargs can be provided for the function call to the next state
+        The ability to pass arguments and kwargs to the callbacks is not currently implemented.
         """
         # Store previous state, move states, then update current state
-        # Note: transitions automatically execute methods specified in add_state_machine
+            # Note: transitions automatically execute methods specified in add_state_machine
         self.last_state = self.current_state
-        self.next_state(*args, **kwargs)
-        self.current_state = self.state
-        logger.debug(self.market_name, "Last state:", self.last_state)
-        logger.debug(self.market_name, "Next state:", self.current_state)
-        logger.info(f"{self.market_name} moved from {self.last_state} to {self.current_state}")
+        if self.current_state == "initialization":
+            ## just getting started, do intialization
+            self.logger.debug(f"[move_to_next_state] calling initialization callback at time {self.current_time}")
+            self.initialize()
+        elif self.next_state_time >= self.end_time:
+            ## reached the end, finalize
+            self.logger.debug(f"[move_to_next_state] calling finalization callback at time {self.current_time}")
+            self.finalize()
+        else:
+            ## next state will call any state specific callbacks.
+            ## it also calls the transition callback which is update_market.
+            self.logger.debug(f"[move_to_next_state] calling next_state callback at time {self.current_time}")
+            self.next_state()
+        # self.current_state = self.state
+        # self.logger.info(f"[move_to_next_state]{self.market_name} moved from {self.last_state} to {self.current_state}")
         return self.current_state
 
-    def calculate_next_state_time(self, return_last=True) -> tuple[float, float]:
-        """
-        Calculate the value of the next state in terms of simulation time
-        based on the timing of the next state in the state machine.
-        """
-        last_state_time = self.last_state_time
-        # Calculate next state time based on current state duration, last time, and initial offset
-        current_state_duration = self.market_timing["states"][self.current_state]["duration"]
-        initial_offset = self.market_timing["initial_offset"]
-        self.next_state_time = current_state_duration + last_state_time + initial_offset
-        # Initial offset only matters on first pass (included above).
-        # After first pass, set to 0 for correct timing
-        self.market_timing["initial_offset"] = 0
-        logger.info(f"{self.market_name}.next_state_time: {self.next_state_time}")
-        if return_last:
-            return last_state_time, self.next_state_time
-        else:
-            return self.next_state_time
-
-    def update_market(self):
+    def update_market(self, event):
         """
         This method drives the state machine which drives all the other
         functionality via callbacks.
@@ -273,67 +309,114 @@ class Market:
         that check is done by the instantiating object and it is assumed
         when this method is called, it's time to move to the next state
         """
-        _, next_state_time = self.calculate_next_state_time()
-        self.last_state_time = next_state_time
-        return next_state_time  # current time
 
-    def interpolate_market_start_times(
-        self, start_date, end_date, freq="24h", start_time=" 00:00:00"
-    ):
-        """Interpolates 24 (by default) hourly data between two date strings."""
+        if not self.is_final:
+            # update the time for the next state
+            self.next_state_time += self.market_timing[self.current_state].get("duration", pd.Timedelta(0))
+            self.logger.debug(f"[update_market] {self.market_name} next state time is {self.next_state_time}. Current time is {self.current_time}")
 
-        # Convert strings to datetime objects
-        start_datetime = pd.to_datetime(start_date + start_time)
-        end_datetime = pd.to_datetime(end_date + start_time)
 
-        # Generate hourly datetime index
-        start_time_index = pd.date_range(start_datetime, end_datetime, freq=freq, inclusive="left")
-        return start_time_index
+    def market_loop(self, res:Union[pd.Timedelta,None]=None):
+        """Loop of the time instances of the market, beginning with
+        start_time until the finalization state is reached.
+        If res is None, the loop will move directly to the next state time.
+        If res is provided as a pandas Timedelta object, the loop will progress
+        with this resolution.
 
-    def collect_bids(self):
-        """
-        Callback method to pull in data.
-
-        This method must be overloaded in an instance of this class to
-        implement the necessary operations to collect the bids in question.
-        """
-
-    def publish_results(self):
-        """
-        Method to publish results from clear_market method.
-
-        This method must be overloaded in an instance of this class to
-        implement the necessary operations to publish the results in question.
-        """
-
-    def clear_market(self, local_save=False, contingency_list=None):
-        """
-        Callback method that runs EGRET and clears a market.
-
-        This method must be overloaded in an instance of this class to
-        implement the necessary operates to clear the market in question.
+        A simple market can run with
+        ```
+        for t in market.market_loop():
+            market.current_time = t
+        ```
 
         Args:
-            local_save (bool, optional): if True, will save a JSON with the results at each timestep
-        """
-        # Don't run market if this start time exceeds the start time list
-        if not self.valid_time_horizon():
-            return
+            res (Union[pd.Timedelta,None], optional): time loop resolution. Defaults to None.
 
-        self.em.get_model(self.current_start_time)
+        Yields:
+            pd.Timestamp: the next time in the loop.
+        """
+        t0 = self.start_time
+        while not self.is_final:
+            if res is None:
+                yield t0
+                t0 = self.next_state_time
+            else:
+                yield t0
+                t0 += res
+
+    @abc.abstractmethod
+    def collect_bids(self, event):
+        """
+        Callback method to pull in data.
+        """
+        pass
+
+    @abc.abstractmethod
+    def publish_results(self, event):
+        """
+        Method to publish results at the end of the clearing state.
+        """
+        pass
+
+    @abc.abstractmethod
+    def clear_market(self, event):
+        """
+        Callback method to clear a market in EGRET.
+        This is usually the method to call the solve method
+        of the attached EnergyMarket.
+        """
+        pass
+
+class BasicMarket(AbstractMarket):
+
+    def __init__(self, market_name:str, market_timing:Union[MarketTiming, dict],
+                 start_time:Union[pd.Timestamp, str], end_time:Union[pd.Timestamp, str],
+                 market:EnergyMarket, local_save = None, logging=None, history_maxlen=10, **kwargs):
+        if logging is None:
+            logging = {}
+        if local_save is None:
+            local_save = {}
+        super().__init__(market_name, market_timing, start_time, end_time, market, logging, history_maxlen, **kwargs)
+        self.local_save = merge_dicts({"save": False, "path": "", "ext": ".json.gz"}, local_save)
+
+        self.market_clearing_counter = 0
+
+        ## OLD PARAMETERS, CONSIDER REMOVING
+        # Default settings for various user inputs
+        self.commitment_hist = None
+        self.storage_soc = None
+        self.pre_simulation_days = None
+
+
+    def do_initialization(self, *args, **kwargs):
+        pass
+
+    def do_finalization(self, *args, **kwargs):
+        pass
+
+    def collect_bids(self, event):
+        """Initialize the model at the current time.
+        """
+        ## initialize model
+        self.em.get_model(self.current_time)
         # Modifications to model before solve, depending on use-case
         self.em.update_initial_conditions(self.em.mdl_sol)
+
+    def clear_market(self, event):
+        """Solve the market model
+        """
+        ## solve the model
         self.em.solve_model()
-        if local_save:
-            self.em.save_model(f"data/{self.market_name}_results_{self.timestep}.json")
         self.market_results = self.em.mdl_sol
-        self.timestep += 1
-        if self.timestep >= len(self.start_times):
-            # Add a day (exact value doesn't matter, just need something past the horizon)
-            self.current_start_time += dt.timedelta(days=1)
-        else:
-            self.current_start_time = self.start_times[self.timestep]
-        logger.info("Market ", self.market_name, "next start time: ", self.current_start_time)
+
+    def publish_results(self, event):
+        """Save the results
+        """
+        if self.local_save["save"]:
+            self.em.save_model(os.path.join(self.local_save["path"], f"{self.market_name}_results_{self.market_clearing_counter}{self.local_save['ext']}"))
+        self.market_clearing_counter += 1
+
+    ### THE METHODS BELOW ARE OLDER AND MAY NEED TO BE REMOVED.
 
     def reset_timestep(self, timestep=0, shift_commitment=True):
         """Resets the timestep to 0 (option to fix to a different value)
@@ -379,7 +462,7 @@ class Market:
                 info_msg = (
                     f"Current start time {self.current_start_time} is past horizon {horizon_time}"
                 )
-                logger.info(f"{info_msg} Market will not be cleared")
+                self.logger.info(f"{info_msg} Market will not be cleared")
                 self.send_horizon_message = False  # Only send warning once
             return False
         return True
@@ -517,6 +600,8 @@ class Market:
                     target_path = self.commitment_hist[etype][unit]["commitment"]
                     target_path["values"] = commit_values_all_sort
         self.commitment_hist["timestamps"] = sorted(commit_times_all)
+
+
 
 
 def sort_array(ref_array, paired_array):
