@@ -12,7 +12,9 @@ THIS_DIR = os.path.split(__file__)[0]
 
 class NoActionMarket(AbstractMarket):
 
-    def __init__(self, market_name, market_timing, start_date, end_date, market, logging={"level":"DEBUG"}, history_maxlen=10, **kwargs):
+    def __init__(self, market_name, market_timing, start_date, end_date, market, logging=None, history_maxlen=10, **kwargs):
+        if logging is None:
+            logging = {"level": "DEBUG"}
         super().__init__(market_name, market_timing, start_date, end_date, market, logging, history_maxlen, **kwargs)
 
     def do_initialization(self, *args, **kwargs):

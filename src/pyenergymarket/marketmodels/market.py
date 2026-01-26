@@ -35,7 +35,7 @@ class MarketTiming:
                  initial_offset=0, **kwargs):
         """initialize market timing class indicating interval and the timing
         definition.
-        
+
         Note:
             The units for all timing, interval etc. are currently not fixed.
             This is because some may work with integer counters, while others
@@ -97,7 +97,7 @@ class MarketTiming:
 
         ## first state must start at time 0
         if self[0]["start_time"] != pd.Timedelta(0):
-            raise ValueError(f"The start time for the first state {self[s]['name']} must be 0.")
+            raise ValueError(f"The start time for the first state {self[0]['name']} must be 0.")
 
         ## no start time greater than the market interval
         for s in self.state_list:
@@ -109,7 +109,7 @@ class MarketTiming:
 class AbstractMarket(abc.ABC):
     """
 
-    Abstract market class to handle various market phases using 
+    Abstract market class to handle various market phases using
     a state machine.
 
     Documentation on the "transitions" library can be found here:
@@ -134,7 +134,7 @@ class AbstractMarket(abc.ABC):
         start_time:Union[pd.Timestamp,str],
         end_time:Union[pd.Timestamp,str],
         market: EnergyMarket,
-        logging = {},
+        logging = None,
         history_maxlen = 10,
         **kwargs,
     ):
@@ -151,6 +151,8 @@ class AbstractMarket(abc.ABC):
             logging (dict, optional): logging settings. Defaults to {}.
             history_maxlen (int, optional): maximum length of state history queue. Defaults to 10.
         """
+        if logging is None:
+            logging = {}
         self.logger = Logger(**merge_dicts({"name": "Market", "level": "WARNING"}, logging))
         self.em = market
         self.market_name = market_name
@@ -178,7 +180,7 @@ class AbstractMarket(abc.ABC):
     @current_time.setter
     def current_time(self, t:pd.Timestamp):
         """sets the current market time.
-        If this time is equal to the next state time, 
+        If this time is equal to the next state time,
         the move is triggered.
 
         Args:
@@ -314,8 +316,8 @@ class AbstractMarket(abc.ABC):
             self.logger.debug(f"[update_market] {self.market_name} next state time is {self.next_state_time}. Current time is {self.current_time}")
 
 
-    def market_loop(self, res:Union[pd.Timedelta,None]=None) -> pd.Timestamp:
-        """Loop of the time instances of the market, beginning with 
+    def market_loop(self, res:Union[pd.Timedelta,None]=None):
+        """Loop of the time instances of the market, beginning with
         start_time until the finalization state is reached.
         If res is None, the loop will move directly to the next state time.
         If res is provided as a pandas Timedelta object, the loop will progress
@@ -369,7 +371,11 @@ class BasicMarket(AbstractMarket):
 
     def __init__(self, market_name:str, market_timing:Union[MarketTiming, dict],
                  start_time:Union[pd.Timestamp, str], end_time:Union[pd.Timestamp, str],
-                 market:EnergyMarket, local_save = {}, logging={}, history_maxlen=10, **kwargs):
+                 market:EnergyMarket, local_save = None, logging=None, history_maxlen=10, **kwargs):
+        if logging is None:
+            logging = {}
+        if local_save is None:
+            local_save = {}
         super().__init__(market_name, market_timing, start_time, end_time, market, logging, history_maxlen, **kwargs)
         self.local_save = merge_dicts({"save": False, "path": "", "ext": ".json.gz"}, local_save)
 

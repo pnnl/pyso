@@ -141,6 +141,7 @@ class TSO(abc.ABC):
         simulation_wallclock = t1 - t0
         logger.info(f"Simulation complete.\nTotal computation time is {simulation_wallclock:.2f}s")
 
+    @abc.abstractmethod
     def write_results(self):
         pass
 
