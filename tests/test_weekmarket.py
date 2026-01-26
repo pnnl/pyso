@@ -5,9 +5,10 @@ import numpy as np
 from utilities import find_solver
 
 from pyenergymarket import EnergyMarket
-from pyenergymarket.marketmodels.market import Market
+from pyenergymarket.marketmodels.market import BasicMarket
 from pyenergymarket.parsers.egretparser import EgretProvider
 from pyenergymarket.utils.timeutils import count_onoff
+from egret.data.model_data import ModelData
 
 THIS_DIR = os.path.split(__file__)[0]
 
@@ -18,8 +19,6 @@ def setup_market():
 
     egretprovider = EgretProvider(datapath)
     solver = find_solver()
-
-    ## This should run 4 instances of the market sequentially.
 
     ## initialize Market Engine
     emconfig = {
@@ -36,57 +35,20 @@ def setup_market():
     }
     em = EnergyMarket(egretprovider, config=emconfig)
 
-    market_timing = {
-        "states": {
-            "clearing": {"start_time": 0, "duration": 3, "unit": "hour"},
-            "idle": {"start_time": 3, "duration": 18, "unit": "hour"},
-            "bidding": {"start_time": 21, "duration": 3, "unit": "hour"},
-        },
-        "initial_offset": 0,
-        "initial_state": "idle",
-        "market_interval": em.configuration["time"]["window"],
-    }
+    market_timing = {"market_interval": em.configuration["time"]["window"],
+                     "time_unit": "hour",
+                     "timing":[
+                          {"name": "bidding", "start_time": 0},
+                          {"name": "clearing", "start_time": 1},
+                          {"name": "idle", "start_time": 2}
+                     ]
+                     }
 
     start_time = "2025-12-10 00:00:00"
     end_time = "2025-12-17 23:00:00"
-    market = Market("test_week_market", market_timing, start_time, end_time, em)
+    market = BasicMarket("test_week_market", market_timing, start_time, end_time, em, 
+                         local_save={"save": True, "path": THIS_DIR, "ext": ".json"})
     return market
-
-
-def simulate(market):
-    """Runs a test simulation with options specified"""
-    horizon_reached = False
-    # Run the simulation until the market end horizon is reached
-    cnt = 0
-    simulation_time = 0
-    while not horizon_reached:
-        market_cleared = run_market(market, simulation_time)
-        if market_cleared:
-            market.em.save_model(os.path.join(THIS_DIR, f"test_week_market_results_{cnt}.json"))
-            cnt += 1
-        # Increment time by one hour
-        simulation_time += 1
-        if simulation_time >= 24 * 7:
-            horizon_reached = True
-
-
-def run_market(market, simulation_time):
-    """Uses the market transition methods to clear the market
-    Returns:
-        market_cleared (bool): True if a market was run, otherwise False
-    """
-    # Selects the market object from the saved dictionary
-    market_cleared = False
-    # First check if we have hit a transition point (simulation time == next state time)
-    if simulation_time == market.next_state_time:
-        # Advance the market state
-        market.move_to_next_state()
-        # If we are in clearing, adjust return boolean
-        if market.current_state == "clearing":
-            market_cleared = True
-        # Updates the market.next_state_time
-        market.update_market()
-    return market_cleared
 
 
 def sequential_pass_testing(fstart, ndays=6):
@@ -95,25 +57,30 @@ def sequential_pass_testing(fstart, ndays=6):
     """
     for day in range(ndays):
         # Open the given day
-        with open(os.path.join(THIS_DIR, f"{fstart}_{day}.json")) as f:
-            first_solution = json.load(f)
+        # with open(os.path.join(THIS_DIR, f"{fstart}_{day}.json")) as f:
+        #     first_solution = json.load(f)
+        first_solution = ModelData(os.path.join(THIS_DIR, f"{fstart}_{day}.json"))
         # Open the next day
-        with open(os.path.join(THIS_DIR, f"{fstart}_{day + 1}.json")) as f:
-            second_solution = json.load(f)
+        # with open(os.path.join(THIS_DIR, f"{fstart}_{day + 1}.json")) as f:
+        #     second_solution = json.load(f)
+        second_solution = ModelData(os.path.join(THIS_DIR, f"{fstart}_{day + 1}.json"))
         # Check that initial power from day 2 come from the end of day1
-        tstart = second_solution["system"]["time_keys"][0]
-        tend = int(np.argmin(np.array(first_solution["system"]["time_keys"]) < tstart)) - 1
-        for g in second_solution["elements"]["generator"]:
+        tstart = second_solution.data["system"]["time_keys"][0]
+        tend = int(np.argmin(np.array(first_solution.data["system"]["time_keys"]) < tstart)) - 1
+        # for g in second_solution["elements"]["generator"]:
+        for g, gdict in second_solution.elements("generator"):
             # Check power
-            p_init = second_solution["elements"]["generator"][g]["initial_p_output"]
-            p_end = first_solution["elements"]["generator"][g]["pg"]["values"][tend]
+            # p_init = second_solution["elements"]["generator"][g]["initial_p_output"]
+            p_init = gdict["initial_p_output"]
+            p_end = first_solution.data["elements"]["generator"][g]["pg"]["values"][tend]
             assert p_init == p_end, (
                 f"Initial power on day {day + 1} does not match final power from day {day} "
                 f"for generator {g}."
             )
             # Check status
-            s_init = second_solution["elements"]["generator"][g]["initial_status"]
-            s_end = count_onoff(first_solution["elements"]["generator"][g], 23)
+            # s_init = second_solution["elements"]["generator"][g]["initial_status"]
+            s_init = gdict["initial_status"]
+            s_end = count_onoff(first_solution.data["elements"]["generator"][g], 23)
             assert s_init == s_end, (
                 f"Initial status on day {day + 1} does not match final status on day {day} "
                 f"for generator {g}."
@@ -128,7 +95,9 @@ def sequential_pass_testing(fstart, ndays=6):
 def test_weekmarket():
     market = setup_market()
     # Set up a loop to run through a day and check results
-    simulate(market)
+    for t in market.market_loop():
+        market.current_time = t
+    # simulate(market)
     # This checks that data is passed between results, then deletes the files
     sequential_pass_testing("test_week_market_results")
 
