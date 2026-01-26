@@ -11,6 +11,10 @@ import pandas as pd
 from egret.data.model_data import ModelData
 
 from pyenergymarket.engine import DataProvider
+from pyenergymarket.utils.ioutils import Logger
+
+# Initialize logger
+logger = Logger("naermparser")
 
 ########
 # Helper functions
@@ -30,13 +34,15 @@ def read_json_gzip(file_path: str):
             data = json.load(f)
         return data
     except FileNotFoundError:
-        print(f"Error: File not found at {file_path}")
+        logger.error(f"Error: File not found at {file_path}")
         return None
     except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from {file_path}. Ensure it's a valid JSON file.")
+        logger.error(
+            f"Error: Could not decode JSON from {file_path}. Ensure it's a valid JSON file."
+        )
         return None
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        logger.error(f"An unexpected error occurred: {e}")
         return None
 
 
@@ -172,10 +178,9 @@ def enforce_p_min_p_max_consistency(md_elem_gen: dict):
                 for i in idx_set:
                     gen["p_min"]["values"][i] = gen_p_max
     if len(corrected_gens) > 0:
-        print(
-            f"[warn] Removed {lost_production:.1f}MWh of generation to ensure consistency "
-            f"of p_min/p_max. Affected {len(corrected_gens)} generators:",
-            corrected_gens,
+        logger.warning(
+            f"Removed {lost_production:.1f}MWh of generation to ensure consistency "
+            f"of p_min/p_max. Affected {len(corrected_gens)} generators: {corrected_gens}"
         )
     return None
 
@@ -193,9 +198,8 @@ def remove_non_time_series(md_elem):
             if len(fixed_fields) > 0:
                 fixed_elem_fields.append((elem_k, list(k for k in fixed_fields)))
         if len(fixed_elem_fields) > 0:
-            print(
-                f"[warn] Fixed single-valued time series at {elem_type} with (key, properties) =",
-                fixed_elem_fields,
+            logger.warning(
+                f"Fixed single-valued time series at {elem_type} with (key, properties) = {fixed_elem_fields}"
             )
     return None
 
@@ -216,8 +220,8 @@ def create_egret_md(md: dict, ts: dict):
     # replace persistent time series for values
     # NOTE:
     if ts["timestamp"][-1] - ts["timestamp"][0] > 168 * 3600:
-        print(
-            "[warn] You have selected a date range spanning more than 1 week. Note that "
+        logger.warning(
+            "You have selected a date range spanning more than 1 week. Note that "
             "Persistent Time Series are converted to values instead of Egret time series, "
             "which works well for persistence beyond market clearing timelines. Supporting "
             "conversion to time series will require modification of Egret to support "
@@ -267,18 +271,18 @@ class TimeSeries:
         self.uid = read_str_array_from_h5(self.__ts_file_handle["uid"])
         self._timestamp = self.__ts_file_handle["timestamp"][:]
         self._values = self.__ts_file_handle["values"]
-    
+
     def __del__(self):
         """close HDF5 file"""
         self.__ts_file_handle.close()
-    
+
     def _unix_tmstamp_to_idx_forw(self, unix_tmstamp: int):
         """finds relative index of first timestamp equal or greater than unix_tmstamp"""
         idx = next((i for i, x in enumerate(self._timestamp) if x >= unix_tmstamp), None)
         if idx is None:
             raise ValueError(f"{unix_tmstamp} not contained within or after time series range")
         return idx
-    
+
     def _unix_tmstamp_to_idx_back(self, unix_tmstamp: int):
         """finds relative index of last timestamp equal or smaller than unix_tmstamp"""
         n = len(self._timestamp)
@@ -319,6 +323,7 @@ class TimeSeries:
         }
         return ts_dict
 
+
 ########
 # GPCM Interface helper functions
 ########
@@ -337,7 +342,8 @@ _ABBREV_TO_UTC_OFFSET = {
     # Eastern
     "EST": "-05:00",
     "EDT": "-04:00",
- }
+}
+
 
 def tz_abbrev_to_utc_offset(abbrev: str) -> str:
     """
@@ -374,19 +380,15 @@ def tz_abbrev_to_utc_offset(abbrev: str) -> str:
 
 
 def date_value_to_persistent_time_series(date_value_dict: dict, utc_shift: str):
-    out = {
-                "data_type" : "persistent_time_series",
-                "timestamps": [],
-                "values": []
-            }
+    out = {"data_type": "persistent_time_series", "timestamps": [], "values": []}
     for date, value in sorted(date_value_dict.items()):
-        timestamp = int(datetime.fromisoformat(f'{date}T00:00:00{utc_shift}').timestamp())
-        out['timestamps'].append(timestamp)
-        out['values'].append(value)
+        timestamp = int(datetime.fromisoformat(f"{date}T00:00:00{utc_shift}").timestamp())
+        out["timestamps"].append(timestamp)
+        out["values"].append(value)
     return out
 
 
-def parse_monthly_gas_prices(monthly_gas_prices_fname: str, tz_abbrev: str="EST"):
+def parse_monthly_gas_prices(monthly_gas_prices_fname: str, tz_abbrev: str = "EST"):
     """function to parse monthly gas prices coming from GPCM
     Args:
         monthly_gas_prices_fname (str): path to JSON gas prices file, structured as dict
@@ -395,36 +397,38 @@ def parse_monthly_gas_prices(monthly_gas_prices_fname: str, tz_abbrev: str="EST"
                                                 "yyyy-mm-dd": price, ...
                                             }
                                         }
-        tz_abbrev (str, optional): time zone used to go from yyyy-mm-dd to timestamp 
+        tz_abbrev (str, optional): time zone used to go from yyyy-mm-dd to timestamp
                                    (instead of relying on locale)
     """
-    
+
     # read JSON file with prices
     try:
-        with open(monthly_gas_prices_fname, 'r') as f:
+        with open(monthly_gas_prices_fname) as f:
             gas_prices = json.load(f)
     except FileNotFoundError:
-        print(f"Error: File not found at {file_path}")
+        logger.error(f"Error: File not found at {monthly_gas_prices_fname}")
         return None
     except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from {file_path}. Ensure it's a valid JSON file.")
+        logger.error(
+            f"Error: Could not decode JSON from {monthly_gas_prices_fname}. Ensure it's a valid JSON file."
+        )
         return None
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        logger.error(f"An unexpected error occurred: {e}")
         return None
-    
+
     # convert each value onto a persistent time series
     utc_shift = tz_abbrev_to_utc_offset(tz_abbrev)
     out = {}
     for k, v in gas_prices.items():
         out[int(k)] = date_value_to_persistent_time_series(v, utc_shift)
-    
+
     # return parsed file
     return out
 
 
 def is_gas_generator(gen: dict):
-    return 'NG' in gen.get('fuel', 'NA')
+    return "NG" in gen.get("fuel", "NA")
 
 
 ########
@@ -433,9 +437,9 @@ def is_gas_generator(gen: dict):
 
 
 class NAERMProvider(DataProvider):
-    
-    def __init__(self, static_fname: str, time_series_fname: str, \
-                 gas_prices_fname: Union[str, None]=None):
+    def __init__(
+        self, static_fname: str, time_series_fname: str, gas_prices_fname: Union[str, None] = None
+    ):
         """initialize the static structure and opens handle to time series data
         Args:
             static_fname (str): path to static information JSON (Egret precursor) file
@@ -457,37 +461,48 @@ class NAERMProvider(DataProvider):
                                     see parse_monthly_gas_prices for format details
         """
         # parse gas prices
-        gas_prices = parse_monthly_gas_prices(gas_prices_fname)       
+        gas_prices = parse_monthly_gas_prices(gas_prices_fname)
         # assign gas prices to gas generators using EIA plant IDs
         missing_generators = []
-        for gen_uid, gen in self.__static_data['elements']['generator'].items():
+        for gen_uid, gen in self.__static_data["elements"]["generator"].items():
             if not is_gas_generator(gen):
                 continue
-            if type(gen['eia']['plantid']) in (int, str):
-                eia_plantid = int(gen['eia']['plantid'])
+            if type(gen["eia"]["plantid"]) in (int, str):
+                eia_plantid = int(gen["eia"]["plantid"])
                 if eia_plantid in gas_prices:
-                    old_fuel_cost = gen['fuel_cost']
-                    gen['fuel_cost'] = copy.deepcopy(gas_prices[eia_plantid])
+                    old_fuel_cost = gen["fuel_cost"]
+                    gen["fuel_cost"] = copy.deepcopy(gas_prices[eia_plantid])
                     if isinstance(old_fuel_cost, float):
-                        gen['fuel_cost']['reference_value'] = old_fuel_cost
+                        gen["fuel_cost"]["reference_value"] = old_fuel_cost
                     elif isinstance(old_fuel_cost, dict):
-                        gen['fuel_cost']['reference_value'] = old_fuel_cost['reference_value']
+                        gen["fuel_cost"]["reference_value"] = old_fuel_cost["reference_value"]
                 else:
                     missing_generators.append(gen_uid)
             else:
-                raise ValueError(f"plantid is not a str or int for generator {gen_uid}, plantid={gen['eia']['plantid']}")
+                raise ValueError(
+                    f"plantid is not a str or int for generator {gen_uid}, plantid={gen['eia']['plantid']}"
+                )
         # print warning for generators that we were not able to find
         if len(missing_generators) > 0:
             missing_generators_set = set(missing_generators)
-            missing_capacity = sum(gen['p_max'] for gen_uid, gen in \
-                                   self.__static_data['elements']['generator'].items() \
-                                   if gen_uid in missing_generators_set)
-            print(f'[warn] Unable to find monthly prices for {len(missing_generators)} gas generators ({missing_capacity} MW) with uids:',
-                  missing_generators)
-            missing_eia_codes = list(set([gen['eia']['plantid'] for gen_uid, gen in \
-                                          self.__static_data['elements']['generator'].items() \
-                                          if gen_uid in missing_generators_set]))
-            print('       These generators have EIA plantid codes:', missing_eia_codes)
+            missing_capacity = sum(
+                gen["p_max"]
+                for gen_uid, gen in self.__static_data["elements"]["generator"].items()
+                if gen_uid in missing_generators_set
+            )
+            logger.warning(
+                f"Unable to find monthly prices for {len(missing_generators)} gas generators ({missing_capacity} MW) with uids: {missing_generators}"
+            )
+            missing_eia_codes = list(
+                set(
+                    [
+                        gen["eia"]["plantid"]
+                        for gen_uid, gen in self.__static_data["elements"]["generator"].items()
+                        if gen_uid in missing_generators_set
+                    ]
+                )
+            )
+            logger.warning(f"These generators have EIA plantid codes: {missing_eia_codes}")
         # return to caller
         return None
 
