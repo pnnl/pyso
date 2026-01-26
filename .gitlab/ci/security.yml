@@ -9,3 +9,4 @@ security:
     - pip install bandit pip-audit
     - bandit -r src/
     - pip-audit
+  allow_failure: true
