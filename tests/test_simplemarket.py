@@ -1,17 +1,23 @@
-import json
 import os
 
+import pandas as pd
+import pytest
+from egret.data.model_data import ModelData
 from utilities import dictionary_testing, find_solver
 
 from pyenergymarket import EnergyMarket
-from pyenergymarket.marketmodels.market import Market
+from pyenergymarket.marketmodels.market import BasicMarket
 from pyenergymarket.parsers.egretparser import EgretProvider
 
 THIS_DIR = os.path.split(__file__)[0]
 
 
-def setup_market():
+@pytest.fixture
+def market(request):
     """Market configuration including reference model, solver arguments, and timing"""
+
+    name = request.param
+
     datapath = os.path.join(THIS_DIR, "testdata", "tiny_uc_2.json")
 
     egretprovider = EgretProvider(datapath)
@@ -32,81 +38,74 @@ def setup_market():
             },
         },
     }
+    if name == "tz":
+        ## add timezone
+        emconfig["time"]["tz"] = "US/Eastern"
+
     em = EnergyMarket(egretprovider, config=emconfig)
 
+    ## the most important thing about the the timing is that bidding is a 0,
+    ## which is where the model is built. Therefore, as setup, the current solution
+    ## should start at the provided start time.
     market_timing = {
-        "states": {
-            "clearing": {"start_time": 0, "duration": 1, "unit": "hour"},
-            "idle": {"start_time": 1, "duration": 4, "unit": "hour"},
-            "bidding": {"start_time": 5, "duration": 1, "unit": "hour"},
-        },
-        "initial_offset": 0,
-        "initial_state": "idle",
         "market_interval": em.configuration["time"]["window"],
+        "time_unit": "hour",
+        "timing": [
+            {"name": "bidding", "start_time": 0},
+            {"name": "clearing", "start_time": 1},
+            {"name": "idle", "start_time": 2},
+        ],
     }
 
-    start_time = "2025-12-10 00:00:00"
-    end_time = "2025-12-10 23:00:00"
-    market = Market("test_market", market_timing, start_time, end_time, em)
+    if name == "normal":
+        start_time = "2025-12-10 00:00:00"
+        end_time = "2025-12-11 00:00:00"
+    elif name == "tz":
+        start_time = "2025-12-09 19:00"
+        end_time = "2025-12-10 19:00"
+    market = BasicMarket(
+        "test_market",
+        market_timing,
+        start_time,
+        end_time,
+        em,
+        local_save={"save": True, "path": THIS_DIR, "ext": ".json"},
+    )
     return market
 
 
-def simulate(market, save_testdata=False):
-    """Runs a test simulation with options specified"""
-    horizon_reached = False
-    # Run the simulation until the market end horizon is reached
-    cnt = 0
-    simulation_time = 0
-    while not horizon_reached:
-        market_cleared = run_market(market, simulation_time)
-        if market_cleared:
-            if save_testdata:
-                # Save test data in testdata directory
-                # Create path with result number
-                filename = f"test_market_results_{cnt}.json"
-                test_data_path = os.path.join(THIS_DIR, "testdata", filename)
-                market.em.save_model(test_data_path)
-            # Save results to main directory
-            result_path = os.path.join(THIS_DIR, f"test_market_results_{cnt}.json")
-            market.em.save_model(result_path)
-            cnt += 1
-        # Increment time by one hour
-        simulation_time += 1
-        if simulation_time >= 24:
-            horizon_reached = True
-
-
-def run_market(market, simulation_time):
-    """Uses the market transition methods to clear the market
-    Returns:
-        market_cleared (bool): True if a market was run, otherwise False
-    """
-    # Selects the market object from the saved dictionary
-    market_cleared = False
-    # First check if we have hit a transition point (simulation time == next state time)
-    if simulation_time == market.next_state_time:
-        # Advance the market state
-        market.move_to_next_state()
-        # If we are in clearing, adjust return boolean
-        if market.current_state == "clearing":
-            market_cleared = True
-        # Updates the market.next_state_time
-        market.update_market()
-    return market_cleared
-
-
-def test_simplemarket(save_testdata=False):
-    market = setup_market()
-    # Set up a loop to run through a day and check results
-    simulate(market, save_testdata=save_testdata)
+@pytest.mark.parametrize("market", ["normal", "tz"], indirect=True)
+def test_simplemarket(market):
+    # market = setup_market()
+    # # Set up a loop to run through a day and check results
+    # simulate(market, save_testdata=save_testdata)
+    for t in market.market_loop():
+        market.current_time = t
     # We set this up with 4 tests so we should see these results
     for cnt in range(4):
-        with open(os.path.join(THIS_DIR, "testdata", f"test_market_results_{cnt}.json")) as f:
-            testdata = json.load(f)
-        with open(os.path.join(THIS_DIR, f"test_market_results_{cnt}.json")) as f:
-            localdata = json.load(f)
+        # with open(os.path.join(THIS_DIR, "testdata", f"test_market_results_{cnt}.json")) as f:
+        testdata = ModelData(os.path.join(THIS_DIR, "testdata", f"test_market_results_{cnt}.json"))
+        # with open(os.path.join(THIS_DIR, f"test_market_results_{cnt}.json.gz")) as f:
+        localdata = ModelData(os.path.join(THIS_DIR, f"test_market_results_{cnt}.json"))
+
+        expected_time_keys = pd.date_range(
+            start=pd.Timestamp("2025-12-10 00:00:00") + cnt * pd.Timedelta(hours=6),
+            end=min(
+                pd.Timestamp("2025-12-11 00:00:00"),
+                pd.Timestamp("2025-12-10 00:00:00")
+                + cnt * pd.Timedelta(hours=6)
+                + pd.Timedelta(hours=9),
+            ),
+            freq="1h",
+            inclusive="left",
+        )
+
+        ## test that the time keys are correct
+        assert localdata.data["system"]["time_keys"] == [
+            f"{s}" for s in expected_time_keys
+        ], f"model {cnt} doesn't match {expected_time_keys}"
         # Compare reference files (testdata) to locally generated files (localdata)
-        dictionary_testing(testdata, localdata)
+        dictionary_testing(testdata.data, localdata.data)
         # Remove local results
         os.remove(os.path.join(THIS_DIR, f"test_market_results_{cnt}.json"))
 

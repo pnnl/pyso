@@ -14,7 +14,7 @@ from egret.models.unit_commitment import SlackType, solve_unit_commitment
 
 from .pyenergymarket_defaults import energymarket_defaults
 from .utils.egretutils import NumpyEncoder
-from .utils.ioutils import Logger, merge_configs
+from .utils.ioutils import Logger, merge_configs, print_inputs
 from .utils.timeutils import count_onoff, mk_daterange
 
 
@@ -48,6 +48,9 @@ class EnergyMarket:
         self.logger = Logger(**self.configuration["logging"])
         if self.configuration["logging"]["file"] is not None:
             self.logger.set_logfile(self.configuration["logging"]["file"])
+
+        if self.configuration["logging"]["print_config"]:
+            print_inputs(self.configuration, self.logger.info)
 
     @property
     def monitored_branches(self) -> dict:
@@ -115,10 +118,17 @@ class EnergyMarket:
         periods = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
         min_freq = self.configuration["time"]["min_freq"]
 
-        daterange = mk_daterange(start, min_freq=min_freq, periods=periods)
+        daterange = mk_daterange(
+            start, min_freq=min_freq, periods=periods, tz=self.configuration["time"]["tz"]
+        )
 
         # get the model for the specified time range
         self.logger.info(f"Forming model starting at: {daterange[0]} - {daterange[-1]}")
+        # convert to UTC if timezone provided and flag is set to TRUE
+        if (daterange.tz is not None) and self.configuration["time"]["convert_to_utc"]:
+            daterange = daterange.tz_convert("UTC")
+        # move time-zone information
+        daterange = daterange.tz_localize(None)
         self.mdl = self.data_provider.get_model(daterange)
 
     def update_initial_conditions(

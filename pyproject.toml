@@ -17,7 +17,10 @@ dependencies = [
     "pandas>=2.2.1",
     "networkx>=2.8.4",
     "transitions",
+    "h5py",
     "reverse-argparse",
+    "tomli",
+    "tomli_w"
 ]
 [project.optional-dependencies]
 naerm = ["gridx-egret @ git+https://gitlab.naerm.team/egret/egret-int.git"]
@@ -30,7 +33,7 @@ dev = [
     "mypy>=1.5.1",
     "pandas-stubs",
     "types-networkx",
-    "scipy-stubs"
+    "scipy-stubs",
 ]
 
 ## see: https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
