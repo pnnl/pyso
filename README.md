@@ -1,47 +1,100 @@
-PyEnergyMarket is a EGRET-based energy market modeling tool developed by PNNL in the E-COMP LDRD initiative.
+PySO is a EGRET-based energy market modeling tool developed by PNNL in the E-COMP LDRD initiative.
 
-## Package Structure
+# Package Structure
 ## EnergyMarket
-The `EnergyMarket` class is defined in `engine.py` and houses the core functionalities for running energy market models
+The `EnergyMarket` class is defined in `engine.py` and houses the core functionalities for running sequential energy market (Egret unit commitment) models.
+It's core functionality is to move from one time window to the next.
+Accounting for initial conditions, initializing enforced constraints etc. should be handled within this object.
 
-## GVParse
-The `GVParse` class is the GridView parse used to convert GridView models (currently _solved_) exported to an `h5` file to the EGRET data model
+The core input is a data provider which should be a subclass of the abstract `DataProvider` class.
+This object must expose a method called `get_model` that takes a DatetimeIndex as input, and return an Egret `ModelData` object for the specified time range as output.
 
-## Getting Started
-To run an example see the [`test_energymarket.py`](./data_model_tests/test_energymarket.py) file.
-To run this test an h5 database from a GridView run is necessary.
-Such files are available on the Thrust 3 teams channel in a folder called `h5files`.
-The command to run the test is:
+A trivial example is the [`EgretProvider`](./src/pyenergymarket/parsers/egretparser.py) that simple returns portions of an Egret model depending depending on the time range provided and the time keys in the model (which are assumed to be Timestamp parsable.)
+
+## Market Class
+The `Market` class is intended to capture the various stages of a market and allow interaction with the operation during these states.
+It is built onto of the `transitions` package as a state machine.
+
+The basic structure is:<br>
+![](./docs/PySOMarketStates.png)
+
+The market states are:
+* bidding
+* clearing
+* idle
+
+Additional ones can be added.
+The following callbacks functions are defined as abstract methods:
+
+|method | place in state machine |
+|:------|:-----------------------|
+|`collect_bids` | entering the `bidding` state|
+|`clear_market` | entering the `clearing` state|
+|`publish_results`| exiting the `clearing` state|
+|`do_initialization`| exiting the `initialization` state|
+|`do_finalization`| entering the `finalization` state|
+
+## MarketTiming Class
+The market time class is use to define the iterations of the `Market` class.
+It requires the following information:
+* market interval: the duration of one iteration
+* timing: a list of dictionary for each of the market states containing:
+    - name : the name of the state
+    - `start_time`: the starting time in the market iteration.
+* `time_unit`: "hour", "W", etc. (see Timedelta unit argument) this is optional depending on the type of input for the market interval and start times.
+
+Time inputs can be provided in two ways:
+* Integers (with units)
+* pandas Timedelta objects.
+
+The following two examples are equivalent:
+```python
+import pandas as pd
+mt_int = {
+    "market_interval": 24,
+    "time_unit": "hour",
+    "timing": [
+        {"name": "clearing",
+        "start_time": 0 },
+        {"name": "idle",
+        "start_time": 3},
+        {"name": "bidding",
+        "start_time": 21}
+    ]
+}
+
+mt = {
+    "market_interval": pd.Timedelta(24, unit="h"),
+    "timing": [
+        {"name": "clearing",
+        "start_time": pd.Timedelta(0, unit="h") },
+        {"name": "idle",
+        "start_time": pd.Timedelta(3, unit="h")},
+        {"name": "bidding",
+        "start_time": pd.Timedelta(21, unit="h")}
+    ]
+}
 ```
->python test_energymarket.py <path-to-h5file.h5>
+
+Internally, the `MarketTiming` class converts everything to Timedelta.
+
+## Basic Usage
+The market class has a property called `current_time` which can be set with a pandas `Timestamp`.
+Setting this time drives the `Market` forward. 
+Based on the `MarketTiming` class, the `Market` always knows when the next state should be transitioned to (`next_state_time` property).
+As long as the set `current_time` is greater than or equal to `next_state_time` the state machine will continue changing states and the related callbacks called.
+The expectation is therefore that the market will be driven in some sort of a loop like the following:
+
+```python
+for t in market.market_loop():
+    market.current_time = t
 ```
-The command will produce a resulting json file called `pyenergy_test_solution.json`
 
-Some summary statistics and a generation stack can be created with the [`investigate_solution.py`](./data_model_tests/investigate_solution.py), which should produce a figure that looks something like this:
-![](./data_model_tests/data_files/investigate_solution.png)
+>**NOTE:**<br>
+>The `market_loop` method is a utility that iterates through the times of the market until the final state is reached.
+>It just one way to generate time for the market.
+>Any valid timestamps, however generated, will do.
 
-Taking a look at `test_energymarket.py` the basic setup is:
-* Create the `GVParser` object based on the h5 file. There are various configuration possible here
-* Create the `EnergyMarket` object, passing it the `GVParser` object as a data provider.
-* Run (eventually many) instances of the market by parsing the model for a particular time window (`EnergyMarket.data_provider.get_model()`), and then solving it.
-
-## Use Case Structure
-### Data Set
-We'll start with the RTS GMLC system just to have a model that runs.
-Will shift to Mini WECC once it is available
-### Day Ahead Market
-* Model as  unit commitment followed by energy dispatch
-* Add a capacity reserve (either via available constraint or bumping load in commitment)
-
-### Reserve Market
-* 24 hour hourly capacity reserve
-* Only generation that has been committed can participate
-* Generators do not _have to_ have their capacity add to 100%, that is if unit commitment for hour t is 100% can still offer reserves, difference must be reconciled in real time
-* We can model the needed reserves as load and the generators bid in just their reserve as "generation"
-
-### Real Time Market
-* Energy Dispatch
-* 15 minute resolution
 
 # Setup
 ## Installing Egret
@@ -67,63 +120,8 @@ This will install Egret from the official Grid Parity Exchange repository.
 
 ### Manual Installation
 Alternatively, you can manually install Egret. The repository needs to be cloned and then installed via pip in edit mode.
-See the instructions [here](https://github.com/pnnl-private/egret?tab=readme-ov-file#installation).
-Please use the `develop` branch.
-This is on PNNL's private GitHub, if you need access reach out to either Eran (<eran.schweitzer@pnnl.gov>), or Trevor (<trevor.hardy@pnnl.gov>)
 
 In all cases, make sure to [install a solver](#solvers)
-
-Then proceed to verify the installation, see [these instructions](https://github.com/breldridge/Egret?tab=readme-ov-file#testing-the-installation)
-
-## Installing `gridtune` package for GridView h5 handling and PowerWorld parsing
-Egret models based on GridView models are created by parsing the `h5` file created by GridView.
-To work with this file, the `gridtune` package is required, which is hosted privately [here](https://tanuki.pnnl.gov/gridtune/gridtune).
-To get access reach out to Eran: <eran.schweitzer@pnnl.gov>.
-
-Once the repository is cloned it can be installed using the editable mode (in the root directory):
-```
-pip install -e ".[simauto]"
-```
-
-**Notes**:
-* The `simauto` option is required for interacting with PowerWorld. This _only_ works on Windows machines (though the installation shouldn't fail)
-* Editable mode is not required. It's possible to leave out the `-e`. If changes are made to GridTUNE, the package will simply need to be reinstalled.
-
-## installing `pyenergymarket`
-Install pyenergy market as an editable package via:
-```
-pip install -e <path-to-pyenergymarket>
-```
-
-To install with support for the GridView Parser use:
-```
-pip install -e <path-to-pyenergymarket>[gv]
-```
-
-After installation a `dependencies.log` file is created.
-If any of the editable dependencies (such as `egret` or `gridtune`) are not installed this file will:
-* indicate this
-* point to where to get the repositories (note: access is restricted)
-* reprise how to install
-
-As an example:
-```
-The following REQUIRED dependencies are missing:
- - egret (source: https://github.com/pnnl-private/egret)
-
-They should be installed as editable packages using pip:
-Clone repository from source
-cd into repository folder
-pip install -e .
-
-The following OPTIONAL dependencies are missing:
- - gridtune (source: https://tanuki.pnnl.gov/gridtune/gridtune)
-
-They should be installed as editable packages using pip:
-Clone repository from source
-cd into repository folder
-pip install -e .
-```
 
 ## Developer Setup
 
@@ -184,7 +182,7 @@ Cbc installation appears to be not very supported on windows.
 The following appears to work for getting the installation working.
 
 #### Python environment
-For this example a `conda` environment is assumed (something like `conda create --name scuc-der`).
+For this example a `conda` environment is assumed.
 There are other ways to work with python environments, with some modification potentially necessary.
 
 #### Get the Binaries
@@ -219,6 +217,10 @@ To install it simply run:
 conda install scip -c conda-forge
 ```
 The repository is [here](https://github.com/conda-forge/scipoptsuite-feedstock)
+
+>**NOTE**:
+>This is here for historical reasons, as runs with scip were attempted.
+>Currently, Egret does not seem to work particularly well with SCIP.
 
 ### IPOPT
 There appears to be an issue with ipopt versions `>3.11` that the `ipopt.exe` is no longer included when installing (at least via conda).
