@@ -14,7 +14,7 @@ from pyenergymarket.engine import DataProvider
 from pyenergymarket.utils.ioutils import Logger
 
 # Initialize logger
-logger = Logger("naermparser")
+logger = Logger("naermparser", msg_format="[{levelname}] {message}")
 
 ########
 # Helper functions
