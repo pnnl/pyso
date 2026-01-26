@@ -26,13 +26,16 @@ from pyenergymarket.utils.ioutils import Logger, merge_dicts
 
 
 class MarketTiming:
-    """Class that defines the timing of various market states
-    """
-    def __init__(self,
-                 market_interval:Union[pd.Timedelta, int],
-                 timing:list[dict],
-                 time_unit = "hour",
-                 initial_offset=0, **kwargs):
+    """Class that defines the timing of various market states"""
+
+    def __init__(
+        self,
+        market_interval: Union[pd.Timedelta, int],
+        timing: list[dict],
+        time_unit="hour",
+        initial_offset=0,
+        **kwargs,
+    ):
         """initialize market timing class indicating interval and the timing
         definition.
 
@@ -51,7 +54,7 @@ class MarketTiming:
         """
 
         self.time_unit = time_unit
-        self.intial_offset=self.ensure_timedelta(initial_offset)
+        self.intial_offset = self.ensure_timedelta(initial_offset)
         self.market_interval = self.ensure_timedelta(market_interval)
         self.timing = deepcopy(timing)
 
@@ -66,7 +69,7 @@ class MarketTiming:
 
         self.validate()
 
-    def ensure_timedelta(self, v:Union[int, pd.Timedelta], unit:str="") -> pd.Timedelta:
+    def ensure_timedelta(self, v: Union[int, pd.Timedelta], unit: str = "") -> pd.Timedelta:
         if isinstance(v, pd.Timedelta):
             return v
         else:
@@ -78,8 +81,7 @@ class MarketTiming:
     def state_list(self) -> list[str]:
         return [d["name"] for d in self.timing]
 
-
-    def __getitem__(self, index:Union[int, str]) -> dict:
+    def __getitem__(self, index: Union[int, str]) -> dict:
         """return the timing dictionary for a particular state
 
         Args:
@@ -94,7 +96,6 @@ class MarketTiming:
         return self.timing[index]
 
     def validate(self):
-
         ## first state must start at time 0
         if self[0]["start_time"] != pd.Timedelta(0):
             raise ValueError(f"The start time for the first state {self[0]['name']} must be 0.")
@@ -102,8 +103,9 @@ class MarketTiming:
         ## no start time greater than the market interval
         for s in self.state_list:
             if self[s]["start_time"] >= self.market_interval:
-                raise ValueError(f"Start time for state {s} is {self[s]['start_time']} which is >= the market interval of {self.market_interval}.")
-
+                raise ValueError(
+                    f"Start time for state {s} is {self[s]['start_time']} which is >= the market interval of {self.market_interval}."
+                )
 
 
 class AbstractMarket(abc.ABC):
@@ -129,13 +131,13 @@ class AbstractMarket(abc.ABC):
 
     def __init__(
         self,
-        market_name:str,
-        market_timing:Union[MarketTiming, dict],
-        start_time:Union[pd.Timestamp,str],
-        end_time:Union[pd.Timestamp,str],
+        market_name: str,
+        market_timing: Union[MarketTiming, dict],
+        start_time: Union[pd.Timestamp, str],
+        end_time: Union[pd.Timestamp, str],
         market: EnergyMarket,
-        logging = None,
-        history_maxlen = 10,
+        logging=None,
+        history_maxlen=10,
         **kwargs,
     ):
         """Initializes a market object with state machine
@@ -156,7 +158,11 @@ class AbstractMarket(abc.ABC):
         self.logger = Logger(**merge_dicts({"name": "Market", "level": "WARNING"}, logging))
         self.em = market
         self.market_name = market_name
-        self.market_timing = market_timing if isinstance(market_timing, MarketTiming) else MarketTiming(**market_timing)
+        self.market_timing = (
+            market_timing
+            if isinstance(market_timing, MarketTiming)
+            else MarketTiming(**market_timing)
+        )
         self.start_time = pd.Timestamp(start_time)
         self.end_time = pd.Timestamp(end_time)
 
@@ -178,7 +184,7 @@ class AbstractMarket(abc.ABC):
         return self._current_time
 
     @current_time.setter
-    def current_time(self, t:pd.Timestamp):
+    def current_time(self, t: pd.Timestamp):
         """sets the current market time.
         If this time is equal to the next state time,
         the move is triggered.
@@ -189,9 +195,13 @@ class AbstractMarket(abc.ABC):
         if self.current_time is not None:
             # check that we are moving forward (or staying in place)
             if t < self.current_time:
-                raise ValueError(f"Time must be monotonically increasing. Current time is {self.current_time} and received {t}.")
+                raise ValueError(
+                    f"Time must be monotonically increasing. Current time is {self.current_time} and received {t}."
+                )
         self._current_time = t
-        self.logger.debug(f"[current_time setter] setting current time to {t} | next_state_time = {self.next_state_time}")
+        self.logger.debug(
+            f"[current_time setter] setting current time to {t} | next_state_time = {self.next_state_time}"
+        )
         while (not self.is_final) and (self.current_time >= self.next_state_time):
             self.logger.debug(f"[current_time setter] calling move_to_next_state at time {t}")
             self.move_to_next_state()
@@ -214,20 +224,26 @@ class AbstractMarket(abc.ABC):
         # self.last_state_time = 0
         self.next_state_time = self.start_time
         # Add the state machine
-        self.state_machine = Machine(model=self,
-                                     states=["initialization", {"name": "finalization", "final": True}] + self.state_list,
-                                     initial="initialization",
-                                     send_event=True,
-                                     before_state_change="track_state",
-                                     after_state_change="update_market")
+        self.state_machine = Machine(
+            model=self,
+            states=["initialization", {"name": "finalization", "final": True}] + self.state_list,
+            initial="initialization",
+            send_event=True,
+            before_state_change="track_state",
+            after_state_change="update_market",
+        )
         # create ordered transitions between the market states (excludes initialization and finalization)
         self.state_machine.add_ordered_transitions(self.state_list)
 
         # add a transition from initialization to the first state
-        self.state_machine.add_transition(trigger="initialize", source="initialization", dest=self.state_list[0])
+        self.state_machine.add_transition(
+            trigger="initialize", source="initialization", dest=self.state_list[0]
+        )
 
         # add a transition to the final state
-        self.state_machine.add_transition(trigger="finalize", source=self.state_list, dest="finalization")
+        self.state_machine.add_transition(
+            trigger="finalize", source=self.state_list, dest="finalization"
+        )
 
         ## specify the initialization callback
         self.state_machine.on_exit_initialization("do_initialization")
@@ -241,29 +257,30 @@ class AbstractMarket(abc.ABC):
 
     @property
     def current_state(self) -> str:
-        """returns the current state machine state
-        """
+        """returns the current state machine state"""
         return self.state
 
     @property
     def is_final(self) -> bool:
-        """Returns True if the model is in the `finalization` state.
-        """
+        """Returns True if the model is in the `finalization` state."""
         return self.state_machine.get_state(self.state).final
 
     def track_state(self, event):
         """This method is called *before* every transition is executed.
         it is used to track/update the state history
         """
-        self.history.appendleft({"time": self.current_time,
-                                 "source": event.transition.source,
-                                 "dest": event.transition.dest})
+        self.history.appendleft(
+            {
+                "time": self.current_time,
+                "source": event.transition.source,
+                "dest": event.transition.dest,
+            }
+        )
         self.logger.debug(f"[track_state] {self.market_name} latest transition: {self.history[0]}")
 
     @abc.abstractmethod
     def do_initialization(self, *args, **kwargs) -> None:
-        """This method executes any necessary initialization steps
-        """
+        """This method executes any necessary initialization steps"""
         pass
 
     @abc.abstractmethod
@@ -280,20 +297,26 @@ class AbstractMarket(abc.ABC):
         The ability to pass arguments and kwargs to the callbacks is not currently implemented.
         """
         # Store previous state, move states, then update current state
-            # Note: transitions automatically execute methods specified in add_state_machine
+        # Note: transitions automatically execute methods specified in add_state_machine
         self.last_state = self.current_state
         if self.current_state == "initialization":
             ## just getting started, do intialization
-            self.logger.debug(f"[move_to_next_state] calling initialization callback at time {self.current_time}")
+            self.logger.debug(
+                f"[move_to_next_state] calling initialization callback at time {self.current_time}"
+            )
             self.initialize()
         elif self.next_state_time >= self.end_time:
             ## reached the end, finalize
-            self.logger.debug(f"[move_to_next_state] calling finalization callback at time {self.current_time}")
+            self.logger.debug(
+                f"[move_to_next_state] calling finalization callback at time {self.current_time}"
+            )
             self.finalize()
         else:
             ## next state will call any state specific callbacks.
             ## it also calls the transition callback which is update_market.
-            self.logger.debug(f"[move_to_next_state] calling next_state callback at time {self.current_time}")
+            self.logger.debug(
+                f"[move_to_next_state] calling next_state callback at time {self.current_time}"
+            )
             self.next_state()
         # self.current_state = self.state
         # self.logger.info(f"[move_to_next_state]{self.market_name} moved from {self.last_state} to {self.current_state}")
@@ -312,11 +335,14 @@ class AbstractMarket(abc.ABC):
 
         if not self.is_final:
             # update the time for the next state
-            self.next_state_time += self.market_timing[self.current_state].get("duration", pd.Timedelta(0))
-            self.logger.debug(f"[update_market] {self.market_name} next state time is {self.next_state_time}. Current time is {self.current_time}")
+            self.next_state_time += self.market_timing[self.current_state].get(
+                "duration", pd.Timedelta(0)
+            )
+            self.logger.debug(
+                f"[update_market] {self.market_name} next state time is {self.next_state_time}. Current time is {self.current_time}"
+            )
 
-
-    def market_loop(self, res:Union[pd.Timedelta,None]=None):
+    def market_loop(self, res: Union[pd.Timedelta, None] = None):
         """Loop of the time instances of the market, beginning with
         start_time until the finalization state is reached.
         If res is None, the loop will move directly to the next state time.
@@ -367,16 +393,34 @@ class AbstractMarket(abc.ABC):
         """
         pass
 
-class BasicMarket(AbstractMarket):
 
-    def __init__(self, market_name:str, market_timing:Union[MarketTiming, dict],
-                 start_time:Union[pd.Timestamp, str], end_time:Union[pd.Timestamp, str],
-                 market:EnergyMarket, local_save = None, logging=None, history_maxlen=10, **kwargs):
+class BasicMarket(AbstractMarket):
+    def __init__(
+        self,
+        market_name: str,
+        market_timing: Union[MarketTiming, dict],
+        start_time: Union[pd.Timestamp, str],
+        end_time: Union[pd.Timestamp, str],
+        market: EnergyMarket,
+        local_save=None,
+        logging=None,
+        history_maxlen=10,
+        **kwargs,
+    ):
         if logging is None:
             logging = {}
         if local_save is None:
             local_save = {}
-        super().__init__(market_name, market_timing, start_time, end_time, market, logging, history_maxlen, **kwargs)
+        super().__init__(
+            market_name,
+            market_timing,
+            start_time,
+            end_time,
+            market,
+            logging,
+            history_maxlen,
+            **kwargs,
+        )
         self.local_save = merge_dicts({"save": False, "path": "", "ext": ".json.gz"}, local_save)
 
         self.market_clearing_counter = 0
@@ -387,7 +431,6 @@ class BasicMarket(AbstractMarket):
         self.storage_soc = None
         self.pre_simulation_days = None
 
-
     def do_initialization(self, *args, **kwargs):
         pass
 
@@ -395,25 +438,27 @@ class BasicMarket(AbstractMarket):
         pass
 
     def collect_bids(self, event):
-        """Initialize the model at the current time.
-        """
+        """Initialize the model at the current time."""
         ## initialize model
         self.em.get_model(self.current_time)
         # Modifications to model before solve, depending on use-case
         self.em.update_initial_conditions(self.em.mdl_sol)
 
     def clear_market(self, event):
-        """Solve the market model
-        """
+        """Solve the market model"""
         ## solve the model
         self.em.solve_model()
         self.market_results = self.em.mdl_sol
 
     def publish_results(self, event):
-        """Save the results
-        """
+        """Save the results"""
         if self.local_save["save"]:
-            self.em.save_model(os.path.join(self.local_save["path"], f"{self.market_name}_results_{self.market_clearing_counter}{self.local_save['ext']}"))
+            self.em.save_model(
+                os.path.join(
+                    self.local_save["path"],
+                    f"{self.market_name}_results_{self.market_clearing_counter}{self.local_save['ext']}",
+                )
+            )
         self.market_clearing_counter += 1
 
     ### THE METHODS BELOW ARE OLDER AND MAY NEED TO BE REMOVED.
@@ -600,8 +645,6 @@ class BasicMarket(AbstractMarket):
                     target_path = self.commitment_hist[etype][unit]["commitment"]
                     target_path["values"] = commit_values_all_sort
         self.commitment_hist["timestamps"] = sorted(commit_times_all)
-
-
 
 
 def sort_array(ref_array, paired_array):

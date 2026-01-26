@@ -27,5 +27,11 @@ energymarket_defaults = {
             "timelimit": 300,
         },
     },
-    "logging": {"name": "pyenergy", "level": "INFO", "msg_format": "{message}", "file": None, "print_config": True},
+    "logging": {
+        "name": "pyenergy",
+        "level": "INFO",
+        "msg_format": "{message}",
+        "file": None,
+        "print_config": True,
+    },
 }

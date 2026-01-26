@@ -10,12 +10,31 @@ from pyenergymarket.parsers.egretparser import EgretProvider
 
 THIS_DIR = os.path.split(__file__)[0]
 
-class NoActionMarket(AbstractMarket):
 
-    def __init__(self, market_name, market_timing, start_date, end_date, market, logging=None, history_maxlen=10, **kwargs):
+class NoActionMarket(AbstractMarket):
+    def __init__(
+        self,
+        market_name,
+        market_timing,
+        start_date,
+        end_date,
+        market,
+        logging=None,
+        history_maxlen=10,
+        **kwargs,
+    ):
         if logging is None:
             logging = {"level": "DEBUG"}
-        super().__init__(market_name, market_timing, start_date, end_date, market, logging, history_maxlen, **kwargs)
+        super().__init__(
+            market_name,
+            market_timing,
+            start_date,
+            end_date,
+            market,
+            logging,
+            history_maxlen,
+            **kwargs,
+        )
 
     def do_initialization(self, *args, **kwargs):
         self.logger.debug(f"[do_initialization] callback at time {self.current_time}")
@@ -31,9 +50,6 @@ class NoActionMarket(AbstractMarket):
 
     def clear_market(self, event):
         self.logger.debug(f"[clear_market] callback at time {self.current_time}")
-
-
-
 
 
 def setup_market():
@@ -61,49 +77,94 @@ def setup_market():
     em = EnergyMarket(egretprovider, config=emconfig)
 
     market_timing = {
-            "market_interval": emconfig["time"]["window"],
-            "time_unit": "hour",
-            "timing": [
-                {"name": "bidding",
-                "start_time": 0 },
-                {"name": "clearing",
-                "start_time": 2},
-                {"name": "idle",
-                "start_time": 4}
-            ]
-            # "timing": [
-            #     {"name": "clearing",
-            #     "start_time": 0 },
-            #     {"name": "idle",
-            #     "start_time": 2},
-            #     {"name": "bidding",
-            #     "start_time": 4}
-            # ]
-        }
+        "market_interval": emconfig["time"]["window"],
+        "time_unit": "hour",
+        "timing": [
+            {"name": "bidding", "start_time": 0},
+            {"name": "clearing", "start_time": 2},
+            {"name": "idle", "start_time": 4},
+        ],
+        # "timing": [
+        #     {"name": "clearing",
+        #     "start_time": 0 },
+        #     {"name": "idle",
+        #     "start_time": 2},
+        #     {"name": "bidding",
+        #     "start_time": 4}
+        # ]
+    }
 
     start_time = "2025-12-10 00:00:00"
     end_time = "2025-12-11 00:00:00"
-    market = NoActionMarket("test_market", market_timing, start_time, end_time, em, history_maxlen=20)
+    market = NoActionMarket(
+        "test_market", market_timing, start_time, end_time, em, history_maxlen=20
+    )
 
-    output = [{"time": pd.Timestamp(start_time), "source": "initialization", "dest": "bidding"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=2), "source": "bidding", "dest": "clearing"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=4), "source": "clearing", "dest": "idle"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=6), "source": "idle", "dest": "bidding"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=8), "source": "bidding", "dest": "clearing"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=10), "source": "clearing", "dest": "idle"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=12), "source": "idle", "dest": "bidding"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=14), "source": "bidding", "dest": "clearing"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=16), "source": "clearing", "dest": "idle"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=18), "source": "idle", "dest": "bidding"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=20), "source": "bidding", "dest": "clearing"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=22), "source": "clearing", "dest": "idle"},
-              {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=24), "source": "idle", "dest": "finalization"},
-              ]
-
+    output = [
+        {"time": pd.Timestamp(start_time), "source": "initialization", "dest": "bidding"},
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=2),
+            "source": "bidding",
+            "dest": "clearing",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=4),
+            "source": "clearing",
+            "dest": "idle",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=6),
+            "source": "idle",
+            "dest": "bidding",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=8),
+            "source": "bidding",
+            "dest": "clearing",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=10),
+            "source": "clearing",
+            "dest": "idle",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=12),
+            "source": "idle",
+            "dest": "bidding",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=14),
+            "source": "bidding",
+            "dest": "clearing",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=16),
+            "source": "clearing",
+            "dest": "idle",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=18),
+            "source": "idle",
+            "dest": "bidding",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=20),
+            "source": "bidding",
+            "dest": "clearing",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=22),
+            "source": "clearing",
+            "dest": "idle",
+        },
+        {
+            "time": pd.Timestamp(start_time) + pd.Timedelta(hours=24),
+            "source": "idle",
+            "dest": "finalization",
+        },
+    ]
 
     return market, list(reversed(output))
-
-
 
 
 @pytest.mark.parametrize("res", [None, pd.Timedelta(hours=1)])

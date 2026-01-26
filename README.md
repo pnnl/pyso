@@ -80,7 +80,7 @@ Internally, the `MarketTiming` class converts everything to Timedelta.
 
 ## Basic Usage
 The market class has a property called `current_time` which can be set with a pandas `Timestamp`.
-Setting this time drives the `Market` forward. 
+Setting this time drives the `Market` forward.
 Based on the `MarketTiming` class, the `Market` always knows when the next state should be transitioned to (`next_state_time` property).
 As long as the set `current_time` is greater than or equal to `next_state_time` the state machine will continue changing states and the related callbacks called.
 The expectation is therefore that the market will be driven in some sort of a loop like the following:

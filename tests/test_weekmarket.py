@@ -34,19 +34,26 @@ def setup_market():
     }
     em = EnergyMarket(egretprovider, config=emconfig)
 
-    market_timing = {"market_interval": em.configuration["time"]["window"],
-                     "time_unit": "hour",
-                     "timing":[
-                          {"name": "bidding", "start_time": 0},
-                          {"name": "clearing", "start_time": 1},
-                          {"name": "idle", "start_time": 2}
-                     ]
-                     }
+    market_timing = {
+        "market_interval": em.configuration["time"]["window"],
+        "time_unit": "hour",
+        "timing": [
+            {"name": "bidding", "start_time": 0},
+            {"name": "clearing", "start_time": 1},
+            {"name": "idle", "start_time": 2},
+        ],
+    }
 
     start_time = "2025-12-10 00:00:00"
     end_time = "2025-12-17 23:00:00"
-    market = BasicMarket("test_week_market", market_timing, start_time, end_time, em,
-                         local_save={"save": True, "path": THIS_DIR, "ext": ".json"})
+    market = BasicMarket(
+        "test_week_market",
+        market_timing,
+        start_time,
+        end_time,
+        em,
+        local_save={"save": True, "path": THIS_DIR, "ext": ".json"},
+    )
     return market
 
 
