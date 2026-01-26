@@ -318,12 +318,12 @@ class TestHelperFunctions:
             },
         }
 
-        # Capture print output for checking warnings
-        with mock.patch("builtins.print") as mocked_print:
+        # Capture logger output for checking warnings
+        with mock.patch("pyenergymarket.parsers.naermparser.logger.warning") as mocked_logger:
             enforce_p_min_p_max_consistency(md_elem_gen)
 
-            # Verify warning was printed
-            mocked_print.assert_called_once()
+            # Verify warning was logged
+            mocked_logger.assert_called_once()
 
             # Check values are corrected
             assert md_elem_gen["gen2"]["p_min"]["values"] == [0.0, 20.0, 0.0]
@@ -351,12 +351,12 @@ class TestHelperFunctions:
             },
         }
 
-        # Capture print output for checking warnings
-        with mock.patch("builtins.print") as mocked_print:
+        # Capture logger output for checking warnings
+        with mock.patch("pyenergymarket.parsers.naermparser.logger.warning") as mocked_logger:
             remove_non_time_series(md_elem)
 
-            # Verify warning was printed
-            mocked_print.assert_called_once()
+            # Verify warning was logged
+            mocked_logger.assert_called_once()
 
             # Check single-value time series was converted to scalar
             assert md_elem["generator"]["gen1"]["p_max"] == 100.0
@@ -414,8 +414,8 @@ class TestHelperFunctions:
             "values": np.array([[0.5, 0.8], [0.6, 0.9]]),  # 2 timestamps, 2 entities (load1, gen1)
         }
 
-        # Capture print output to avoid cluttering test results
-        with mock.patch("builtins.print"):
+        # Capture logger output to avoid cluttering test results
+        with mock.patch("pyenergymarket.parsers.naermparser.logger.warning"):
             # Call the function under test
             result = create_egret_md(md, ts)
 
