@@ -7,9 +7,17 @@ with suppress(ImportError):
 with suppress(ImportError):
     from .parsers.pwparser import PWParse
 with suppress(ImportError):
-    from .parsers.egretparser import EgretProvider, DailyEgretProvider
+    from .parsers.egretparser import DailyEgretProvider, EgretProvider
 with suppress(ImportError):
     from .parsers.naermparser import NAERMProvider
 from . import utils
 
-__all__ = ["EnergyMarket", "GVParse", "PWParse", "EgretProvider", "DailyEgretProvider", "NAERMProvider", "utils"]
+__all__ = [
+    "EnergyMarket",
+    "GVParse",
+    "PWParse",
+    "EgretProvider",
+    "DailyEgretProvider",
+    "NAERMProvider",
+    "utils",
+]

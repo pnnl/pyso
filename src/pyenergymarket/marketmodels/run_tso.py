@@ -6,7 +6,6 @@ a user-defined time range.
 import abc
 import argparse
 import json
-import logging
 import os
 import time as pytime
 
@@ -15,9 +14,7 @@ import pandas as pd
 import pyenergymarket as pyen
 from pyenergymarket.marketmodels import market as generic_market
 from pyenergymarket.marketmodels.default_tso_config import get_defaults
-from pyenergymarket.parsers.egretparser import DailyEgretProvider
-from pyenergymarket.utils.ioutils import merge_configs
-from pyenergymarket.utils.ioutils import get_provider_by_name, Logger
+from pyenergymarket.utils.ioutils import Logger, get_provider_by_name
 
 # logger = logging.getLogger(__name__)
 # logger.addHandler(logging.StreamHandler())
@@ -102,7 +99,7 @@ class TSO(abc.ABC):
 
     def find_next_market(self):
         """Checks markets to determine which comes next"""
-        next_time = None # Initialize with None since we don't know the type
+        next_time = None  # Initialize with None since we don't know the type
         for market_name, market in self.markets.keys():
             if next_time is None:
                 next_market = market_name
@@ -113,8 +110,9 @@ class TSO(abc.ABC):
                     next_time = market.next_state_time
                 elif market.next_state_time == next_time:
                     # If two markets start at the same time, use market_order to determine which comes first
-                    next_market = self.market_order[min(self.market_order.index(market),
-                                                        self.market_order.index(next_market))]
+                    next_market = self.market_order[
+                        min(self.market_order.index(market), self.market_order.index(next_market))
+                    ]
                     next_time = self.markets[next_market].next_state_time
         return next_market, next_time
 
@@ -131,13 +129,16 @@ class TSO(abc.ABC):
             market_cleared = self.run_market(next_market)
             if market_cleared:
                 logger.info(
-                    f"{next_market} cleared at simulation time {next_time} "
-                    f"{self.time_unit}s"
+                    f"{next_market} cleared at simulation time {next_time} " f"{self.time_unit}s"
                 )
             # Can add callback features to pass data between markets here
             # Once all market start times are at the end (inclusive), terminate the simulation
-            horizon_reached = all([self.start + self.markets[mkt].next_state_time >=
-                                   self.end for mkt in self.market_order])
+            horizon_reached = all(
+                [
+                    self.start + self.markets[mkt].next_state_time >= self.end
+                    for mkt in self.market_order
+                ]
+            )
         t1 = pytime.time()
         simulation_wallclock = t1 - t0
         logger.info(f"Simulation complete.\nTotal computation time is {simulation_wallclock:.2f}s")
@@ -147,7 +148,9 @@ class TSO(abc.ABC):
         pass
 
 
-def create_market(mtype, provider:dict, em_config:dict, market_timing:dict, start=None, end=None, freq=None):
+def create_market(
+    mtype, provider: dict, em_config: dict, market_timing: dict, start=None, end=None, freq=None
+):
     """Builds a market instance"""
     # data_provider = DailyEgretProvider(filename)
     data_provider = get_provider_by_name(provider["type"])
@@ -160,8 +163,6 @@ def create_market(mtype, provider:dict, em_config:dict, market_timing:dict, star
     market = generic_market.Market(mtype, market_timing, start, end, market=em, freq=freq)
     return market
 
-
-    
 
 def execute_sequence(options):
     """Runs a market instance with the given options"""
@@ -206,6 +207,7 @@ if __name__ == "__main__":
                 json.dump(default_options, f, indent=4)
         elif config_file.endswith("toml"):
             from pyenergymarket.utils.ioutils import save_config
+
             save_config(config_file, default_options)
         logger.critical(f"Default config created. Edit {config_file} to update run settings")
         exit()
@@ -217,6 +219,7 @@ if __name__ == "__main__":
             options = json.load(f)
     elif config_file.endswith("toml"):
         from pyenergymarket.utils.ioutils import load_config
+
         options = load_config(config_file)
     # # Joins any user options onto the default options
     # merge_configs(default_options, options)

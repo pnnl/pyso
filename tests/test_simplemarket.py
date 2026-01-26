@@ -1,7 +1,7 @@
 import os
-import pytest
 
 import pandas as pd
+import pytest
 from egret.data.model_data import ModelData
 from utilities import dictionary_testing, find_solver
 
@@ -10,6 +10,7 @@ from pyenergymarket.marketmodels.market import BasicMarket
 from pyenergymarket.parsers.egretparser import EgretProvider
 
 THIS_DIR = os.path.split(__file__)[0]
+
 
 @pytest.fixture
 def market(request):
@@ -46,14 +47,15 @@ def market(request):
     ## the most important thing about the the timing is that bidding is a 0,
     ## which is where the model is built. Therefore, as setup, the current solution
     ## should start at the provided start time.
-    market_timing = {"market_interval": em.configuration["time"]["window"],
-                     "time_unit": "hour",
-                     "timing":[
-                          {"name": "bidding", "start_time": 0},
-                          {"name": "clearing", "start_time": 1},
-                          {"name": "idle", "start_time": 2}
-                     ]
-                     }
+    market_timing = {
+        "market_interval": em.configuration["time"]["window"],
+        "time_unit": "hour",
+        "timing": [
+            {"name": "bidding", "start_time": 0},
+            {"name": "clearing", "start_time": 1},
+            {"name": "idle", "start_time": 2},
+        ],
+    }
 
     if name == "normal":
         start_time = "2025-12-10 00:00:00"
@@ -61,7 +63,14 @@ def market(request):
     elif name == "tz":
         start_time = "2025-12-09 19:00"
         end_time = "2025-12-10 19:00"
-    market = BasicMarket("test_market", market_timing, start_time, end_time, em, local_save={"save":True, "path": THIS_DIR, "ext": ".json"})
+    market = BasicMarket(
+        "test_market",
+        market_timing,
+        start_time,
+        end_time,
+        em,
+        local_save={"save": True, "path": THIS_DIR, "ext": ".json"},
+    )
     return market
 
 
@@ -79,12 +88,22 @@ def test_simplemarket(market):
         # with open(os.path.join(THIS_DIR, f"test_market_results_{cnt}.json.gz")) as f:
         localdata = ModelData(os.path.join(THIS_DIR, f"test_market_results_{cnt}.json"))
 
-        expected_time_keys = pd.date_range(start = pd.Timestamp("2025-12-10 00:00:00") + cnt*pd.Timedelta(hours=6),
-                                           end = min(pd.Timestamp("2025-12-11 00:00:00"), pd.Timestamp("2025-12-10 00:00:00") + cnt*pd.Timedelta(hours=6) + pd.Timedelta(hours=9)),
-                                           freq="1h", inclusive="left")
+        expected_time_keys = pd.date_range(
+            start=pd.Timestamp("2025-12-10 00:00:00") + cnt * pd.Timedelta(hours=6),
+            end=min(
+                pd.Timestamp("2025-12-11 00:00:00"),
+                pd.Timestamp("2025-12-10 00:00:00")
+                + cnt * pd.Timedelta(hours=6)
+                + pd.Timedelta(hours=9),
+            ),
+            freq="1h",
+            inclusive="left",
+        )
 
         ## test that the time keys are correct
-        assert localdata.data["system"]["time_keys"] == [f"{s}" for s in expected_time_keys], f"model {cnt} doesn't match {expected_time_keys}"
+        assert localdata.data["system"]["time_keys"] == [
+            f"{s}" for s in expected_time_keys
+        ], f"model {cnt} doesn't match {expected_time_keys}"
         # Compare reference files (testdata) to locally generated files (localdata)
         dictionary_testing(testdata.data, localdata.data)
         # Remove local results

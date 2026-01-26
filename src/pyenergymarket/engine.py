@@ -48,7 +48,7 @@ class EnergyMarket:
         self.logger = Logger(**self.configuration["logging"])
         if self.configuration["logging"]["file"] is not None:
             self.logger.set_logfile(self.configuration["logging"]["file"])
-        
+
         if self.configuration["logging"]["print_config"]:
             print_inputs(self.configuration, self.logger.info)
 
