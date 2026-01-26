@@ -1,8 +1,8 @@
-import pytest
 import os
-import pandas as pd
 
-from utilities import dictionary_testing, find_solver
+import pandas as pd
+import pytest
+from utilities import find_solver
 
 from pyenergymarket import EnergyMarket
 from pyenergymarket.marketmodels.market import AbstractMarket
@@ -11,10 +11,10 @@ from pyenergymarket.parsers.egretparser import EgretProvider
 THIS_DIR = os.path.split(__file__)[0]
 
 class NoActionMarket(AbstractMarket):
-    
+
     def __init__(self, market_name, market_timing, start_date, end_date, market, logging={"level":"DEBUG"}, history_maxlen=10, **kwargs):
         super().__init__(market_name, market_timing, start_date, end_date, market, logging, history_maxlen, **kwargs)
-    
+
     def do_initialization(self, *args, **kwargs):
         self.logger.debug(f"[do_initialization] callback at time {self.current_time}")
 
@@ -82,7 +82,7 @@ def setup_market():
     start_time = "2025-12-10 00:00:00"
     end_time = "2025-12-11 00:00:00"
     market = NoActionMarket("test_market", market_timing, start_time, end_time, em, history_maxlen=20)
-    
+
     output = [{"time": pd.Timestamp(start_time), "source": "initialization", "dest": "bidding"},
               {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=2), "source": "bidding", "dest": "clearing"},
               {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=4), "source": "clearing", "dest": "idle"},
@@ -97,8 +97,8 @@ def setup_market():
               {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=22), "source": "clearing", "dest": "idle"},
               {"time": pd.Timestamp(start_time)+pd.Timedelta(hours=24), "source": "idle", "dest": "finalization"},
               ]
-    
-    
+
+
     return market, list(reversed(output))
 
 

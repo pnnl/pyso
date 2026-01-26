@@ -1,14 +1,13 @@
-import json
 import os
 
 import numpy as np
+from egret.data.model_data import ModelData
 from utilities import find_solver
 
 from pyenergymarket import EnergyMarket
 from pyenergymarket.marketmodels.market import BasicMarket
 from pyenergymarket.parsers.egretparser import EgretProvider
 from pyenergymarket.utils.timeutils import count_onoff
-from egret.data.model_data import ModelData
 
 THIS_DIR = os.path.split(__file__)[0]
 
@@ -46,7 +45,7 @@ def setup_market():
 
     start_time = "2025-12-10 00:00:00"
     end_time = "2025-12-17 23:00:00"
-    market = BasicMarket("test_week_market", market_timing, start_time, end_time, em, 
+    market = BasicMarket("test_week_market", market_timing, start_time, end_time, em,
                          local_save={"save": True, "path": THIS_DIR, "ext": ".json"})
     return market
 

@@ -2,10 +2,10 @@
 place here.
 """
 
+import copy
 import logging
 import sys
-import copy
-from typing import Mapping
+from collections.abc import Mapping
 
 
 def merge_configs(defaults: dict, user: dict, level=0):

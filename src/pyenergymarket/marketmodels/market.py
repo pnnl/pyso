@@ -11,27 +11,26 @@ can be called as methods. (This may not be a hard assumption.)
 trevor.hardy@pnnl.gov
 """
 
-import datetime as dt
-import math
-from copy import deepcopy
 import abc
-from typing import Union
 import os
+from collections import deque
+from copy import deepcopy
+from typing import Union
 
 import numpy as np
 import pandas as pd
 from transitions import Machine
-from collections import deque
 
 from pyenergymarket.engine import EnergyMarket
 from pyenergymarket.utils.ioutils import Logger, merge_dicts
 
+
 class MarketTiming:
     """Class that defines the timing of various market states
     """
-    def __init__(self, 
-                 market_interval:Union[pd.Timedelta, int], 
-                 timing:list[dict], 
+    def __init__(self,
+                 market_interval:Union[pd.Timedelta, int],
+                 timing:list[dict],
                  time_unit = "hour",
                  initial_offset=0, **kwargs):
         """initialize market timing class indicating interval and the timing
@@ -66,7 +65,7 @@ class MarketTiming:
                 d["duration"] = self.timing[-i]["start_time"] - d["start_time"]
 
         self.validate()
-    
+
     def ensure_timedelta(self, v:Union[int, pd.Timedelta], unit:str="") -> pd.Timedelta:
         if isinstance(v, pd.Timedelta):
             return v
@@ -74,12 +73,12 @@ class MarketTiming:
             if not unit:
                 unit = self.time_unit
             return pd.Timedelta(v, unit=unit)
-    
+
     @property
     def state_list(self) -> list[str]:
         return [d["name"] for d in self.timing]
-    
-    
+
+
     def __getitem__(self, index:Union[int, str]) -> dict:
         """return the timing dictionary for a particular state
 
@@ -95,16 +94,16 @@ class MarketTiming:
         return self.timing[index]
 
     def validate(self):
-        
+
         ## first state must start at time 0
         if self[0]["start_time"] != pd.Timedelta(0):
             raise ValueError(f"The start time for the first state {self[s]['name']} must be 0.")
-        
+
         ## no start time greater than the market interval
         for s in self.state_list:
             if self[s]["start_time"] >= self.market_interval:
                 raise ValueError(f"Start time for state {s} is {self[s]['start_time']} which is >= the market interval of {self.market_interval}.")
-        
+
 
 
 class AbstractMarket(abc.ABC):
@@ -158,7 +157,7 @@ class AbstractMarket(abc.ABC):
         self.market_timing = market_timing if isinstance(market_timing, MarketTiming) else MarketTiming(**market_timing)
         self.start_time = pd.Timestamp(start_time)
         self.end_time = pd.Timestamp(end_time)
-        
+
         self.send_horizon_message = True  # Will send a message when timestamp is past the horizon
         self.market_results = None
 
@@ -170,12 +169,12 @@ class AbstractMarket(abc.ABC):
     @property
     def state_list(self) -> list[str]:
         return self.market_timing.state_list
-    
+
     @property
     def current_time(self):
         """the current market time"""
         return self._current_time
-    
+
     @current_time.setter
     def current_time(self, t:pd.Timestamp):
         """sets the current market time.
@@ -213,15 +212,15 @@ class AbstractMarket(abc.ABC):
         # self.last_state_time = 0
         self.next_state_time = self.start_time
         # Add the state machine
-        self.state_machine = Machine(model=self, 
-                                     states=["initialization", {"name": "finalization", "final": True}] + self.state_list, 
+        self.state_machine = Machine(model=self,
+                                     states=["initialization", {"name": "finalization", "final": True}] + self.state_list,
                                      initial="initialization",
                                      send_event=True,
                                      before_state_change="track_state",
                                      after_state_change="update_market")
         # create ordered transitions between the market states (excludes initialization and finalization)
         self.state_machine.add_ordered_transitions(self.state_list)
-        
+
         # add a transition from initialization to the first state
         self.state_machine.add_transition(trigger="initialize", source="initialization", dest=self.state_list[0])
 
@@ -243,7 +242,7 @@ class AbstractMarket(abc.ABC):
         """returns the current state machine state
         """
         return self.state
-    
+
     @property
     def is_final(self) -> bool:
         """Returns True if the model is in the `finalization` state.
@@ -254,7 +253,7 @@ class AbstractMarket(abc.ABC):
         """This method is called *before* every transition is executed.
         it is used to track/update the state history
         """
-        self.history.appendleft({"time": self.current_time, 
+        self.history.appendleft({"time": self.current_time,
                                  "source": event.transition.source,
                                  "dest": event.transition.dest})
         self.logger.debug(f"[track_state] {self.market_name} latest transition: {self.history[0]}")
@@ -264,7 +263,7 @@ class AbstractMarket(abc.ABC):
         """This method executes any necessary initialization steps
         """
         pass
-    
+
     @abc.abstractmethod
     def do_finalization(self, *args, **kwargs) -> None:
         """This method executes at the end of the simulation, and can capture
@@ -308,7 +307,7 @@ class AbstractMarket(abc.ABC):
         that check is done by the instantiating object and it is assumed
         when this method is called, it's time to move to the next state
         """
-        
+
         if not self.is_final:
             # update the time for the next state
             self.next_state_time += self.market_timing[self.current_state].get("duration", pd.Timedelta(0))
@@ -356,7 +355,7 @@ class AbstractMarket(abc.ABC):
         Method to publish results at the end of the clearing state.
         """
         pass
-    
+
     @abc.abstractmethod
     def clear_market(self, event):
         """
@@ -368,12 +367,12 @@ class AbstractMarket(abc.ABC):
 
 class BasicMarket(AbstractMarket):
 
-    def __init__(self, market_name:str, market_timing:Union[MarketTiming, dict], 
-                 start_time:Union[pd.Timestamp, str], end_time:Union[pd.Timestamp, str], 
+    def __init__(self, market_name:str, market_timing:Union[MarketTiming, dict],
+                 start_time:Union[pd.Timestamp, str], end_time:Union[pd.Timestamp, str],
                  market:EnergyMarket, local_save = {}, logging={}, history_maxlen=10, **kwargs):
         super().__init__(market_name, market_timing, start_time, end_time, market, logging, history_maxlen, **kwargs)
         self.local_save = merge_dicts({"save": False, "path": "", "ext": ".json.gz"}, local_save)
-        
+
         self.market_clearing_counter = 0
 
         ## OLD PARAMETERS, CONSIDER REMOVING
@@ -403,7 +402,7 @@ class BasicMarket(AbstractMarket):
         ## solve the model
         self.em.solve_model()
         self.market_results = self.em.mdl_sol
-    
+
     def publish_results(self, event):
         """Save the results
         """

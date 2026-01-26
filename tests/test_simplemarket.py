@@ -1,13 +1,12 @@
-import json
 import os
 
+import pandas as pd
+from egret.data.model_data import ModelData
 from utilities import dictionary_testing, find_solver
 
 from pyenergymarket import EnergyMarket
 from pyenergymarket.marketmodels.market import BasicMarket
 from pyenergymarket.parsers.egretparser import EgretProvider
-from egret.data.model_data import ModelData
-import pandas as pd
 
 THIS_DIR = os.path.split(__file__)[0]
 
@@ -67,10 +66,10 @@ def test_simplemarket(save_testdata=False):
         # with open(os.path.join(THIS_DIR, f"test_market_results_{cnt}.json.gz")) as f:
         localdata = ModelData(os.path.join(THIS_DIR, f"test_market_results_{cnt}.json"))
 
-        expected_time_keys = pd.date_range(start = market.start_time + cnt*pd.Timedelta(hours=6), 
+        expected_time_keys = pd.date_range(start = market.start_time + cnt*pd.Timedelta(hours=6),
                                            end = min(market.end_time, market.start_time + cnt*pd.Timedelta(hours=6) + pd.Timedelta(hours=9)),
                                            freq="1h", inclusive="left")
-        
+
         ## test that the time keys are correct
         assert localdata.data["system"]["time_keys"] == [f"{s}" for s in expected_time_keys], f"model {cnt} doesn't match {expected_time_keys}"
         # Compare reference files (testdata) to locally generated files (localdata)

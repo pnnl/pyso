@@ -3,12 +3,11 @@ This script adds a market operator capable of running the DA and RT market for
 a user-defined time range.
 """
 
+import abc
 import argparse
-import datetime
 import json
 import logging
 import os
-import abc
 import time as pytime
 
 import pandas as pd

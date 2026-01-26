@@ -1,6 +1,8 @@
-from pyenergymarket.marketmodels.market import MarketTiming
 import pandas as pd
 import pytest
+
+from pyenergymarket.marketmodels.market import MarketTiming
+
 
 @pytest.fixture
 def market_timing(request):
