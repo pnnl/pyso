@@ -243,9 +243,10 @@ def create_egret_md(md: dict, ts: dict):
     # remove all time series that actually fixed values
     remove_non_time_series(md["elements"])
     # add time series keys to system
-    md["system"]["time_keys"] = [
-        datetime.fromtimestamp(tstamp).strftime("%Y-%m-%d %H:%M GMT") for tstamp in ts["timestamp"]
-    ]
+    #md["system"]["time_keys"] = [
+    #    datetime.fromtimestamp(tstamp).strftime("%Y-%m-%d %H:%M GMT") for tstamp in ts["timestamp"]
+    #]
+    md["system"]["time_keys"] = [int(tstamp) for tstamp in ts["timestamp"]]
     # all done, return dictionary to caller
     return md
 
