@@ -155,7 +155,7 @@ def get_provider_by_name(name: str):
 
 
 class Logger(logging.Logger):
-    def __init__(self, name, level=logging.INFO, msg_format="{message}", **kwargs):
+    def __init__(self, name, level=logging.INFO, msg_format="{message}", file = "", **kwargs):
         self.name = name
         self.level = level
         self.logger = logging.getLogger(name)
@@ -177,6 +177,10 @@ class Logger(logging.Logger):
         stream_handler = logging.StreamHandler(sys.stdout)
         stream_handler.setFormatter(self.formatter)
         self.logger.addHandler(stream_handler)
+
+        ## log to file if specified
+        if file:
+            self.set_logfile(file)
 
         self.formattoggle = False
         self.currentformat = "normal"
