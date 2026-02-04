@@ -487,7 +487,7 @@ class NAERMProvider(DataProvider):
         if len(missing_generators) > 0:
             missing_generators_set = set(missing_generators)
             missing_capacity = sum(
-                gen["p_max"]
+                gen["p_max"] if isinstance(gen["p_max"], float) else gen["p_max"]["reference_value"]
                 for gen_uid, gen in self.__static_data["elements"]["generator"].items()
                 if gen_uid in missing_generators_set
             )
