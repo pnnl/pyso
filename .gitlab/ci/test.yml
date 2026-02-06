@@ -21,7 +21,7 @@ test:naerm:
       when: always
   script:
     - pip install -e ".[test,naerm]"
-    - pytest -v --cov=src/pyenergymarket tests/ --junitxml=junit-naerm.xml
+    - pytest -v --cov=src/pyso tests/ --junitxml=junit-naerm.xml
     - coverage report
     - coverage xml -o coverage-naerm.xml
     - coverage html -d htmlcov-naerm
@@ -53,7 +53,7 @@ test:standard:
       when: always
   script:
     - pip install -e ".[test,standard]"
-    - pytest -v --cov=src/pyenergymarket tests/ --junitxml=junit-standard.xml
+    - pytest -v --cov=src/pyso tests/ --junitxml=junit-standard.xml
     - coverage report
     - coverage xml -o coverage-standard.xml
     - coverage html -d htmlcov-standard

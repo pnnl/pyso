@@ -21,8 +21,8 @@ import numpy as np
 import pandas as pd
 from transitions import Machine
 
-from pyenergymarket.engine import EnergyMarket
-from pyenergymarket.utils.ioutils import Logger, merge_dicts
+from pyso.engine import EnergyMarket
+from pyso.utils.ioutils import Logger, merge_dicts
 
 
 class MarketTiming:

@@ -35,7 +35,7 @@ select = [
 ignore = ["E741", "E501"]  # Ignore ambiguous variable name warnings (l, I, O)
 
 [lint.isort]
-known-first-party = ["pyenergymarket"]
+known-first-party = ["pyso"]
 
 # Format configuration
 [format]

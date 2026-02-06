@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 
 ## modified from here: https://stackoverflow.com/questions/6323860/sibling-package-imports
 [project]
-name = "pyenergymarket"
+name = "pyso"
 version = "0.1.0"
-description = "PyEnergyMarket is a EGRET-based energy market modeling tool developed by PNNL in the E-COMP LDRD initiative"
+description = "PySO is a EGRET-based energy market modeling tool developed by PNNL in the E-COMP LDRD initiative"
 authors = [{name="Eran Schweitzer", email="eran.schweitzer@pnnl.gov"},
             {name="Allison Campbell", email="allison.m.campbell@pnnl.gov"},
             {name="Molly Rose Kelly-Gorham", email="mollyrose.kelly-gorham@pnnl.gov"},
@@ -77,7 +77,7 @@ ignore_missing_imports = true
 
 
 [[tool.mypy.overrides]]
-module = "pyenergymarket.*"
+module = "pyso.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 

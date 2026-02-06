@@ -14,10 +14,10 @@ import pandas as pd
 from egret.data.model_data import ModelData
 from scipy.interpolate import CubicSpline
 
-import pyenergymarket as pyen
-from pyenergymarket.engine import DataProvider
-from pyenergymarket.marketmodels import da_market, rt_market
-from pyenergymarket.marketmodels import market as generic_market
+import pyso as pyen
+from pyso.engine import DataProvider
+from pyso.marketmodels import da_market, rt_market
+from pyso.marketmodels import market as generic_market
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())

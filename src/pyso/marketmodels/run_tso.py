@@ -11,10 +11,10 @@ import time as pytime
 
 import pandas as pd
 
-import pyenergymarket as pyen
-from pyenergymarket.marketmodels import market as generic_market
-from pyenergymarket.marketmodels.default_tso_config import get_defaults
-from pyenergymarket.utils.ioutils import Logger, get_provider_by_name
+import pyso as pyen
+from pyso.marketmodels import market as generic_market
+from pyso.marketmodels.default_tso_config import get_defaults
+from pyso.utils.ioutils import Logger, get_provider_by_name
 
 # logger = logging.getLogger(__name__)
 # logger.addHandler(logging.StreamHandler())
@@ -129,7 +129,7 @@ class TSO(abc.ABC):
             market_cleared = self.run_market(next_market)
             if market_cleared:
                 logger.info(
-                    f"{next_market} cleared at simulation time {next_time} " f"{self.time_unit}s"
+                    f"{next_market} cleared at simulation time {next_time} {self.time_unit}s"
                 )
             # Can add callback features to pass data between markets here
             # Once all market start times are at the end (inclusive), terminate the simulation
@@ -206,7 +206,7 @@ if __name__ == "__main__":
             with open(config_file, "w") as f:
                 json.dump(default_options, f, indent=4)
         elif config_file.endswith("toml"):
-            from pyenergymarket.utils.ioutils import save_config
+            from pyso.utils.ioutils import save_config
 
             save_config(config_file, default_options)
         logger.critical(f"Default config created. Edit {config_file} to update run settings")
@@ -218,7 +218,7 @@ if __name__ == "__main__":
         with open(config_file) as f:
             options = json.load(f)
     elif config_file.endswith("toml"):
-        from pyenergymarket.utils.ioutils import load_config
+        from pyso.utils.ioutils import load_config
 
         options = load_config(config_file)
     # # Joins any user options onto the default options

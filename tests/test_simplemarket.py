@@ -5,9 +5,9 @@ import pytest
 from egret.data.model_data import ModelData
 from utilities import dictionary_testing, find_solver
 
-from pyenergymarket import EnergyMarket
-from pyenergymarket.marketmodels.market import BasicMarket
-from pyenergymarket.parsers.egretparser import EgretProvider
+from pyso import EnergyMarket
+from pyso.marketmodels.market import BasicMarket
+from pyso.parsers.egretparser import EgretProvider
 
 THIS_DIR = os.path.split(__file__)[0]
 

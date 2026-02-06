@@ -4,10 +4,10 @@ import numpy as np
 from egret.data.model_data import ModelData
 from utilities import find_solver
 
-from pyenergymarket import EnergyMarket
-from pyenergymarket.marketmodels.market import BasicMarket
-from pyenergymarket.parsers.egretparser import EgretProvider
-from pyenergymarket.utils.timeutils import count_onoff
+from pyso import EnergyMarket
+from pyso.marketmodels.market import BasicMarket
+from pyso.parsers.egretparser import EgretProvider
+from pyso.utils.timeutils import count_onoff
 
 THIS_DIR = os.path.split(__file__)[0]
 
