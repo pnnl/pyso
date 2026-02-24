@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pyenergymarket.parsers.naermparser import (
+from pyso.parsers.naermparser import (
     NAERMProvider,
     TimeSeries,
     assign_ts_values,
@@ -319,7 +319,7 @@ class TestHelperFunctions:
         }
 
         # Capture logger output for checking warnings
-        with mock.patch("pyenergymarket.parsers.naermparser.logger.warning") as mocked_logger:
+        with mock.patch("pyso.parsers.naermparser.logger.warning") as mocked_logger:
             enforce_p_min_p_max_consistency(md_elem_gen)
 
             # Verify warning was logged
@@ -352,7 +352,7 @@ class TestHelperFunctions:
         }
 
         # Capture logger output for checking warnings
-        with mock.patch("pyenergymarket.parsers.naermparser.logger.warning") as mocked_logger:
+        with mock.patch("pyso.parsers.naermparser.logger.warning") as mocked_logger:
             remove_non_time_series(md_elem)
 
             # Verify warning was logged
@@ -415,7 +415,7 @@ class TestHelperFunctions:
         }
 
         # Capture logger output to avoid cluttering test results
-        with mock.patch("pyenergymarket.parsers.naermparser.logger.warning"):
+        with mock.patch("pyso.parsers.naermparser.logger.warning"):
             # Call the function under test
             result = create_egret_md(md, ts)
 

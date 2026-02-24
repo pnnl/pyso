@@ -71,7 +71,7 @@ def post_install():
 
 
 setup(
-    name="pyenergymarket",
+    name="pyso",
     cmdclass={
         "install": PostInstallCommand,
         "develop": PostDevelopCommand,

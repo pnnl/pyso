@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from pyenergymarket.marketmodels.market import MarketTiming
+from pyso.marketmodels.market import MarketTiming
 
 
 @pytest.fixture

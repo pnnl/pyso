@@ -9,7 +9,7 @@ Accounting for initial conditions, initializing enforced constraints etc. should
 The core input is a data provider which should be a subclass of the abstract `DataProvider` class.
 This object must expose a method called `get_model` that takes a DatetimeIndex as input, and return an Egret `ModelData` object for the specified time range as output.
 
-A trivial example is the [`EgretProvider`](./src/pyenergymarket/parsers/egretparser.py) that simple returns portions of an Egret model depending depending on the time range provided and the time keys in the model (which are assumed to be Timestamp parsable.)
+A trivial example is the [`EgretProvider`](./src/pyso/parsers/egretparser.py) that simple returns portions of an Egret model depending depending on the time range provided and the time keys in the model (which are assumed to be Timestamp parsable.)
 
 ## Market Class
 The `Market` class is intended to capture the various stages of a market and allow interaction with the operation during these states.
@@ -165,7 +165,7 @@ To run type checking manually:
 python -m mypy src
 
 # Run mypy on a specific file
-python -m mypy src/pyenergymarket/utils/timeutils.py
+python -m mypy src/pyso/utils/timeutils.py
 ```
 
 ### Known Issues

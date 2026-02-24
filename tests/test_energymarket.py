@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from egret.data.model_data import ModelData
 
-import pyenergymarket as pyen
+import pyso as pyen
 
 
 def get_h5path():

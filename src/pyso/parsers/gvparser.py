@@ -4,7 +4,7 @@ import pandas as pd
 from egret.data.model_data import ModelData
 from egret.parsers.gvparser import GVParse as EgretGVParse
 
-from pyenergymarket.engine import DataProvider
+from pyso.engine import DataProvider
 
 
 class GVParse(EgretGVParse, DataProvider):

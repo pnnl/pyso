@@ -4,9 +4,9 @@ import pandas as pd
 import pytest
 from utilities import find_solver
 
-from pyenergymarket import EnergyMarket
-from pyenergymarket.marketmodels.market import AbstractMarket
-from pyenergymarket.parsers.egretparser import EgretProvider
+from pyso import EnergyMarket
+from pyso.marketmodels.market import AbstractMarket
+from pyso.parsers.egretparser import EgretProvider
 
 THIS_DIR = os.path.split(__file__)[0]
 

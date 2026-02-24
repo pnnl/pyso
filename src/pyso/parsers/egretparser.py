@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 from egret.data.model_data import ModelData
 
-from pyenergymarket.engine import DataProvider
-from pyenergymarket.utils.egretutils import merge_model_data
+from pyso.engine import DataProvider
+from pyso.utils.egretutils import merge_model_data
 
 
 class EgretProvider(DataProvider):
