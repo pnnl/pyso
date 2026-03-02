@@ -115,8 +115,8 @@ class EnergyMarket:
             start (Union[str, pd.Timestamp]): time start time of the model
         """
 
-        periods = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
-        min_freq = self.configuration["time"]["min_freq"]
+        periods : int = self.configuration["time"]["window"] + self.configuration["time"]["lookahead"]
+        min_freq : int = self.configuration["time"]["min_freq"]
 
         daterange = mk_daterange(
             start, min_freq=min_freq, periods=periods, tz=self.configuration["time"]["tz"]
@@ -130,6 +130,9 @@ class EnergyMarket:
         # move time-zone information
         daterange = daterange.tz_localize(None)
         self.mdl = self.data_provider.get_model(daterange)
+        
+        # make sure the time_period_length_minutes parameter is set to the appropriate value
+        self.mdl.data["system"]["time_period_length_minutes"] = min_freq
 
     def update_initial_conditions(
         self, mdl_sol: Union[ModelData, None] = None, update_mode: str = "calculate"
