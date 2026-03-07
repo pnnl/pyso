@@ -451,7 +451,7 @@ def get_eia_plantid_fraction(eia_data: dict, eia_pmax_used_key: str):
                 out[k] /= eia_capacity
         else:
             logger.warning(
-                f"Found zero capacity eia_data={eia_data}, out={out}. Will compute prices as averages."
+                f"Found zero capacity eia_data={eia_data}. Will compute prices as averages."
             )
             unif_fraction = 1.0/len(eia_data["values"])
             for k in out:
