@@ -431,6 +431,51 @@ def parse_monthly_gas_prices(monthly_gas_prices_fname: str, tz_abbrev: str = "ES
 def is_gas_generator(gen: dict):
     return "NG" in gen.get("fuel", "NA")
 
+def get_eia_plantid_fraction(eia_data: dict, eia_pmax_used_key: str):
+    if "plantid" in eia_data:
+        return { int(eia_data["plantid"]): 1.0 }
+    elif eia_data.get("data_type", None) == "multiple_eia":
+        out = { int(eia_record["plantid"]): eia_record["eia_allocation"] * \
+                eia_record[eia_pmax_used_key] \
+                for eia_record in eia_data["values"]}
+        eia_capacity = sum(out.values())
+        if eia_capacity != 0.0:
+            for k in out:
+                out[k] /= eia_capacity
+        else:
+            unif_fraction = 1.0/len(eia_data["values"])
+            for k in out:
+                out[k] = unif_fraction
+        return out
+    else:
+        raise ValueError(f"unexpected EIA data structure: {eia_data}")
+
+def linear_combination_gas_prices(gas_prices: dict, eia_plantid_fraction: dict, abs_tol: float=1E-8):
+    combined_gas_price = None
+    cumm_fraction = 0.0
+    missing_eia_codes = []
+    for plantid, fraction in eia_plantid_fraction.items():
+        if plantid in gas_prices:
+            gas_price_contrib = copy.deepcopy(gas_prices[plantid])
+            gas_price_contrib["values"] = [gp * fraction for gp in gas_price_contrib["values"]]
+            if combined_gas_price is None:
+                combined_gas_price = gas_price_contrib
+            else:
+                for i in range(len(combined_gas_price["values"])):
+                    combined_gas_price["values"][i] += gas_price_contrib["values"][i]
+            cumm_fraction += fraction
+        else:
+            missing_eia_codes.append(plantid)
+    if combined_gas_price is None:
+        return combined_gas_price, missing_eia_codes
+    if abs(cumm_fraction - 1.0) > abs_tol:
+        logger.warning(
+            f"Non unitary factor (cumm_fraction={cumm_fraction}) for "
+            f"eia_plantid_fraction={eia_plantid_fraction}. Will re-scale gas prices."
+        )
+        combined_gas_price["values"] = [gp / cumm_fraction for gp in combined_gas_price["values"]]
+    return combined_gas_price, missing_eia_codes
+
 
 ########
 # NAERM Data provider definition
@@ -464,25 +509,25 @@ class NAERMProvider(DataProvider):
         # parse gas prices
         gas_prices = parse_monthly_gas_prices(gas_prices_fname)
         # assign gas prices to gas generators using EIA plant IDs
+        eia_pmax_used_key = self.__static_data["system"]["eia_pmax_used"]
         missing_generators = []
+        missing_eia_codes = []
         for gen_uid, gen in self.__static_data["elements"]["generator"].items():
             if not is_gas_generator(gen):
                 continue
-            if type(gen["eia"]["plantid"]) in (int, str):
-                eia_plantid = int(gen["eia"]["plantid"])
-                if eia_plantid in gas_prices:
-                    old_fuel_cost = gen["fuel_cost"]
-                    gen["fuel_cost"] = copy.deepcopy(gas_prices[eia_plantid])
-                    if isinstance(old_fuel_cost, float):
-                        gen["fuel_cost"]["reference_value"] = old_fuel_cost
-                    elif isinstance(old_fuel_cost, dict):
-                        gen["fuel_cost"]["reference_value"] = old_fuel_cost["reference_value"]
-                else:
-                    missing_generators.append(gen_uid)
+            eia_plantid_fraction = get_eia_plantid_fraction(gen["eia"], eia_pmax_used_key)
+            gen_gas_price, gen_missing_eia_codes = \
+                linear_combination_gas_prices(gas_prices, eia_plantid_fraction)
+            if gen_gas_price is not None:
+                old_fuel_cost = gen["fuel_cost"]
+                gen["fuel_cost"] = gen_gas_price
+                if isinstance(old_fuel_cost, float):
+                    gen["fuel_cost"]["reference_value"] = old_fuel_cost
+                elif isinstance(old_fuel_cost, dict):
+                    gen["fuel_cost"]["reference_value"] = old_fuel_cost["reference_value"]
             else:
-                raise ValueError(
-                    f"plantid is not a str or int for generator {gen_uid}, plantid={gen['eia']['plantid']}"
-                )
+                missing_generators.append(gen_uid)
+            missing_eia_codes.extend(gen_missing_eia_codes)
         # print warning for generators that we were not able to find
         if len(missing_generators) > 0:
             missing_generators_set = set(missing_generators)
@@ -494,16 +539,10 @@ class NAERMProvider(DataProvider):
             logger.warning(
                 f"Unable to find monthly prices for {len(missing_generators)} gas generators ({missing_capacity} MW) with uids: {missing_generators}"
             )
-            missing_eia_codes = list(
-                set(
-                    [
-                        gen["eia"]["plantid"]
-                        for gen_uid, gen in self.__static_data["elements"]["generator"].items()
-                        if gen_uid in missing_generators_set
-                    ]
-                )
-            )
-            logger.warning(f"These generators have EIA plantid codes: {missing_eia_codes}")
+        # print warning for missing gas EIA codes in gas_prices
+        if len(missing_eia_codes) > 0:
+            missing_eia_codes = list(set(missing_eia_codes))
+            logger.warning(f"Unable to find these EIA codes in gas price data: {missing_eia_codes}")
         # return to caller
         return None
 
