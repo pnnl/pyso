@@ -435,14 +435,24 @@ def get_eia_plantid_fraction(eia_data: dict, eia_pmax_used_key: str):
     if "plantid" in eia_data:
         return { int(eia_data["plantid"]): 1.0 }
     elif eia_data.get("data_type", None) == "multiple_eia":
-        out = { int(eia_record["plantid"]): eia_record["eia_allocation"] * \
-                eia_record[eia_pmax_used_key] \
-                for eia_record in eia_data["values"]}
+        pid_gid_to_pmax = { (int(eia_record["plantid"]), str(eia_record["genid"])): \
+                            eia_record["eia_allocation"] * float(eia_record[eia_pmax_used_key]) \
+                            for eia_record in eia_data["values"]}
+        out = {}
+        for pid_gid, pmax in pid_gid_to_pmax.items():
+            pid = pid_gid[0]
+            if pid in out:
+                out[pid] += pmax
+            else:
+                out[pid] = pmax
         eia_capacity = sum(out.values())
         if eia_capacity != 0.0:
             for k in out:
                 out[k] /= eia_capacity
         else:
+            logger.warning(
+                f"Found zero capacity eia_data={eia_data}, out={out}. Will compute prices as averages."
+            )
             unif_fraction = 1.0/len(eia_data["values"])
             for k in out:
                 out[k] = unif_fraction
@@ -470,7 +480,7 @@ def linear_combination_gas_prices(gas_prices: dict, eia_plantid_fraction: dict, 
         return combined_gas_price, missing_eia_codes
     if abs(cumm_fraction - 1.0) > abs_tol:
         logger.warning(
-            f"Non unitary factor (cumm_fraction={cumm_fraction}) for "
+            f"Non unitary factor (cumm_fraction={cumm_fraction:.5f}) for "
             f"eia_plantid_fraction={eia_plantid_fraction}. Will re-scale gas prices."
         )
         combined_gas_price["values"] = [gp / cumm_fraction for gp in combined_gas_price["values"]]
